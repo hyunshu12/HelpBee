@@ -1,6 +1,51 @@
 # CLAUDE.md
 
+> **Level: Enterprise** | Initialized: 2026-04-09 | bkit v2.1.1
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## 🚨 GitHub 커밋/PR 규칙 (Claude 필독)
+
+### 브랜치 보호 규칙
+- `main`, `develop` 브랜치는 **직접 push 금지** (branch protection 적용)
+- 모든 변경은 반드시 **feature 브랜치 → PR → 머지** 순서로 진행
+
+### Claude가 커밋/push 요청을 받으면
+1. **feature 브랜치 생성** (현재 브랜치가 feature/* 가 아닌 경우)
+   ```bash
+   git checkout -b feature/{작업내용}
+   ```
+2. **커밋**
+   ```bash
+   git add <파일>
+   git commit -m "feat/fix/chore: 설명"
+   ```
+3. **feature 브랜치 push**
+   ```bash
+   git push origin feature/{작업내용}
+   ```
+4. **PR 생성** (`feature/*` → `develop`)
+   - GitHub MCP(`mcp__github__create_pull_request`) 사용
+   - `base: develop`, `head: feature/{작업내용}`
+
+### 브랜치 네이밍
+| 유형 | 패턴 | 예시 |
+|------|------|------|
+| 기능 | `feature/{name}` | `feature/user-auth` |
+| 버그 수정 | `bugfix/{name}` | `bugfix/image-upload` |
+| 문서 | `docs/{name}` | `docs/api-guide` |
+| 긴급 수정 | `hotfix/{name}` | `hotfix/api-crash` |
+
+### 커밋 메시지 규칙
+```
+feat: 새 기능
+fix: 버그 수정
+chore: 빌드/설정 변경
+docs: 문서
+refactor: 리팩토링
+```
 
 ---
 

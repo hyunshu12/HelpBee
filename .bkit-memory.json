@@ -1,0 +1,33 @@
+{
+  "project": "HelpBee",
+  "level": "Enterprise",
+  "version": "1.0.0",
+  "initialized_at": "2026-04-09",
+  "architecture": {
+    "pattern": "Microservices + Clean Architecture (4-Layer)",
+    "services": ["auth", "user", "analysis"],
+    "infra": ["EKS", "RDS", "S3", "Terraform", "Kustomize"],
+    "monitoring": ["Sentry", "Prometheus", "Grafana", "Loki"]
+  },
+  "pdca": {
+    "current_phase": "init",
+    "features": [],
+    "trust_score": 100,
+    "automation_level": "L2"
+  },
+  "tech_stack": {
+    "frontend": "Next.js 14+ (Turborepo)",
+    "backend": "FastAPI (Python 3.11)",
+    "database": "PostgreSQL (schema-per-service)",
+    "cache": "Redis",
+    "ai": "OpenAI GPT-4o Vision"
+  },
+  "ports": {
+    "web": 3000,
+    "admin": 3002,
+    "api": 3001,
+    "auth": 8001,
+    "user": 8002,
+    "analysis": 8003
+  }
+}

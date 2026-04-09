@@ -1,3 +1,7 @@
+# Claude Code / bkit (로컬 세션 데이터)
+.claude/
+.bkit/
+
 # Node
 node_modules/
 npm-debug.log*
@@ -92,3 +96,4 @@ secrets/
 예산계획서.md
 AI_양봉진단_사업제안서.md
 CLAUDE.md
+/CLAUDE.md
