@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: analysis-service
+  namespace: helpbee
+spec:
+  selector:
+    app: analysis-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+  type: ClusterIP

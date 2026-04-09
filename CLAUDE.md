@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> **Level: Enterprise** | Initialized: 2026-04-09 | bkit v2.1.1
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
