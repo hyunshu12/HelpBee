@@ -407,6 +407,53 @@ apps/api는 다음 워크스페이스 패키지에 의존:
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### API 엔드포인트 요약 (`/api/v1`)
+응답 봉투 `{data, meta}`, 에러는 RFC 7807 (`application/problem+json`).
+
+| 도메인 | 메서드/경로 | 인증 |
+|---|---|---|
+| Auth | POST /auth/{signup,login,refresh,logout}, GET /auth/me | mixed |
+| Hives | GET/POST /hives, GET/PATCH/DELETE /hives/:id | auth + 소유권 |
+| Analyses | POST /analyses, GET /analyses?hiveId=&from=&to=, GET /analyses/:id, GET /analyses/trend?hiveId=&granularity=day\|week | auth |
+| Images | POST /images/presign, DELETE /images/:key | auth |
+| Admin | GET /admin/{users,users/:id,analyses,stats} | role=admin |
+| Subscriptions | GET /subscriptions/me, GET /subscriptions/plans (정적 stub) | auth (me) |
+
+### 주요 정책
+- **JWT**: HS256, access 15분 / refresh 7일. Refresh DB 해시 저장 + 회전 + 재사용 감지 시 전체 폐기
+- **패스워드**: argon2 (bcrypt보다 GPU 저항성 우수)
+- **레이트리밋 (Redis)**: 익명 60req/min, 인증 300req/min, /analyses POST 10/min + 무료 4회/월 (`quota:{userId}:{YYYYMM}`)
+- **AI 호출**: axios baseURL=AI_BASE_URL, timeout 30s, 5xx/timeout 지수 백오프 2회. engine='auto' 시 OpenAI 1차 → 실패/저신뢰 시 YOLO 폴백. dual-result(관리자 전용) 동시 호출 → raw_response jsonb
+- **이미지 업로드**: S3 presigned PUT 흐름. jpeg/png/webp 10MB 매직넘버 sniff. EXIF 제거. multipart 프록시 백업
+- **로그**: pino 구조화 (requestId/userId/route/latencyMs), 민감 동작은 audit_log insert
+
+### 마일스톤
+- **5월 W1**: env/config, DB/Redis 부트, auth + JWT + argon2, hives CRUD, 에러/검증 미들웨어
+- **5월 W2**: images presign, analyses CRUD, AI client, trend 집계, 쿼터
+- **5월 W3**: admin 라우터, subscriptions stub, audit, pino, 레이트리밋
+- **5월 W4**: 통합 테스트, Bruno 컬렉션, 보안 점검 (헬멧, CORS)
+
+### 검증
+- Bruno 컬렉션 (@apps/api/bruno/) 도메인별 폴더 + 환경
+- vitest + Hono `app.request` 통합 테스트, Testcontainers DB 격리
+- CI 게이트: type-check, lint, test
+
+### 리스크 / 미해결
+- AI 동기 호출 SLA 적합성 — 10s 초과 시 BullMQ 큐 전환 검토
+- S3 vs Cloudflare R2 — 한국 latency/비용 비교 필요
+- jwt-simple → jose 교체 검토 (알고리즘 강제·키 회전)
+- 무료 쿼터 월 경계 (UTC vs KST) 합의 필요
+- EXIF/위치정보 보존 vs 삭제 정책 (개인정보)
+
+### 다른 분야와의 인터페이스 (정합 포인트)
+- **← DB** (@packages/database): queries/* helper만 사용, 직접 SQL 금지
+- **→ AI** (@apps/ai): HTTP /analyze, /analyze/dual, /analyze/yolo 호출. AI 응답 스키마 변경 시 services/ai-client.ts 동기화
+- **→ Flutter** (@apps/mobile), **Admin** (@apps/admin): Bruno 컬렉션을 OpenAPI 대용으로 공유. packages/types 동기화 필수
+
+---
+
 ## 14. PR 체크리스트
 
 라우트/스키마/서비스를 추가/수정한 PR은 다음을 확인:

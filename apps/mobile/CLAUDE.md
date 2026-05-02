@@ -397,6 +397,54 @@ flutter build apk --debug    # 또는 ios --no-codesign
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### 화면 흐름
+Splash → Onboarding(3 슬라이드: 진단 원리, 카메라 가이드, 알림 권한) → Login/Signup → Home(벌통 리스트, FAB) → 벌통 상세(월별 위험도 그래프) → 카메라(가이드 오버레이) → 결과(0-100 게이지 + tier + 권장사항) → 설정
+
+### 핵심 정책
+- **상태 관리**: Riverpod 2 + riverpod_generator. AsyncNotifier로 API 상태 일관 관리. Bloc 미채택 (학습곡선/보일러플레이트)
+- **라우팅**: go_router 선언형 + redirect auth guard. Deep link `helpbee://hive/{id}`, `helpbee://analysis/{id}`
+- **API 통신**: dio + interceptors (JWT auto-refresh / retry 지수 백오프 idempotent only / logging). DTO는 freezed + json_serializable
+- **카메라/이미지**: camera (in-app capture + 가이드 오버레이) + image_picker (갤러리). image 패키지로 max 1920×1920 JPEG q85. flutter_image_compress (HEIC→JPEG). presigned URL → S3 직업로드
+- **로컬 저장**: flutter_secure_storage (토큰 단일 저장처) / hive or isar (오프라인 캐시 + 미전송 큐) / shared_preferences (온보딩 플래그)
+- **차트**: fl_chart (월별 LineChart, 결과 반원형 게이지)
+- **푸시**: firebase_messaging + flutter_local_notifications. iOS APNs, Android 13+ POST_NOTIFICATIONS
+- **i18n**: flutter_localizations + intl, ko_KR primary (en은 Phase 2)
+- **테마**: Material 3, seed=#F4B400 (꿀색), error=#D32F2F, Pretendard / Noto Sans KR, 다크모드 토글
+- **오프라인**: 연결 끊김 시 hive 큐 → connectivity 복구 시 자동 재전송. "전송 대기 중" 배지 + 수동 재시도
+
+### 마일스톤
+- **5월 W1 (5/4-5/10)**: `flutter create` 실행 + scaffold + auth (login/signup/refresh)
+- **5월 W2 (5/11-5/17)**: 벌통 CRUD + 카메라 화면 + S3 업로드
+- **5월 W3 (5/18-5/24)**: AI 분석 통합 + 결과 화면 + 게이지
+- **5월 W4 (5/25-5/31)**: fl_chart 추이 + 푸시 + 다듬기
+- **6월**: 베타 빌드 (TestFlight/Play Internal Testing) + 양봉가 3명 피드백 반영
+
+### 검증
+- Unit: repository, JWT refresh logic
+- Widget: 결과 화면 tier별 렌더링, 로그인 폼 validation
+- Integration (integration_test): 로그인→카메라→결과 플로우 (emulator)
+- 베타 양봉가 3명 1주 실 사용 → 5초 도달률 / 가이드 이해도 / 행동 전환율 측정
+
+### CI/CD
+GitHub Actions matrix (iOS/Android) + fastlane → main 머지 시 TestFlight + Play Internal Testing 자동 빌드
+
+### 리스크 / 미해결
+- Flutter 경험 부족 → Riverpod/go_router 사내 워크숍
+- Firebase 비용 → FCM은 무료, Crashlytics만 활성
+- App Store 심사 지연 → 5월 W3까지 첫 빌드 제출 필수
+- 카메라 권한 거부 → 온보딩에서 가치 설명 후 요청, 거부 시 갤러리 fallback 안내
+- hive vs isar 선택 미확정
+- Firebase 프로젝트 연결, fastlane 셋업, Universal Links vs URL Scheme 미정
+
+### 다른 분야와의 인터페이스 (정합 포인트)
+- **← Backend API** (@apps/api): REST 호출 only. AI 응답 스키마 변경 시 features/analyses/ DTO 동기화
+- **← Storage** (@infra S3): presigned PUT URL로 직업로드. EXIF는 클라이언트가 보내고 서버가 strip
+- **↔ packages/types**: 가능하면 OpenAPI 또는 freezed 코드젠으로 자동 동기화. 수동 동기화 시 PR 본문에 명시
+
+---
+
 ## 19. PR 전 체크리스트
 
 - [ ] `dart format .` 적용됨
