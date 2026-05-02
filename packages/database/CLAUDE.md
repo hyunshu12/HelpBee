@@ -245,6 +245,44 @@ PR을 열기 전에 다음을 모두 확인할 것:
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### 테이블 목록 (9개)
+- **users** — id uuid PK, email citext UNIQUE, password_hash, name, role text DEFAULT 'user', email_verified_at, timestamps + deleted_at
+- **refresh_tokens** — user_id FK, token_hash UNIQUE, expires_at, revoked_at, user_agent, ip inet
+- **hives** — user_id FK, name, note, latitude/longitude numeric, address, installed_at, soft delete
+- **analysis_images** — hive_id FK, uploaded_by FK, storage_url (S3 URL only), mime_type, width/height, byte_size, checksum, captured_at
+- **ai_models** — provider ('openai'|'yolo'), name, version, released_at, is_active. UNIQUE(provider, name, version)
+- **analyses** — hive_id, image_id, model_id FK, status, varroa_infection_risk smallint (0-100), estimated_varroa_count, overall_health, raw_response jsonb, latency_ms, error, analyzed_at. **UNIQUE(image_id, model_id)** — dual-engine 핵심
+- **recommendations** — analysis_id FK, order, content, severity (i18n/검색 분리)
+- **subscriptions** — user_id UNIQUE, plan ('free'|'basic'|'pro' DEFAULT 'free'), status, dates
+- **audit_log** — actor_id, action, entity, entity_id, metadata jsonb, ip. Index(entity, entity_id)
+
+### 마일스톤
+- **5월 W1**: 디렉터리 구조, users/hives/refresh_tokens, 0001_init
+- **5월 W2**: analysis_images/analyses/ai_models/recommendations, dual UNIQUE 제약 검증
+- **5월 W3**: subscriptions/audit_log, queries helper, dev seed
+- **5월 W4**: drizzle-kit studio QA, 통합 테스트, packages/types 동기화
+- **6월 W1**: 트렌드 쿼리 인덱스 EXPLAIN 검토
+
+### 검증
+- `pnpm drizzle-kit studio` 시각 검증
+- `scripts/check-schema.ts` — user→hive→image→dual analysis→trend→soft delete 흐름 PASS
+- CI에서 `drizzle-kit check`로 drift 감지
+
+### 리스크 / 미해결
+- 이미지 storage 제공자 (S3 vs R2 vs Supabase) 미확정 — URL 컬럼은 무관
+- overall_health: PG enum vs text+check (마이그레이션 유연성 위해 후자 권장)
+- citext extension 가능 여부 — 안 되면 lower(email) UNIQUE로 대체
+- audit_log 보존 기간 / 파티셔닝 정책 미정
+
+### 다른 분야와의 인터페이스 (정합 포인트)
+- **→ Backend API** (@apps/api): db 인스턴스, schema namespace, queries/* helper, Drizzle 추론 타입 export
+- **→ AI 서비스** (@apps/ai): ai_models 활성 모델 메타 조회, dual-engine row 2개 insert 패턴
+- **↔ packages/types**: Drizzle InferSelectModel과 1:1 정합 유지
+
+---
+
 ## 10. 참고
 
 - 전체 분야 마스터 플랜: `~/.claude/plans/refactored-percolating-church.md`
