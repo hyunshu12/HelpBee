@@ -275,6 +275,52 @@ pnpm --filter web build
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### 페이지 구성
+- `/` 히어로 (영상 데모) + 가치 제안 3가지 + CTA
+- `/how-it-works` 촬영 → 분석 → 결과 3-step
+- `/pricing` 베이직/프로/엔터프라이즈 (MVP는 표시만, 결제 X)
+- `/about` 회사 소개, 미션, 팀
+- `/blog/[slug]` MDX 기반 양봉 가이드 / varroa 정보
+- `/contact` 문의 폼 → apps/api `/inquiries` 저장
+- `/download` App Store + Play Store 링크 (UTM 태그)
+- `/privacy`, `/terms` 법적 문서
+
+### 핵심 정책
+- **i18n**: next-intl (ko 기본, en은 Phase 2 라우팅 분리)
+- **SEO**: next-seo, 동적 sitemap.ts/robots.ts, OG next/og, 키워드 ("양봉 응애 진단", "꿀벌 건강 AI")
+- **디자인 톤**: 자연/꿀 컨셉, 신뢰감, 한국어 카피라이팅 (농촌 친화적), 큰 폰트 (장년층 대응 18px+)
+- **콘텐츠**: MDX + contentlayer (frontmatter title/date/author/coverImage)
+- **분석**: GA4 + Hotjar (afterInteractive)
+- **미디어**: next/image AVIF/WebP, 데모 영상은 Cloudflare Stream 임베드
+- **포트**: 3000
+
+### 마일스톤
+- **5월 W1-W2**: 랜딩/how-it-works/pricing 1차 (packages/ui 토큰 + 핵심 컴포넌트와 병행)
+- **6월 W2-W3**: 블로그 5편 + 베타 신청 폼 + i18n 영문 스켈레톤
+- **7-9월**: 마케팅 콘텐츠 추가, 분석 도입
+
+### 검증
+- Lighthouse 90+ (Performance/SEO/Accessibility)
+- Storybook(packages/ui) 시각 회귀
+
+### 배포
+- Vercel (빌드 캐시/이미지 최적화/Preview 환경 무료)
+- env: NEXT_PUBLIC_API_URL, NEXT_PUBLIC_GA_ID
+
+### 리스크 / 미해결
+- 디자인 리소스 부족 → shadcn 기본 + 꿀색 팔레트만으로 MVP
+- 한국어 카피라이팅 외주 또는 양봉협회 자문
+- 장년층 UX → 18px+, 고대비, 음성 안내 Phase 2 검토
+
+### 다른 분야와의 인터페이스
+- **← packages/ui**: 모든 컴포넌트
+- **→ Backend API** (@apps/api): /inquiries (문의 폼) only — 사용자 인증/결제 흐름은 web에 두지 않음
+- **콘텐츠**: content/blog/*.mdx는 디자인/마케팅 협업 (외주 가능)
+
+---
+
 ## 13. 체크리스트 (PR Checklist)
 
 - [ ] 새 라우트는 `app/[locale]/` 아래에 있다

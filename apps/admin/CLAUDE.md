@@ -246,6 +246,52 @@ pnpm --filter admin test:e2e
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### 기능 범위
+- 어드민 로그인 (role='admin' 검증)
+- 대시보드 KPI: 전체/활성 사용자, 월간 진단 수, AI 비용 (OpenAI vs YOLO), 진단 성공률
+- 사용자 관리: 목록 (검색/필터/정렬), 상세, 상태 변경
+- 진단 관리: 목록 + 상세 (원본 이미지 + YOLO bbox overlay + OpenAI side-by-side 비교)
+- AI 모델 사용 통계: 모델별 호출 수/응답 시간/비용 차트
+- 시스템 헬스: /health 엔드포인트 폴링, AI 서비스 상태
+- 감사 로그 뷰어
+
+### 핵심 정책
+- **인증**: 자체 JWT (apps/api 동일 시크릿), middleware.ts에서 토큰 + role 검증, httpOnly 쿠키 저장
+- **데이터 페칭**: RSC로 첫 페인트(SSR) + TanStack Query로 클라이언트 상호작용 (mutation/refetch)
+- **테이블**: TanStack Table v8, 서버사이드 페이지네이션/정렬/필터
+- **차트**: Recharts (KPI 카드, 시계열)
+- **이미지 뷰어**: react-zoom-pan-pinch + Canvas overlay로 YOLO bbox 렌더링
+- **포트**: 3001 권장
+
+### 마일스톤
+- **5월 W3-W4**: 로그인 + 대시보드 KPI + 사용자 목록
+- **6월 W1**: 진단 상세 + bbox overlay 비교 뷰 + 시스템 헬스
+- **6월 W2-W3**: 감사 로그 + 보강
+- **7-9월**: 콘텐츠 추가, GA4/Hotjar 도입, A/B 테스트
+
+### 검증
+- Playwright e2e: 로그인 → 사용자 목록 → 진단 상세 핵심 플로우 PASS
+- Storybook(packages/ui) 시각 회귀 (Chromatic)
+
+### 배포 / 보안
+- Vercel (빌드 캐시/이미지 최적화/Preview 환경)
+- Cloudflare Access (ZeroTrust) 사내 SSO 게이팅, IP 화이트리스트 백업
+- env: NEXT_PUBLIC_API_URL, JWT_SECRET, NEXT_PUBLIC_GA_ID
+
+### 리스크 / 미해결
+- 디자인 리소스 부족 → shadcn 기본 + 꿀색 팔레트 커스터마이즈만으로 MVP
+- 한국어 카피라이팅 외주 또는 양봉협회 자문 필요
+- 장년층 UX → 폰트 18px+, 고대비, 음성 안내(Phase 2 검토)
+
+### 다른 분야와의 인터페이스
+- **← Backend API** (@apps/api): /admin/* 엔드포인트 호출. role='admin' 검증은 백엔드와 양쪽
+- **← packages/ui**: 모든 컴포넌트는 packages/ui에서 import (직접 shadcn 사용 금지)
+- **← packages/types**: API 응답 타입은 packages/types에서 import
+
+---
+
 ## 12. 체크리스트 (PR Checklist)
 
 새 기능 / 페이지 PR 시 다음을 확인:

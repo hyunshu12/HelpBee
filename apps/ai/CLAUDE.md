@@ -327,6 +327,84 @@ pytest -q -m regression        # 회귀만
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### API 엔드포인트
+| 메서드/경로 | 설명 |
+|---|---|
+| GET /health | OpenAI 연결 체크 포함 |
+| GET /metrics | Prometheus 호환 텍스트 (누적 토큰/비용) |
+| POST /analyze | OpenAI 단독 진단 (multipart 또는 {image_url}) |
+| POST /analyze/yolo | 자체 YOLO 추론 ({boxes, count, risk_score, model_version, latency_ms}) |
+| POST /analyze/dual or /analyze/compare | OpenAI + YOLO 병렬 (asyncio.gather, 베타 검증) |
+| POST /analyze/batch | 최대 10장 동시 (rate limit 고려) |
+
+### AnalysisResponse 스키마
+```
+risk_score: int (0-100)
+tier: Literal["safe","caution","warning","critical"]
+estimated_count: int
+confidence: float (0-1)
+recommendations: list[str]   # 한글
+model_version: str           # "gpt-4o-mini-2024-07-18"
+prompt_version: str          # "v1.2"
+latency_ms: int
+cost_estimate_usd: float
+raw_payload: dict | None
+```
+
+### OpenAI 통합 정책
+- **모델**: gpt-4o-mini 1차 (~$0.001/이미지) → 정확도 부족 시 gpt-4o 승격
+- **Structured Output**: response_format=json_schema + Pydantic
+- **프롬프트**: prompts/varroa_prompt.py 단일 소스. system은 양봉 전문가 페르소나(영문), user는 한글 권장 조치 요청. Few-shot 3-5장(safe/caution/critical) base64 inline. prompt_version 응답 포함
+- **전처리**: Pillow longest 1024px 다운스케일, JPEG q=85, EXIF strip, RGBA→RGB, HEIC→JPEG, 10MB 가드
+- **재시도**: tenacity 지수 백오프 max 3, 30s 하드 타임아웃, 실패 시 null result + reason (에러 아님)
+- **비용**: response.usage 토큰 → USD 환산 → 백엔드 콜백 + 월 예산 초과 시 503 BUDGET_EXCEEDED
+
+### YOLO 파이프라인 정책
+- **모델**: YOLOv8s 베이스라인 → yolov8m 비교 (Ultralytics 안정성). v11 실험적
+- **데이터셋**: public(Roboflow varroa, BeeAlert) 300-500 + 베타 양봉가 3명 + augmentation. 베타 시작 전 500-1000장 + varroa instances 2000+
+- **라벨링**: Roboflow + 2명 cross-labeling IoU≥0.7, 미만 수의학자 검수, golden 100장 holdout
+- **학습**: train.py CLI + configs/yolo.yaml + W&B tracking + SemVer 버전 (0.1.0 베이스라인)
+- **Compute**: Colab Pro+ A100, retrain은 Lambda Labs (~$1.10/h) or GCP A100 spot
+- **추론**: lazy-load, env YOLO_DEVICE=cuda|cpu, GPU 미가용 시 CPU 자동. 목표 latency: GPU <500ms, CPU <2s (yolov8s)
+- **위험도 산출**: `risk = clamp(0,100, mite_density * K + count_weight * mite_count)`. K, count_weight, 임계 구간은 configs/risk.yaml에서 튜닝
+- **모델 저장**: S3 helpbee-models/yolo/v0.1.0/best.pt versioning. env YOLO_MODEL_VERSION 부팅 시 다운로드. Blue-green canary 5% → 100%
+- **재학습 루프**: feedback_queue → 주 1회 cron → 100장 누적 시 patch retrain (v0.1.x)
+
+### 마일스톤
+- **5월 W1**: /analyze stub + 프롬프트 프로토타입 + 수동 curl. 동시에 public dataset + Roboflow workspace + 라벨링 가이드 PDF
+- **5월 W2**: structured output Pydantic, 전처리 완성. yolov8s 베이스라인 학습 (public only), mAP 측정
+- **5월 W3**: dual-engine endpoint, YOLO bridge 인터페이스 합의. /analyze/yolo 통합 + S3 weight 파이프라인
+- **5월 W4**: cost tracker, 회귀 테스트, 백엔드 E2E. /analyze/compare + 베타 양봉가 데이터 수집 시작
+- **6월**: 라벨링 + iterate (v0.2.0)
+- **7-8월**: 베타 retraining loop, 50+ 실 이미지, 90% 정확도 게이트
+
+### 검증
+- pytest unit (mocked OpenAI 파싱, 전처리, 비용 계산)
+- 회귀 테스트셋 fixture (20-30장 + 기대 risk_score JSON) — CI 게이트
+- mAP@0.5 ≥ 0.85, mAP@0.5:0.95 ≥ 0.6 (100장 holdout)
+- Latency p50/p95 (GPU/CPU)
+- Beta report: OpenAI vs YOLO confusion matrix, 비용 비교, FN 분석
+
+### 리스크 / 미해결
+- 한국 양봉 환경 이미지 부족 → few-shot에 현장 사진 우선 / 베타 후 fine-tuning 검토
+- OpenAI silent 모델 업데이트 → model_version 핀 + 회귀 게이트 필수
+- 비용 스파이크 → 백엔드 rate limit + AI budget guard 이중화
+- 한글 권장 조치 일관성 → recommendations enum화 + 매핑 (LLM 자유 생성 최소화)
+- 양봉가 협조 실패 시 public data 의존 → 일반화 약화
+- 수의학자 검수비 미산정 (월 50-100만원 예상)
+- GPU 비용: 학습당 $20-50, 월 5회 sweep 시 $200-300
+- CPU에서 yolov8m 이상 2s 초과 → ONNX export + quantization 필요
+- Class imbalance → weighted loss / oversampling
+
+### 다른 분야와의 인터페이스 (정합 포인트)
+- **← Backend API** (@apps/api): HTTP만 (DB 직접 접근 X). 응답 스키마 변경 시 apps/api/src/services/ai-client.ts + 클라이언트(@apps/mobile, @apps/admin) 동기화
+- **→ DB** (@packages/database): 직접 접근 없음. ai_models 테이블 메타는 백엔드를 통해 조회
+- **모델 가중치 ↔ S3** (@infra): helpbee-models 버킷 versioning, env로 버전 핀
+
+---
+
 ## 13. 회귀 게이트 체크리스트
 
 PR 머지 전 다음 중 해당하는 항목 **모두** 체크:

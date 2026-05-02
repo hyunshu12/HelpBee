@@ -423,6 +423,45 @@ k6 run infra/k6/scenarios/diagnose.js
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌 — 정합 요약)
+
+### 핵심 의사결정 (1줄 요약)
+- **클라우드**: AWS Seoul (ap-northeast-2). NCP는 Phase 2 결제 도입 시 재검토
+- **오케스트레이션**: ECS Fargate (운영 단순). K8s/EKS는 Phase 2 (DAU 5,000+)에 검토
+- **DB/캐시**: RDS PostgreSQL 16 db.t4g.small + ElastiCache Redis 7 cache.t4g.micro. Multi-AZ는 Phase 2
+- **스토리지**: S3 + CloudFront. helpbee-images-prod (사용자 사진, lifecycle 30일 IA → 1년 Glacier), helpbee-models (YOLO weights, versioning)
+- **GPU**: EC2 g5.xlarge Spot (~$0.4/h)으로 YOLO 학습. 추론은 MVP에서 CPU(ONNX). 트래픽 증가 시 SageMaker Serverless
+- **시크릿**: AWS Secrets Manager (DB, OpenAI, JWT) + SSM Parameter Store (non-sensitive)
+- **모니터링**: CloudWatch + Sentry (api/ai/admin/web/Flutter) + Grafana Cloud Free
+- **알림**: CloudWatch Alarms → SNS → Lambda → Slack webhook (5xx>1%, AI down, RDS CPU>80%, 예산 80%)
+- **WAF/보안**: CloudFront + AWS WAF (CommonRuleSet, KnownBadInputs), HTTPS-only, CORS allowlist, 100 req/min/IP
+- **백업/DR**: RDS automated backup 7일, weekly snapshot 복원 검증, RTO 4h / RPO 1h
+
+### CI/CD 파이프라인
+- **PR**: turbo run lint type-check test (캐시 활용)
+- **main 머지**: build → ECR push → aws ecs update-service (staging 자동 배포)
+- **tag v0.x.0**: production 배포 + manual approval 필수
+- **Flutter (apps/mobile)**: GHA + fastlane → TestFlight (베타) / Internal Testing (Play)
+
+### 도메인
+- helpbee.kr (가비아) + helpbee.com 확보 권장
+- Route53 + ACM
+- 서브: api / ai / admin / www / cdn
+
+### 검증 / 부하
+- Staging smoke: /health, /ready
+- terraform plan diff PR 리뷰 필수 (직접 apply 금지)
+- k6 부하: 100 req/s 5분, p95 < 500ms, 에러 < 0.5%
+- Sentry 에러율 < 0.5% 24h
+
+### 다른 분야와의 인터페이스 (정합 포인트)
+- **← 모든 앱**: 환경변수는 .env.example + AWS Secrets Manager, Dockerfile은 각 앱 폴더에 배치
+- **↔ Flutter** (@apps/mobile): mobile-beta.yml에서 fastlane 빌드/배포
+- **↔ AI 서비스** (@apps/ai): GPU spot 학습 인프라 + S3 helpbee-models 버킷 versioning
+- **↔ DB** (@packages/database): RDS 백업 + 복원 drill에 의존. drizzle-kit migrate는 deploy 전 단계로 통합
+
+---
+
 ## 20. 배포 전 체크리스트 (Pre-deploy Checklist)
 
 production 배포 전 (체크 다 안 되면 배포 금지):
