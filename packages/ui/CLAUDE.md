@@ -219,6 +219,52 @@ pnpm --filter @helpbee/ui storybook    # http://localhost:6006
 
 ---
 
+## 📋 개발 계획 (마스터 플랜 발췌)
+
+### Phase 1 컴포넌트 세트 (shadcn 표준)
+Button, Card, Table, Dialog, Badge, Input, Tabs, Skeleton
+
+### 디자인 토큰 (tailwind.preset.ts)
+- 꿀색 팔레트: honey-50 ~ honey-900 (#F5B82E 계열)
+- bee-black, bee-brown 보조
+- 위험도 컬러: safe (초록), caution (노랑), warning (주황), critical (빨강)
+- 타이포 스케일: 18px+ 본문 (장년층 대응)
+- radius: 2xl(24) 기본
+
+### 사용 방식 (양 Next.js 앱)
+```typescript
+// tailwind.config.ts
+import preset from '@helpbee/ui/tailwind.preset';
+export default { presets: [preset], ... };
+
+// next.config.js
+transpilePackages: ['@helpbee/ui']
+```
+
+### Storybook
+- packages/ui/.storybook/ 셋업 후 모든 컴포넌트 스토리 추가
+- Chromatic 시각 회귀 (CI 통합)
+
+### 마일스톤
+- **5월 W1-W2**: 디자인 토큰 + 핵심 컴포넌트 (Button, Card, Input, Badge)
+- **5월 W3**: Table, Dialog, Tabs, Skeleton
+- **5월 W4**: Storybook + Chromatic
+- **6월**: chart wrapper, form helpers (apps/admin 요구 따라)
+
+### 검증
+- Storybook 모든 컴포넌트 스토리 PASS
+- Chromatic 시각 회귀 0 diff (의도적 변경 시 PR 본문 명시)
+
+### 리스크
+- 디자인 시안 부재 → shadcn 표준 우선, 꿀색 토큰만 커스터마이즈
+- 두 앱 동시 영향 → 토큰 변경 PR은 항상 영향도 명시
+
+### 다른 분야와의 인터페이스
+- **→ apps/admin, apps/web**: 컴포넌트 + 토큰 export. 이 두 앱은 직접 shadcn-ui 사용 금지
+- **shadcn 패턴**: cva + clsx + tailwind-merge 유지. Radix 프리미티브 기반
+
+---
+
 ## 9. 체크리스트 (PR Checklist)
 
 - [ ] 새 컴포넌트는 `src/components/{Name}.tsx` + `index.ts` export
