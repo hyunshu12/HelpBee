@@ -3,6 +3,7 @@
 # Real datasets — managed in Roboflow, never commit raw images/labels
 training/datasets/*
 !training/datasets/README.md
+!training/datasets/AIHUB_71667.md
 !training/datasets/.gitkeep
 
 # Training run artifacts (logs, checkpoints, predictions)

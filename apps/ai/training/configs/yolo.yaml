@@ -1,0 +1,79 @@
+# YOLO 학습 hyperparameter — v0.1.0 baseline
+# Usage: python -m training.train --config training/configs/yolo.yaml
+#
+# 결정 근거:
+# - 모델: YOLOv11s + P2 head (작은 객체 응애 탐지 강화)
+# - imgsz 1280: 응애가 매우 작은 객체. 640으론 픽셀 부족 → 1280으로 키움
+# - batch 16: A100 40GB 가정. T4(16GB)면 8, RTX 3090(24GB)면 12로 낮출 것
+# - epochs 200 + patience 30: 학습 데이터가 5k → 50k로 점진 확장하므로 충분히 길게.
+#   overfit 시 early stopping이 자동 종료
+# - close_mosaic 10: 마지막 10 epoch에서 mosaic 끄기 → 정확도 회복 (Ultralytics 권장)
+# - copy_paste 0.3: 응애 인스턴스 부족 가능성 대응 (class imbalance)
+
+# ===== Data & Model =====
+data: training/configs/dataset.yaml
+model: training/configs/yolov11s-p2.yaml
+pretrained: yolo11s.pt           # ImageNet pretrained weights (Ultralytics 자동 다운로드)
+
+# ===== Training schedule =====
+epochs: 200
+patience: 30                       # val mAP 30 epoch 정체 → 자동 early stop
+batch: 16                          # GPU 메모리에 맞게 train.py CLI에서 오버라이드 가능
+imgsz: 1280
+device: 0                          # 0=GPU 0, 'cpu'=CPU, '0,1'=multi-GPU
+workers: 8
+
+# ===== Optimizer =====
+optimizer: AdamW                   # YOLOv11 default. SGD 비교는 v0.2.0+
+lr0: 0.001                         # AdamW에서 SGD lr0(0.01) 대비 10배 낮춤
+lrf: 0.01                          # final lr = lr0 * lrf
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3.0
+warmup_momentum: 0.8
+warmup_bias_lr: 0.1
+cos_lr: true                       # cosine learning rate scheduler
+
+# ===== Loss weights =====
+box: 7.5
+cls: 0.5
+dfl: 1.5
+
+# ===== Augmentation =====
+# 위에서 언급한 KCI 논문(2024) augmentation을 강화
+hsv_h: 0.015                       # 약하게 (응애 색이 진단 단서)
+hsv_s: 0.4
+hsv_v: 0.3
+degrees: 10.0                      # 벌통 위에서 본 사진은 회전 OK
+translate: 0.1
+scale: 0.5
+shear: 2.0
+perspective: 0.0
+flipud: 0.5                        # 위/아래 뒤집기 (벌통 사진은 invariant)
+fliplr: 0.5
+mosaic: 1.0                        # 4장 합성 (default)
+mixup: 0.15
+copy_paste: 0.3                    # ★ 응애 인스턴스 픽셀 단위 복사 — class imbalance 핵심
+auto_augment: randaugment
+erasing: 0.4                       # random erasing (cutout)
+close_mosaic: 10                   # 마지막 10 epoch에서 mosaic off
+
+# ===== Logging =====
+project: runs/yolo
+name: v0.1.0-baseline
+exist_ok: false
+save: true
+save_period: -1                    # 매 epoch 저장 안 함 (best/last만)
+plots: true
+verbose: true
+seed: 42
+deterministic: true
+
+# ===== Validation =====
+val: true
+amp: true                          # mixed precision (A100/T4/RTX 30+ 권장)
+cache: false                       # RAM 충분하면 'ram', 아니면 false 또는 'disk'
+
+# ===== W&B =====
+# 환경변수 WANDB_API_KEY 설정 시 자동 활성화 (ultralytics 내장)
+# 비활성화하려면 WANDB_DISABLED=true

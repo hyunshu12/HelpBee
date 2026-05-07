@@ -1,0 +1,34 @@
+# YOLO 학습용 의존성. 추론 서버는 requirements.txt 사용.
+# pip install -r requirements-gpu.txt
+-r requirements.txt
+
+# Deep learning (CUDA 12.1 휠. CPU only면 torch만 따로 깔 것)
+torch>=2.2,<2.5
+torchvision>=0.17,<0.20
+
+# YOLO
+ultralytics>=8.3,<8.4
+
+# Augmentation
+albumentations>=1.4,<2.0
+
+# Experiment tracking
+wandb>=0.16
+
+# Data tools
+roboflow>=1.1
+pandas>=2.1
+scikit-learn>=1.4
+tqdm>=4.66
+
+# Small object inference
+sahi>=0.11
+
+# Annotation conversion
+pycocotools>=2.0
+
+# YAML
+pyyaml>=6.0
+
+# Numpy 호환
+numpy>=1.24,<2.0

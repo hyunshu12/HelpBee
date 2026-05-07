@@ -144,7 +144,7 @@ refactor: 리팩토링
 | Presigned URL 발급 / 업로드 라우트 | @apps/api/src/routes/ + @apps/api/src/services/ (storage.ts, ai-client.ts) — 가이드: @apps/api/CLAUDE.md |
 | AI 분석 (OpenAI Vision) | @apps/ai/app/routers/ + @apps/ai/app/services/ + @apps/ai/app/prompts/ — 가이드: @apps/ai/CLAUDE.md |
 | AI 분석 (자체 YOLO 추론) | @apps/ai/app/services/yolo_inference.py + @apps/ai/app/routers/yolo.py — 가이드: @apps/ai/CLAUDE.md |
-| YOLO 모델 학습 / 데이터셋 | @apps/ai/training/ + @apps/ai/training/datasets/README.md — 가이드: @apps/ai/CLAUDE.md |
+| YOLO 모델 학습 / 데이터셋 | @apps/ai/training/ + **@apps/ai/training/datasets/AIHUB_71667.md (v0.1.0 주 데이터셋, cold-pickup 필독)** + @apps/ai/training/datasets/README.md — 가이드: @apps/ai/CLAUDE.md |
 | 분석 결과 DB 저장 (dual-engine) | @packages/database/src/schema/analyses.ts + @packages/database/src/schema/aiModels.ts — 가이드: @packages/database/CLAUDE.md |
 | 모바일 카메라 / 결과 화면 | @apps/mobile/lib/features/analyses/ + @apps/mobile/lib/shared/widgets/ — 가이드: @apps/mobile/CLAUDE.md |
 | 어드민 진단 비교 뷰 (bbox) | @apps/admin/src/app/(dashboard)/analyses/ + @apps/admin/src/components/viewer/ — 가이드: @apps/admin/CLAUDE.md |
