@@ -1,0 +1,69 @@
+# 위험도(risk_score) 산출 + tier 매핑 — v0.1.0
+#
+# ⚠️ 71667 라벨 분석 결과(Q3=B): 응애 클래스 bbox는 응애 자체가 아닌 "응애가 보이는 벌 영역".
+#    따라서 표준 VMIR(mites per 100 bees)을 직접 계산할 수 없다.
+#    대신 "감염률(infestation_rate) = 감염 영역 인스턴스 / 전체 벌 인스턴스" 사용.
+#
+# 임계값은 Honey Bee Health Coalition 표준(VMIR 3% / 10%)을 그대로 차용.
+# 측정 정의가 다르므로 베타에서 calibration 회귀 필요.
+#   - 베타 양봉가 사진에 sugar-roll 또는 alcohol-wash 실측 VMIR 라벨링
+#   - 우리 infestation_rate vs 실측 VMIR 회귀 → 임계값 보정
+#
+# 상세: apps/ai/training/datasets/AIHUB_71667.md §위험도 측정 정의
+
+formula: infestation_rate          # 'infestation_rate' (default) | 'composite' (논문 fallback)
+
+# ===== Infestation Rate (v0.1.0 default) =====
+infestation_rate:
+  # rate = (bee_with_varroa 인스턴스 수) / (모든 벌 인스턴스 수) * 100
+  # 분모 = bee_normal + bee_with_varroa + bee_other_disease
+  # (다른 질병도 "벌"로 카운트 — 분모 일관성 유지)
+
+  # 임계값 (Honey Bee Health Coalition VMIR 표준 차용)
+  # 측정 정의 차이 있음 → 베타에서 보정
+  thresholds:
+    safe_max: 3.0       # < 3.0  → safe
+    watch_max: 10.0     # 3~10   → watch, > 10 → danger
+
+  min_bee_count: 5      # 5마리 미만 탐지 → "watch" + low_confidence flag
+
+  # risk_score 매핑 (0~100 스케일)
+  score_mapping:
+    rate_at_score_70: 10.0    # 감염률 10% 일 때 risk_score = 70 (watch_max)
+    rate_at_score_100: 20.0   # 감염률 20%+ 면 risk_score = 100 saturation
+
+  # 면적 가중 옵션 (v0.2.0+ 검증 후 활성화 검토)
+  # rate_area = sum(varroa_area) / sum(all_bee_area). 큰 bbox 영향 낮음.
+  use_area_weighting: false
+
+# ===== 논문(KCI 2024) 방식 — 비교용 fallback =====
+# 분류 모델 도입 시 논문의 (감염 벌 수 / 전체 벌 수) 와 같은 metric 비교
+composite:
+  K_density: 80.0
+  K_count: 0.5
+  thresholds:
+    safe_max: 30
+    watch_max: 70
+
+# ===== 한국어 권장 조치 (recommendations enum) =====
+# LLM 자유 생성 대신 enum 매핑이 일관성 ↑ (CLAUDE.md §리스크)
+recommendations:
+  safe:
+    - "응애 감염률이 안전 범위(3% 미만)입니다. 정기 모니터링을 유지하세요."
+    - "다음 점검은 7~10일 후 같은 벌통을 재촬영해 추세를 확인하세요."
+  watch:
+    - "응애 감염률이 주의 범위(3~10%)입니다. 처치를 검토하세요."
+    - "산성 처치(개미산/옥살산) 또는 thymol 기반 처치를 고려하세요."
+    - "여왕벌과 봉세를 점검하고, 3일 이내 재촬영으로 추세를 확인하세요."
+  danger:
+    - "응애 감염률이 위험 범위(10% 이상)입니다. 즉시 처치가 필요합니다."
+    - "우선 alcohol wash 또는 sugar roll로 정확한 mite-per-100-bees를 측정하세요."
+    - "수의사 또는 양봉 전문가 자문 후 처치제(개미산/옥살산/Apivar)를 적용하세요."
+    - "주변 벌통도 함께 검사하세요 — 응애는 봉간 전파됩니다."
+  other_disease:
+    - "응애 외 다른 질병 의심 영역이 탐지되었습니다."
+    - "날개불구바이러스(DWV) / 부저병 / 석고병 가능성 — 수의학적 진단이 필요합니다."
+    - "감염 의심 봉군은 격리하고 도구 소독을 권장합니다."
+  low_confidence:
+    - "탐지된 벌이 적어 진단 신뢰도가 낮습니다."
+    - "벌통 프레임 전체가 보이도록 더 가까운 거리에서 재촬영하세요."
