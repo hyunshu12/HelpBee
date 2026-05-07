@@ -1,6 +1,51 @@
 # CLAUDE.md
 
+> **Level: Enterprise** | Initialized: 2026-04-09 | bkit v2.1.1
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## 🚨 GitHub 커밋/PR 규칙 (Claude 필독)
+
+### 브랜치 보호 규칙
+- `main`, `develop` 브랜치는 **직접 push 금지** (branch protection 적용)
+- 모든 변경은 반드시 **feature 브랜치 → PR → 머지** 순서로 진행
+
+### Claude가 커밋/push 요청을 받으면
+1. **feature 브랜치 생성** (현재 브랜치가 feature/* 가 아닌 경우)
+   ```bash
+   git checkout -b feature/{작업내용}
+   ```
+2. **커밋**
+   ```bash
+   git add <파일>
+   git commit -m "feat/fix/chore: 설명"
+   ```
+3. **feature 브랜치 push**
+   ```bash
+   git push origin feature/{작업내용}
+   ```
+4. **PR 생성** (`feature/*` → `develop`)
+   - GitHub MCP(`mcp__github__create_pull_request`) 사용
+   - `base: develop`, `head: feature/{작업내용}`
+
+### 브랜치 네이밍
+| 유형 | 패턴 | 예시 |
+|------|------|------|
+| 기능 | `feature/{name}` | `feature/user-auth` |
+| 버그 수정 | `bugfix/{name}` | `bugfix/image-upload` |
+| 문서 | `docs/{name}` | `docs/api-guide` |
+| 긴급 수정 | `hotfix/{name}` | `hotfix/api-crash` |
+
+### 커밋 메시지 규칙
+```
+feat: 새 기능
+fix: 버그 수정
+chore: 빌드/설정 변경
+docs: 문서
+refactor: 리팩토링
+```
 
 ---
 
@@ -55,6 +100,113 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | **admin** | Next.js 14+ | 관리자 대시보드 (사용자/구독 관리, 분석 모니터링) | 3002 |
 | **api** | Hono.js | API 서버 (인증, CRUD, 이미지 업로드 조율) | 3001 |
 | **ai** | FastAPI | AI 분석 서버 (OpenAI Vision API 호출) | 8000 |
+
+---
+
+## 📍 작업 라우팅 가이드 (상황 → 폴더)
+
+> **Claude 필독**: 작업 요청을 받으면 아래 표에서 상황을 찾고, 해당 폴더의 `@CLAUDE.md`를 먼저 읽고 시작합니다. 분야별 컨벤션·금기·체크리스트가 그 안에 있습니다.
+
+### 🗂 분야별 진입점 (8개)
+
+| 분야 | 진입 문서 | 폴더 |
+|---|---|---|
+| DB & 스키마 | @packages/database/CLAUDE.md | @packages/database/ |
+| Backend API | @apps/api/CLAUDE.md | @apps/api/ |
+| AI 서비스 (OpenAI + YOLO) | @apps/ai/CLAUDE.md | @apps/ai/ |
+| Flutter 모바일 | @apps/mobile/CLAUDE.md | @apps/mobile/ |
+| 어드민 대시보드 | @apps/admin/CLAUDE.md | @apps/admin/ |
+| 랜딩/마케팅 | @apps/web/CLAUDE.md | @apps/web/ |
+| 디자인 시스템 (UI) | @packages/ui/CLAUDE.md | @packages/ui/ |
+| DevOps / 인프라 | @infra/CLAUDE.md | @infra/ |
+
+### 🔍 상황별 라우팅
+
+#### 인증 / 사용자
+| 상황 | 건드릴 폴더 |
+|---|---|
+| 로그인/회원가입/JWT 라우트 추가 | @apps/api/src/routes/ + @apps/api/src/middleware/ + @apps/api/src/lib/ — 가이드: @apps/api/CLAUDE.md |
+| 사용자 테이블 / refresh_token 스키마 변경 | @packages/database/src/schema/ + @packages/database/migrations/ — 가이드: @packages/database/CLAUDE.md |
+| 모바일 로그인 UI / 토큰 저장 | @apps/mobile/lib/features/auth/ + @apps/mobile/lib/core/storage/ — 가이드: @apps/mobile/CLAUDE.md |
+| 어드민 로그인 / role 검증 | @apps/admin/src/app/(auth)/login/ + @apps/admin/middleware.ts — 가이드: @apps/admin/CLAUDE.md |
+
+#### 벌통 (Hive) CRUD
+| 상황 | 건드릴 폴더 |
+|---|---|
+| 벌통 API 엔드포인트 | @apps/api/src/routes/ + @apps/api/src/schemas/ — 가이드: @apps/api/CLAUDE.md |
+| 벌통 DB 모델 / 쿼리 헬퍼 | @packages/database/src/schema/ + @packages/database/src/queries/ — 가이드: @packages/database/CLAUDE.md |
+| 모바일 벌통 리스트/상세 | @apps/mobile/lib/features/hives/ — 가이드: @apps/mobile/CLAUDE.md |
+| 어드민 벌통 모니터링 | @apps/admin/src/app/(dashboard)/users/ + @apps/admin/src/components/tables/ — 가이드: @apps/admin/CLAUDE.md |
+
+#### 이미지 업로드 / 진단
+| 상황 | 건드릴 폴더 |
+|---|---|
+| Presigned URL 발급 / 업로드 라우트 | @apps/api/src/routes/ + @apps/api/src/services/ (storage.ts, ai-client.ts) — 가이드: @apps/api/CLAUDE.md |
+| AI 분석 (OpenAI Vision) | @apps/ai/app/routers/ + @apps/ai/app/services/ + @apps/ai/app/prompts/ — 가이드: @apps/ai/CLAUDE.md |
+| AI 분석 (자체 YOLO 추론) | @apps/ai/app/services/yolo_inference.py + @apps/ai/app/routers/yolo.py — 가이드: @apps/ai/CLAUDE.md |
+| YOLO 모델 학습 / 데이터셋 | @apps/ai/training/ + @apps/ai/training/datasets/README.md — 가이드: @apps/ai/CLAUDE.md |
+| 분석 결과 DB 저장 (dual-engine) | @packages/database/src/schema/analyses.ts + @packages/database/src/schema/aiModels.ts — 가이드: @packages/database/CLAUDE.md |
+| 모바일 카메라 / 결과 화면 | @apps/mobile/lib/features/analyses/ + @apps/mobile/lib/shared/widgets/ — 가이드: @apps/mobile/CLAUDE.md |
+| 어드민 진단 비교 뷰 (bbox) | @apps/admin/src/app/(dashboard)/analyses/ + @apps/admin/src/components/viewer/ — 가이드: @apps/admin/CLAUDE.md |
+
+#### UI / 디자인
+| 상황 | 건드릴 폴더 |
+|---|---|
+| 공유 컴포넌트 추가 (Button, Card 등) | @packages/ui/src/components/ — 가이드: @packages/ui/CLAUDE.md |
+| 디자인 토큰 (꿀색 팔레트, 타이포) | @packages/ui/src/tokens/ + @packages/ui/tailwind.preset.ts — 가이드: @packages/ui/CLAUDE.md |
+| 어드민 차트 / 테이블 | @apps/admin/src/components/charts/ + @apps/admin/src/components/tables/ — 가이드: @apps/admin/CLAUDE.md |
+| 랜딩 페이지 / SEO | @apps/web/src/app/[locale]/ + @apps/web/src/lib/ — 가이드: @apps/web/CLAUDE.md |
+| 블로그 / MDX 콘텐츠 | @apps/web/content/blog/ + @apps/web/messages/ — 가이드: @apps/web/CLAUDE.md |
+| 모바일 테마 / 다국어 | @apps/mobile/lib/core/theme/ + @apps/mobile/lib/l10n/ — 가이드: @apps/mobile/CLAUDE.md |
+
+#### 인프라 / 배포 / CI
+| 상황 | 건드릴 폴더 |
+|---|---|
+| Dockerfile (앱별) | @apps/api/Dockerfile, @apps/ai/Dockerfile, @apps/admin/Dockerfile, @apps/web/Dockerfile — 가이드: @infra/CLAUDE.md |
+| 로컬 docker-compose 확장 | @docker-compose.yml + @infra/docker/nginx/ — 가이드: @infra/CLAUDE.md |
+| GitHub Actions (CI/CD) | @.github/workflows/ — 가이드: @infra/CLAUDE.md |
+| Terraform (AWS Seoul, 환경별) | @infra/terraform/modules/ + @infra/terraform/envs/staging/ + @infra/terraform/envs/production/ — 가이드: @infra/CLAUDE.md |
+| Kubernetes (기존 develop 자산) | @infra/k8s/ |
+| 시크릿 / 환경변수 | @.env.example + AWS Secrets Manager (가이드: @infra/CLAUDE.md) |
+| 부하 테스트 (k6) | @infra/k6/ — 가이드: @infra/CLAUDE.md |
+| 운영 스크립트 | @scripts/ — 가이드: @infra/CLAUDE.md |
+
+#### 테스트
+| 상황 | 건드릴 폴더 |
+|---|---|
+| API 통합 테스트 (vitest) | @apps/api/src/tests/ — 가이드: @apps/api/CLAUDE.md |
+| API 시나리오 (Bruno) | @apps/api/bruno/ |
+| AI 단위/회귀 테스트 (pytest) | @apps/ai/app/tests/ + @apps/ai/app/tests/fixtures/ — 가이드: @apps/ai/CLAUDE.md |
+| Flutter unit/widget/integration | @apps/mobile/test/ + @apps/mobile/integration_test/ — 가이드: @apps/mobile/CLAUDE.md |
+| 어드민 e2e (Playwright) | @apps/admin/tests/ — 가이드: @apps/admin/CLAUDE.md |
+| 디자인 시스템 시각 회귀 | @packages/ui/.storybook/ — 가이드: @packages/ui/CLAUDE.md |
+
+#### 문서 / 기획
+| 상황 | 건드릴 폴더 |
+|---|---|
+| 요구사항(PRD) | @docs/00-requirement/ |
+| 아키텍처 문서 | @docs/01-development/ |
+| 테스트 시나리오 | @docs/02-scenario/ |
+| 기술 부채 / 리팩토링 | @docs/03-refactoring/ |
+| 운영 런북 | @docs/04-operation/ |
+| Git 워크플로우 (필독) | @gitworkflow.md, @GIT_FLOW_GUIDE.md |
+| 모노레포 빠른 시작 | @README_MONOREPO.md |
+| 모노레포 상세 구조 | @PROJECT_STRUCTURE.md |
+
+### ⚠️ 다중 폴더 변경 시 (필수 동기화)
+
+- **API 응답 타입 변경** → @packages/types/src/ → 사용처 (@apps/api, @apps/admin, @apps/web, @apps/mobile) 모두 갱신
+- **DB 스키마 변경** → @packages/database/src/schema/ + @packages/database/migrations/ + @packages/database/CLAUDE.md 체크리스트 통과 + 의존하는 @apps/api/src/routes/ 검토
+- **AI 응답 스키마 변경** → @apps/ai/app/schemas/ + @apps/api/src/services/ai-client.ts + @apps/mobile/lib/features/analyses/ + @apps/admin/src/app/(dashboard)/analyses/
+- **디자인 토큰 변경** → @packages/ui/src/tokens/ + @apps/admin + @apps/web 모두 영향, PR 본문에 영향도 명시
+- **새 환경변수 추가** → @.env.example + @apps/{각 앱}/CLAUDE.md 환경 섹션 + @infra/CLAUDE.md (Secrets Manager) 동시 갱신
+
+### 🚦 Claude 작업 흐름
+
+1. 사용자 요청을 받으면 위 표에서 가장 가까운 상황을 찾는다
+2. 해당 행의 모든 `@폴더/CLAUDE.md`를 먼저 읽는다 (분야별 규칙·금기·체크리스트)
+3. 변경할 파일을 식별하고 `git checkout -b feature/{설명}` (현재가 develop이면)
+4. 분야별 CLAUDE.md의 PR 체크리스트를 통과한 뒤 push → develop으로 PR
 
 ---
 

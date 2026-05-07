@@ -1,6 +1,7 @@
 {
   "extends": "@helpbee/config/typescript/nextjs.json",
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]

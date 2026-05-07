@@ -19,8 +19,8 @@
     "redis": "^4.6.0",
     "jwt-simple": "^0.5.6",
     "axios": "^1.6.0",
-    "@helpbee/types": "*",
-    "@helpbee/database": "*"
+    "@helpbee/types": "workspace:*",
+    "@helpbee/database": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

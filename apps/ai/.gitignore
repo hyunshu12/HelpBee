@@ -1,0 +1,32 @@
+# --- AI service ignores ---
+
+# Real datasets — managed in Roboflow, never commit raw images/labels
+training/datasets/*
+!training/datasets/README.md
+!training/datasets/.gitkeep
+
+# Training run artifacts (logs, checkpoints, predictions)
+training/runs/
+
+# Model weights (managed in S3 helpbee-models bucket)
+*.pt
+*.onnx
+*.engine
+
+# Weights & Biases local cache
+wandb/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example

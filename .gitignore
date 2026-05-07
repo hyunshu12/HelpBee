@@ -1,3 +1,7 @@
+# Claude Code / bkit (로컬 세션 데이터)
+.claude/
+.bkit/
+
 # Node
 node_modules/
 npm-debug.log*
@@ -91,4 +95,6 @@ secrets/
 # 내부 기획 문서 (외부 공유 불필요)
 예산계획서.md
 AI_양봉진단_사업제안서.md
-CLAUDE.md
+
+# 루트 CLAUDE.md만 무시 (도메인별 apps/*/CLAUDE.md, packages/*/CLAUDE.md, infra/CLAUDE.md 는 추적)
+/CLAUDE.md
