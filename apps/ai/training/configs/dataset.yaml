@@ -1,0 +1,21 @@
+# Ultralytics dataset config — v0.1.0 baseline
+# 변환 스크립트: training/data/aihub_to_yolo.py
+# 데이터셋 상세: apps/ai/training/datasets/AIHUB_71667.md
+
+path: ../datasets/varroa-v1
+train: images/train
+val: images/val
+test: images/test  # 선택. golden은 별도 dataset.yaml로 평가
+
+# 3-class detection (Q1' 결정 = B+)
+#   0: bee_normal         — 정상 벌/유충
+#   1: bee_with_varroa    — 응애가 보이는 벌 영역 (Q3=B: 응애 자체 아님)
+#   2: bee_other_disease  — 날개불구·부저병·석고병 통합
+#
+# 71667 7-class → 우리 3-class 매핑은 aihub_to_yolo.py 의 CLASS_MAPPING.
+# v0.2.0+ 에서 7-class 분리는 데이터 충분해진 후 자연스러운 확장.
+names:
+  0: bee_normal
+  1: bee_with_varroa
+  2: bee_other_disease
+nc: 3

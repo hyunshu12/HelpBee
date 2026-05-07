@@ -176,9 +176,16 @@ class AnalysisResponse(BaseModel):
 - `imgsz=640`, `conf=0.25`, `iou=0.5` (운영 기본값, configs/yolo.yaml 에서 오버라이드)
 
 ### 8-2. 데이터
-- **출처**: 공개 데이터셋(BeeImage, Kaggle varroa) + 베타 양봉가 기여 + augmentation
-- **베타 진입 게이트**: 500–1000장 + **2,000+ varroa instances** + golden 100장 holdout 통과
-- **Augmentation (albumentations)**: HFlip, Rotate(±15°), HSV jitter, Cutout, MotionBlur, RandomShadow
+- **v0.1.0 주 데이터셋**: **AI Hub 71667 (꿀벌 질병 진단 이미지 데이터)** — 312,000장 / 1,171,779 인스턴스
+  - 상세·스키마·매핑·통계·제약 모두: **[apps/ai/training/datasets/AIHUB_71667.md](training/datasets/AIHUB_71667.md)**
+  - 71667 7-class → 우리 3-class (`bee_normal` / `bee_with_varroa` / `bee_other_disease`) 매핑은
+    `training/data/aihub_to_yolo.py:CLASS_MAPPING` 단일 소스
+  - ⚠️ Q3 라벨 케이스 = B (응애 자체 bbox 없음, "감염된 벌 영역"). VMIR 직접 계산 불가 →
+    `infestation_rate` 사용 (`training/configs/risk.yaml`)
+- **외부 데이터 (베타)**: 베타 양봉가 사진 + Roboflow / Kaggle 변종 — 일반화 평가 + golden 셋 교체
+- **베타 진입 게이트**: 500–1000장 + **2,000+ varroa instances** + golden 300장 holdout 통과
+- **Augmentation (albumentations / Ultralytics 내장)**: HFlip, Rotate(±15°), HSV jitter, Cutout,
+  MotionBlur, RandomShadow, **Copy-Paste (응애 인스턴스 imbalance 대응 핵심)**
   - 상세 카운트(밀도 정확도) 영향 줄 수 있는 transform 은 train only
 
 ### 8-3. 라벨링 SOP
@@ -422,7 +429,25 @@ PR 머지 전 다음 중 해당하는 항목 **모두** 체크:
 
 ## 참고
 
+### 데이터셋
+- **AI Hub 71667 (v0.1.0 주 데이터셋)**: [training/datasets/AIHUB_71667.md](training/datasets/AIHUB_71667.md) ★ cold-pickup 필독
+- **공개 데이터 보강**: BeeImage, Kaggle varroa, Roboflow varroa workspace
+- **외부 베타 데이터**: 베타 양봉가 3명 사진 (Phase 2)
+
+### 학습 인프라
+- 학습 config: [training/configs/yolo.yaml](training/configs/yolo.yaml)
+- 모델 정의 (P2 head): [training/configs/yolov11s-p2.yaml](training/configs/yolov11s-p2.yaml)
+- 데이터셋 config: [training/configs/dataset.yaml](training/configs/dataset.yaml)
+- 위험도 정의: [training/configs/risk.yaml](training/configs/risk.yaml)
+- 변환 / 분할 / golden: [training/data/](training/data/)
+- 학습 / 평가 진입점: [training/train.py](training/train.py), [training/eval.py](training/eval.py)
+- 단축 명령: [Makefile](Makefile)
+
+### 외부
 - 상위 계획: `~/.claude/plans/refactored-percolating-church.md`
+- AI YOLO 설계 결정 로그: `~/.claude/plans/ai-linked-prism.md`
 - S3 가중치 버킷: `helpbee-models`
 - W&B 프로젝트: `helpbee-yolo`
 - Roboflow 프로젝트: (URL은 시크릿/팀위키)
+- KCI 논문 (참고): "A YOLOv8-Based Two-Stage Framework for Non-Destructive Detection of
+  Varroa destructor Infestations in Apis mellifera Colonies" (Lee et al., JKSCI 2024.10)
