@@ -150,7 +150,7 @@ await db.insert(schema.analyses).values({ ... });
 docker compose up -d postgres
 # (필요시) docker compose logs -f postgres
 ```
-`docker-compose.yml`이 Postgres 16 + Redis 7을 띄운다. 기본 DB: `helpbee_dev`, user: `helpbee`, password: `helpbee`. 정확한 값은 `.env.local` / `docker-compose.yml` 참조.
+`docker-compose.yml`이 Postgres 16 + Redis 7을 띄운다. 기본 DB: `helpbee`, user: `helpbee_user`, password: `helpbee_password`. 정확한 값은 `.env.local` / `docker-compose.yml` 참조. (`packages/database/src/client.ts`의 `DEFAULT_URL`도 동일 값 사용.)
 
 ### 6.2 마이그레이션 / 스튜디오
 ```bash
@@ -177,8 +177,8 @@ pnpm --filter @helpbee/database tsx src/seeds/dev.ts
 - free subscription auto-row
 
 ### 6.4 환경 변수
-- `DATABASE_URL=postgres://helpbee:helpbee@localhost:5432/helpbee_dev`
-- `drizzle.config.ts`가 이 변수를 읽는다. `.env`는 git ignored.
+- `DATABASE_URL=postgresql://helpbee_user:helpbee_password@localhost:5432/helpbee`
+- `drizzle.config.ts` / `src/client.ts` / `src/seeds/dev.ts`가 같은 변수를 읽는다 (미지정 시 동일 DEFAULT_URL fallback). `.env`는 git ignored.
 
 ---
 

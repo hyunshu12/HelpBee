@@ -1,5 +1,5 @@
 {
-  "extends": "@helpbee/config/typescript/base.json",
+  "extends": "@helpbee/config/typescript/node.json",
   "compilerOptions": {
     "noEmit": true,
     "moduleResolution": "Bundler",

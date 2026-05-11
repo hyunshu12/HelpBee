@@ -189,6 +189,7 @@ refactor: 리팩토링
 | 테스트 시나리오 | @docs/02-scenario/ |
 | 기술 부채 / 리팩토링 | @docs/03-refactoring/ |
 | 운영 런북 | @docs/04-operation/ |
+| **구현 완료 기록 (PR 머지 산출물 인덱스)** ★ | **@docs/05-implementation/** |
 | Git 워크플로우 (필독) | @gitworkflow.md, @GIT_FLOW_GUIDE.md |
 | 모노레포 빠른 시작 | @README_MONOREPO.md |
 | 모노레포 상세 구조 | @PROJECT_STRUCTURE.md |
@@ -230,6 +231,14 @@ refactor: 리팩토링
    - 설치 및 실행 방법
    - 개별 앱 실행 명령어
    - 데이터베이스 마이그레이션
+
+### 진행 상황 추적 — 새 작업 시 ★ 먼저 확인 ★
+
+4. **@docs/05-implementation/** — PR 단위 구현 기록 인덱스
+   - 무엇이 이미 구현됐는지 한눈에 파악 (git log 뒤지지 말고 여기부터)
+   - 각 PR 머지 시 `YYYY-MM-DD-{topic}.md` 한 파일 추가 의무
+   - 디렉터리 README에 작성 규칙 / 템플릿 / 인덱스 표 정리됨
+   - cold-pickup AI / 신규 합류자의 첫 시작점
 
 ---
 
