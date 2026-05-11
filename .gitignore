@@ -63,6 +63,9 @@ desktop.ini
 *.sqlite
 *.db
 migrations/
+# Exception: Drizzle 마이그레이션 SQL은 단일 진실 소스로 git 커밋 (packages/database/CLAUDE.md §3.3)
+!packages/database/migrations/
+!packages/database/migrations/**
 
 # Logs
 logs/

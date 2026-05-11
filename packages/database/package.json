@@ -2,22 +2,28 @@
   "name": "@helpbee/database",
   "version": "0.1.0",
   "private": true,
-  "description": "Database schema and migrations using Drizzle ORM",
+  "description": "Database schema, migrations, queries, and seeds (Drizzle ORM + postgres-js)",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "migrate": "drizzle-kit migrate",
+    "generate": "drizzle-kit generate:pg",
+    "migrate": "tsx src/migrate.ts",
     "push": "drizzle-kit push:pg",
+    "check": "drizzle-kit check:pg",
     "studio": "drizzle-kit studio",
+    "seed:dev": "tsx src/seeds/dev.ts",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.28.0",
-    "pg": "^8.11.0"
+    "argon2": "^0.31.2",
+    "drizzle-orm": "^0.29.5",
+    "postgres": "^3.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
+    "@helpbee/config": "workspace:*",
+    "@types/node": "^20.0.0",
     "drizzle-kit": "^0.20.0",
-    "@types/node": "^20.0.0"
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
   }
 }
