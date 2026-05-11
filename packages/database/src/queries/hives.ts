@@ -38,13 +38,22 @@ export type HiveTrendPoint = {
 };
 
 /**
- * Hive별 일자별 평균 risk 트렌드.
- * dual-engine 환경에서는 같은 image_id에 2 row가 있을 수 있어 단순 평균이 두 모델 합 평균이 됨.
- * 베타 비교 기간에는 이 동작 의도적 — 후속 PR에서 model_id로 분리 트렌드 함수 추가 예정.
+ * Hive별 일자별 평균 risk 트렌드 (소유권 검증 포함).
+ *
+ * - hives INNER JOIN으로 소유권(userId) + soft delete(deletedAt IS NULL) 동시 검증.
+ *   → 호출 라우트가 검증을 깜빡해도 IDOR 발생 X.
+ *   → 다른 user의 hiveId로 호출 시 빈 배열 반환.
+ * - dual-engine 환경에서는 같은 image_id에 2 row가 있을 수 있어 단순 평균이 두 모델 합 평균이 됨.
+ *   베타 비교 기간에는 이 동작 의도적 — 후속 PR에서 model_id로 분리 트렌드 함수 추가 예정.
+ *
+ * @example
+ *   // apps/api 라우트에서 (userId는 JWT 미들웨어에서 추출):
+ *   const trend = await queries.hives.getHiveTrend(db, hiveId, userId, from, to);
  */
 export async function getHiveTrend(
   db: Database,
   hiveId: string,
+  userId: string,
   from: Date,
   to: Date,
 ): Promise<HiveTrendPoint[]> {
@@ -56,9 +65,12 @@ export async function getHiveTrend(
       analysisCount: count(analyses.id).mapWith(Number),
     })
     .from(analyses)
+    .innerJoin(hives, eq(hives.id, analyses.hiveId))
     .where(
       and(
         eq(analyses.hiveId, hiveId),
+        eq(hives.userId, userId),
+        isNull(hives.deletedAt),
         eq(analyses.status, 'success'),
         gte(analyses.analyzedAt, from),
         lte(analyses.analyzedAt, to),

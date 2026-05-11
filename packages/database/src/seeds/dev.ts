@@ -9,6 +9,7 @@
  * idempotent — 재실행 시 ON CONFLICT DO NOTHING (UNIQUE 제약 활용).
  */
 import argon2 from 'argon2';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
@@ -60,22 +61,28 @@ async function main(): Promise<void> {
     const passwordHash = await argon2.hash(DEV_PASSWORD, ARGON2_OPTS);
 
     // ─────────────── users ───────────────
-    const userRows = await db
-      .insert(schema.users)
-      .values(
-        SEED_USERS.map((u) => ({
-          email: u.email,
-          name: u.name,
-          role: u.role,
-          passwordHash,
-          emailVerifiedAt: new Date(),
-        })),
-      )
-      .onConflictDoNothing({ target: schema.users.email })
-      .returning();
-    console.log(`[seed:dev] users inserted: ${userRows.length} (existing rows skipped)`);
+    // users.email은 컬럼 UNIQUE() 대신 lower(email) partial index로 관리되므로
+    // drizzle의 `onConflictDoNothing({ target: column })` 사용 불가 (PG에서 인식 못 함).
+    // → select-then-insert 패턴으로 멱등성 확보.
+    const existingUsers = await db.select().from(schema.users);
+    const existingEmails = new Set(existingUsers.map((u) => u.email.toLowerCase()));
+    const toInsert = SEED_USERS.filter((u) => !existingEmails.has(u.email.toLowerCase())).map(
+      (u) => ({
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        passwordHash,
+        emailVerifiedAt: new Date(),
+      }),
+    );
+    const userRows = toInsert.length
+      ? await db.insert(schema.users).values(toInsert).returning()
+      : [];
+    console.log(
+      `[seed:dev] users inserted: ${userRows.length} (existing ${existingUsers.length} skipped)`,
+    );
 
-    // 이미 존재하는 경우 위 onConflictDoNothing은 반환 X — id 확보 위해 다시 조회.
+    // id 확보 위해 전체 조회 (방금 insert + 기존)
     const allUsers = await db.select().from(schema.users);
     const adminUser = allUsers.find((u) => u.email === 'admin@helpbee.local');
     const bk1 = allUsers.find((u) => u.email === 'beekeeper1@helpbee.local');
@@ -133,18 +140,9 @@ async function main(): Promise<void> {
 
     // ─────────────── analysis_images + analyses (dual-engine) ───────────────
     // 같은 image_id에 (openai, yolo) 두 row를 5세트 — UNIQUE(image_id, model_id) 검증용.
-    const existingImages = await db
-      .select()
-      .from(schema.analysisImages)
-      .where(
-        // 시드 마커: storage_url 접두사로 식별
-        // drizzle like helper 대신 raw sql 사용
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (schema.analysisImages.storageUrl as any).like
-          ? undefined
-          : undefined,
-      );
-    // 단순화: 시드는 한 번만 한다 — analysis_images 0개일 때만 dual analysis 생성.
+    // 멱등성: analysis_images 가 0개일 때만 시드 세트 생성.
+    // (DB에 이미 이미지가 1개라도 있으면 재시드 안 함 — 운영 DB 보호)
+    const existingImages = await db.select().from(schema.analysisImages);
     const imagesCount = existingImages.length;
     if (imagesCount === 0 && allHives.length > 0) {
       const dualSets = 5;
@@ -229,12 +227,20 @@ async function main(): Promise<void> {
     }
 
     // ─────────────── audit_log ───────────────
-    await db.insert(schema.auditLog).values({
-      actorId: adminUser.id,
-      action: 'seed.dev',
-      entity: 'system',
-      metadata: { note: 'seed:dev executed' },
-    });
+    // 멱등성: 시드 마커 row 1개만 유지 (audit_log는 hard 보존이지만 시드 자체는 멱등 강제)
+    const existingSeedAudit = await db
+      .select()
+      .from(schema.auditLog)
+      .where(eq(schema.auditLog.action, 'seed.dev'))
+      .limit(1);
+    if (existingSeedAudit.length === 0) {
+      await db.insert(schema.auditLog).values({
+        actorId: adminUser.id,
+        action: 'seed.dev',
+        entity: 'system',
+        metadata: { note: 'seed:dev executed' },
+      });
+    }
 
     console.log('[seed:dev] done.');
   } finally {

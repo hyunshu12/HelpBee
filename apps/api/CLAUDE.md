@@ -324,7 +324,7 @@ pnpm --filter @helpbee/database migrate
 pnpm --filter api dev      # tsx watch + .env.local 로드
 ```
 
-기본 포트: `3000`. health check: `GET http://localhost:3000/health`.
+기본 포트: `3001` (`src/index.ts`의 `PORT ?? 3001`). health check: `GET http://localhost:3001/health`. Bruno 환경(`bruno/environments/local.bru`)도 동일 포트로 맞출 것.
 
 ### Bruno
 
