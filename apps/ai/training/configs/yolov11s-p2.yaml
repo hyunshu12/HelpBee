@@ -1,4 +1,10 @@
-# YOLOv11s + P2 detection head — 작은 객체(응애) 탐지 강화 변형
+# YOLOv11s + P2 detection head — ⚠️ v0.2.0 실험 변형 (v0.1.0 미사용, ADR-0001)
+#
+# ⚠️ 이 변형의 "작은 객체(응애)" 근거는 v0.1.0 주 데이터(AI Hub 71667)에는 적용되지 않는다.
+#    AIHUB_71667.md §6 — 모든 응애 bbox는 "감염된 벌 영역"으로 medium~large(min area ratio 0.13),
+#    응애 자체 bbox 0개. 따라서 P2(작은 객체용)는 v0.1.0 데이터에 불필요하고, 운영 config(yolo.yaml)는
+#    표준 yolo11s.yaml / imgsz 640을 쓴다. 이 파일은 실제 양봉가 사진(더 멀리·작게 찍힘)이 들어오는
+#    v0.2.0에서 재평가용으로만 보존. 결정 근거: docs/01-development/adr/ADR-0001-yolo-engine-architecture.md
 #
 # 표준 YOLOv11 (cfg/models/11/yolo11.yaml)은 P3/P4/P5 (8x/16x/32x) 3-scale.
 # 이 변형은 P2 (4x) head를 추가해 4-scale 탐지 → 작은 객체 mAP 향상.
