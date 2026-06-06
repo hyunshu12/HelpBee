@@ -172,8 +172,10 @@ class AnalysisResponse(BaseModel):
 ## 8. YOLO 파이프라인 원칙
 
 ### 8-1. 모델
-- 베이스라인 `yolov8s`, 비교 `yolov8m`
-- `imgsz=640`, `conf=0.25`, `iou=0.5` (운영 기본값, configs/yolo.yaml 에서 오버라이드)
+> **ADR-0001 (2026-06-05)**: v0.1.0 = **단일 스테이지 3-class YOLOv11s @ imgsz 640** (P2 미사용).
+> v0.2.0 = 2-stage 검출→분류 (라이선스 게이트 통과 시). 상세: `docs/01-development/adr/ADR-0001-yolo-engine-architecture.md`
+- v0.1.0 베이스라인: **YOLOv11s** (표준, P2 미사용), `imgsz=640`. (구 `yolov8s` 표기는 ADR-0001로 폐기)
+- `conf=0.25`, `iou=0.5` (운영 기본값, configs/yolo.yaml 에서 오버라이드)
 
 ### 8-2. 데이터
 - **v0.1.0 주 데이터셋**: **AI Hub 71667 (꿀벌 질병 진단 이미지 데이터)** — 312,000장 / 1,171,779 인스턴스

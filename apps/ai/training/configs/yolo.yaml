@@ -1,9 +1,12 @@
 # YOLO 학습 hyperparameter — v0.1.0 baseline
 # Usage: python -m training.train --config training/configs/yolo.yaml
 #
-# 결정 근거:
-# - 모델: YOLOv11s + P2 head (작은 객체 응애 탐지 강화)
-# - imgsz 1280: 응애가 매우 작은 객체. 640으론 픽셀 부족 → 1280으로 키움
+# 결정 근거 (ADR-0001 반영, 2026-06-05):
+# - 모델: 표준 YOLOv11s. ⚠️ P2 head 미사용 — AIHUB_71667.md §6에서 모든 응애 bbox가
+#   medium~large("감염된 벌 영역", min area ratio 0.13)로 확인되어 P2(작은 객체용)는
+#   v0.1.0 데이터에 불필요. P2 변형은 yolov11s-p2.yaml에 v0.2.0 실험으로 보존.
+# - imgsz 640: 응애 자체가 아닌 "감염 벌 영역"이 타깃이라 1280 불필요. 640이 CPU/ONNX
+#   추론 latency·1인 운영에 유리(1280은 ~4× 연산). 승인된 2-stage 설계도 640 채택.
 # - batch 16: A100 40GB 가정. T4(16GB)면 8, RTX 3090(24GB)면 12로 낮출 것
 # - epochs 200 + patience 30: 학습 데이터가 5k → 50k로 점진 확장하므로 충분히 길게.
 #   overfit 시 early stopping이 자동 종료
@@ -12,14 +15,14 @@
 
 # ===== Data & Model =====
 data: training/configs/dataset.yaml
-model: training/configs/yolov11s-p2.yaml
+model: yolo11s.yaml                # 표준 YOLOv11s (P2 미사용, ADR-0001). P2 변형: yolov11s-p2.yaml (v0.2.0 실험)
 pretrained: yolo11s.pt           # ImageNet pretrained weights (Ultralytics 자동 다운로드)
 
 # ===== Training schedule =====
 epochs: 200
 patience: 30                       # val mAP 30 epoch 정체 → 자동 early stop
 batch: 16                          # GPU 메모리에 맞게 train.py CLI에서 오버라이드 가능
-imgsz: 1280
+imgsz: 640
 device: 0                          # 0=GPU 0, 'cpu'=CPU, '0,1'=multi-GPU
 workers: 8
 

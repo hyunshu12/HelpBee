@@ -1,7 +1,9 @@
-# HelpBee YOLO 2-Stage 모델 설계 — v0.1.0
+# HelpBee YOLO 2-Stage 모델 설계 — v0.2.0 목표 (구 v0.1.0, ADR-0001로 재범위)
 
-> 설계 결정 일자: 2026-05-07 | Owner: AI팀 | 참고: Lee et al. JKSCI 2024.10
-> Status: APPROVED for implementation | Target: 2026-06 MVP 베타
+> 설계 결정 일자: 2026-05-07 | 재범위: 2026-06-05 (ADR-0001) | Owner: AI팀 | 참고: Lee et al. JKSCI 2024.10
+> Status: APPROVED — **v0.2.0 목표 설계**. v0.1.0은 단일 스테이지 3-class 베이스라인으로 선출시(ADR-0001).
+> Target: 라이선스 게이트(71488 상용·내국인, Zenodo CC BY) 통과 후 v0.2.0. 미통과 시 폴백 = 출시한 단일 스테이지.
+> 결정 근거: docs/01-development/adr/ADR-0001-yolo-engine-architecture.md
 
 ---
 
