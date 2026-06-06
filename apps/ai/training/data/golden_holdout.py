@@ -134,12 +134,12 @@ def write_golden(items: list[Item], output: Path):
         manifest.append({"image": it.image.name, "meta": it.meta})
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
 
-    # data.yaml — Ultralytics가 eval에서 사용
+    # data.yaml — Ultralytics가 eval에서 사용 (3-class, dataset.yaml과 일치, ADR-0001)
     (output / "data.yaml").write_text(
         "path: .\n"
         "val: images/val\n"
-        "names:\n  0: bee_normal\n  1: varroa_mite\n"
-        "nc: 2\n",
+        "names:\n  0: bee_normal\n  1: bee_with_varroa\n  2: bee_other_disease\n"
+        "nc: 3\n",
         encoding="utf-8",
     )
     logger.info(f"golden 쓰기 완료: {output}")

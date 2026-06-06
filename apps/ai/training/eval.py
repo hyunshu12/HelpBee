@@ -5,14 +5,14 @@ Usage:
     python -m training.eval \\
         --weights runs/yolo/v0.1.0-baseline/weights/best.pt \\
         --golden training/datasets/golden/data.yaml \\
-        --imgsz 1280
+        --imgsz 640
 
 출력 (콘솔 + JSON):
     - mAP@0.5
     - mAP@0.5:0.95 (엄격)
     - Precision, Recall (전체 + 클래스별)
-    - Recall@varroa (양봉가 입장 핵심: 응애 놓침 = false negative 비율)
-    - VMIR MAE (이미지별 추정 VMIR vs 라벨 VMIR 평균 절대 오차)
+    - Recall@varroa = bee_with_varroa 클래스 recall (양봉가 입장 핵심: 응애 놓침 비율)
+    - infestation_rate MAE (이미지별 추정 vs 라벨 감염률 평균 절대 오차, 분모=전체 벌)
     - Confusion matrix (저장: weights와 같은 디렉토리)
 
 회귀 게이트 (apps/ai/CLAUDE.md §13):
@@ -31,20 +31,27 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def compute_vmir_from_label(label_path: Path, varroa_id: int = 1, normal_id: int = 0) -> float | None:
-    """라벨 파일 → VMIR (mites per 100 bees)."""
+def compute_infestation_rate_from_label(
+    label_path: Path,
+    varroa_id: int = 1,
+    bee_class_ids: tuple[int, ...] = (0, 1, 2),
+) -> float | None:
+    """라벨 파일 → infestation_rate (%).
+
+    infestation_rate = (bee_with_varroa 인스턴스) / (전체 벌 인스턴스) * 100
+    분모 = bee_normal(0) + bee_with_varroa(1) + bee_other_disease(2)
+    (risk.yaml / AIHUB_71667.md §10 정의. 71667 Q3=B → 표준 VMIR 계산 불가하므로 infestation_rate 사용.)
+    """
     if not label_path.exists():
         return None
     counts = Counter()
     for line in label_path.read_text().splitlines():
         if line.strip():
             counts[int(line.split()[0])] += 1
-    bees = counts.get(normal_id, 0) + counts.get(varroa_id, 0)
-    # NB: bee_count 분모를 어떻게 잡을지는 라벨 매핑(Q3) 결과에 따라 다름.
-    #     케이스 A (응애 자체 bbox)에서는 normal 만 분모. 케이스 B/C는 다름.
-    if bees == 0:
+    total_bees = sum(counts.get(c, 0) for c in bee_class_ids)
+    if total_bees == 0:
         return None
-    return counts.get(varroa_id, 0) / max(1, counts.get(normal_id, 0)) * 100
+    return counts.get(varroa_id, 0) / total_bees * 100
 
 
 def main():
@@ -53,7 +60,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--weights", type=Path, required=True, help="best.pt 경로")
     p.add_argument("--golden", type=Path, required=True, help="golden data.yaml")
-    p.add_argument("--imgsz", type=int, default=1280)
+    p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--conf", type=float, default=0.25)
     p.add_argument("--iou", type=float, default=0.5)
     p.add_argument(
@@ -106,21 +113,21 @@ def main():
             "recall": r_per_class[idx] if idx < len(r_per_class) else None,
         }
 
-    # ===== 2. VMIR MAE — golden val 셋에서 이미지별 비교 =====
-    logger.info("=== VMIR MAE 계산 ===")
+    # ===== 2. infestation_rate MAE — golden val 셋에서 이미지별 비교 =====
+    logger.info("=== infestation_rate MAE 계산 ===")
     golden_root = args.golden.parent
     img_dir = golden_root / "images" / "val"
     lbl_dir = golden_root / "labels" / "val"
 
-    vmir_diffs: list[float] = []
+    rate_diffs: list[float] = []
     if img_dir.exists():
-        # 모델 추론 + 라벨 VMIR 비교
+        # 모델 추론 + 라벨 infestation_rate 비교 (분모 = 전체 벌, AIHUB §10)
         for img_path in sorted(img_dir.iterdir()):
             if not img_path.is_file():
                 continue
             lbl_path = lbl_dir / img_path.with_suffix(".txt").name
-            label_vmir = compute_vmir_from_label(lbl_path)
-            if label_vmir is None:
+            label_rate = compute_infestation_rate_from_label(lbl_path)
+            if label_rate is None:
                 continue
             preds = model.predict(
                 source=str(img_path), imgsz=args.imgsz, conf=args.conf, verbose=False
@@ -129,12 +136,12 @@ def main():
                 continue
             cls_tensor = preds[0].boxes.cls.cpu().numpy() if preds[0].boxes else []
             counts = Counter(int(c) for c in cls_tensor)
-            normal_n = counts.get(0, 0)
+            total_bees = counts.get(0, 0) + counts.get(1, 0) + counts.get(2, 0)
             varroa_n = counts.get(1, 0)
-            pred_vmir = (varroa_n / max(1, normal_n)) * 100 if normal_n > 0 else 0.0
-            vmir_diffs.append(abs(pred_vmir - label_vmir))
+            pred_rate = (varroa_n / total_bees * 100) if total_bees > 0 else 0.0
+            rate_diffs.append(abs(pred_rate - label_rate))
 
-    vmir_mae = sum(vmir_diffs) / len(vmir_diffs) if vmir_diffs else None
+    rate_mae = sum(rate_diffs) / len(rate_diffs) if rate_diffs else None
 
     # ===== 3. 결과 요약 =====
     result = {
@@ -144,9 +151,9 @@ def main():
         "mAP@0.5": round(map50, 4),
         "mAP@0.5:0.95": round(map5095, 4),
         "per_class": per_class,
-        "varroa_recall": per_class.get("varroa_mite", {}).get("recall"),
-        "vmir_mae": round(vmir_mae, 3) if vmir_mae is not None else None,
-        "vmir_n_images": len(vmir_diffs),
+        "varroa_recall": per_class.get("bee_with_varroa", {}).get("recall"),
+        "infestation_rate_mae": round(rate_mae, 3) if rate_mae is not None else None,
+        "infestation_rate_n_images": len(rate_diffs),
     }
 
     out_path = args.output or args.weights.parent / "eval_golden.json"

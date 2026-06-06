@@ -88,15 +88,16 @@ train-extend:
 		--pretrained runs/yolo/v0.1.0-baseline/weights/best.pt \
 		--name $(NAME)
 
-# Golden 셋 평가
+# Golden 셋 평가 (다른 run 평가: make eval EVAL_RUN=v0.1.1-50k)
+EVAL_RUN ?= v0.1.0-baseline
 eval:
 	$(PY) -m training.eval \
-		--weights runs/yolo/v0.1.0-baseline/weights/best.pt \
+		--weights runs/yolo/$(EVAL_RUN)/weights/best.pt \
 		--golden training/datasets/golden/data.yaml \
-		--imgsz 1280
+		--imgsz 640
 
 # ONNX export — CPU 추론 서버에서 ultralytics 없이 onnxruntime으로 빠른 추론
 export-onnx:
 	$(PY) -c "from ultralytics import YOLO; \
 		YOLO('runs/yolo/v0.1.0-baseline/weights/best.pt') \
-		.export(format='onnx', dynamic=True, simplify=True, imgsz=1280)"
+		.export(format='onnx', dynamic=True, simplify=True, imgsz=640)"
