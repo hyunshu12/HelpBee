@@ -12,8 +12,8 @@
     "map5095_floor": 0.6,
     "passed": true
   },
-  "signoff": "CONDITIONAL-GO",
-  "signoff_blocker": "CPU(ONNX) inference latency unmeasured; CLAUDE.md §8-5 requires <2s/image before 5% canary",
+  "signoff": "GO",
+  "signoff_blocker": "(resolved) CPU latency measured & passes <2s. Remaining (non-blocking): S3 upload (AWS creds) + 5% canary.",
   "weights": "training/runs/yolo/v0.1.0-baseline/weights/best.pt",
   "mAP@0.5": 0.9159,
   "mAP@0.5:0.95": 0.8474,
@@ -34,7 +34,8 @@
   "varroa_recall": 0.95,
   "infestation_rate_mae": 0.141,
   "rate_n_images": 300,
-  "cpu_onnx_latency_ms_p50": null,
-  "cpu_onnx_latency_ms_p95": null,
-  "notes": "infestation_rate_mae=0.141 measured on BIMODAL golden (varroa imgs mean rate 92.75%, median 100%; + 200 zero-rate imgs) -> does NOT validate the 3%/10% tier boundaries. v0.1.1: add per-subset MAE + tier-flip logging + a 1-12% field-rate golden subset. bee_normal recall 0.712 (colony-001 overfit) is the v0.1.1 data-diversification target."
+  "cpu_onnx_latency_ms_p50": 245,
+  "cpu_onnx_latency_ms_p95": 263,
+  "notes": "infestation_rate_mae=0.141 measured on BIMODAL golden (varroa imgs mean rate 92.75%, median 100%; + 200 zero-rate imgs) -> does NOT validate the 3%/10% tier boundaries. v0.1.1: add per-subset MAE + tier-flip logging + a 1-12% field-rate golden subset. bee_normal recall 0.712 (colony-001 overfit) is the v0.1.1 data-diversification target.",
+  "cpu_onnx_latency_note": "ONNX intra_op=1 thread (~Fargate 1 vCPU), inference-only P50/P95; 16-core box P50 52 / P95 68ms; end-to-end +~15-30ms (NMS/preproc). Gate <2s: PASS (~7x margin). Reconfirm on actual Fargate at canary."
 }
