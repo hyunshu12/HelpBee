@@ -67,5 +67,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 날짜 | 주제 | PR | 파일 |
 |---|---|---|---|
 | 2026-05-11 | Database 9-table schema + types 동기화 + impl log 체계 도입 | (TBD) | [2026-05-11-database-schema.md](./2026-05-11-database-schema.md) |
+| 2026-06-08 | v0.1.0 YOLO HP 스윕 결과 + 최종 config 결정 (copy_paste no-op 발견 → AIHUB 정정) | (이 PR) | [2026-06-08-hp-sweep.md](./2026-06-08-hp-sweep.md) |
 
 (새 기록 추가 시 위 표 갱신)
