@@ -122,6 +122,24 @@ def extract_golden(
     return selected
 
 
+def _load_class_names() -> dict[int, str]:
+    """configs/dataset.yaml 의 names 를 단일 소스로 사용 (3-class drift 방지)."""
+    fallback = {0: "bee_normal", 1: "bee_with_varroa", 2: "bee_other_disease"}
+    cfg_path = Path(__file__).resolve().parents[1] / "configs" / "dataset.yaml"
+    try:
+        import yaml
+
+        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+        names = data.get("names")
+        if isinstance(names, dict):
+            return {int(k): str(v) for k, v in names.items()}
+        if isinstance(names, list):
+            return {i: str(n) for i, n in enumerate(names)}
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"dataset.yaml names 로드 실패 ({e}) — fallback 3-class 사용")
+    return fallback
+
+
 def write_golden(items: list[Item], output: Path):
     img_dst = output / "images" / "val"
     lbl_dst = output / "labels" / "val"
@@ -134,15 +152,23 @@ def write_golden(items: list[Item], output: Path):
         manifest.append({"image": it.image.name, "meta": it.meta})
     (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
 
-    # data.yaml — Ultralytics가 eval에서 사용
+    # data.yaml — Ultralytics가 eval에서 사용.
+    # ⚠️ 학습/변환과 동일한 3-class 스키마여야 한다 (dataset.yaml 단일 소스).
+    #   과거 nc:2 / varroa_mite 하드코딩 → 3-class 모델과 정합이 깨져 golden eval 무효화됨 (수정).
+    # path 는 absolute 로 써서 Ultralytics datasets_dir 상대해석 함정을 피한다.
+    names = _load_class_names()
+    names_block = "".join(f"  {i}: {n}\n" for i, n in sorted(names.items()))
     (output / "data.yaml").write_text(
-        "path: .\n"
+        f"path: {output.resolve()}\n"
+        # ultralytics val() 가 train 키 존재를 요구한다. golden 은 평가 전용이라 val 과 동일 경로 지정
+        # (학습엔 쓰이지 않음 — eval 은 model.val() 만 호출).
+        "train: images/val\n"
         "val: images/val\n"
-        "names:\n  0: bee_normal\n  1: varroa_mite\n"
-        "nc: 2\n",
+        f"names:\n{names_block}"
+        f"nc: {len(names)}\n",
         encoding="utf-8",
     )
-    logger.info(f"golden 쓰기 완료: {output}")
+    logger.info(f"golden 쓰기 완료: {output} (nc={len(names)}, names={list(names.values())})")
 
 
 def main():

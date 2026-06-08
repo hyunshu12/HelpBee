@@ -122,6 +122,18 @@ make export-onnx   # imgsz 640
 
 데이터 더 받을 수 있으면 (디스크 늘면): `make convert-data ... LIMIT=50000 && make split-data && make train-extend NAME=v0.1.1-50k`
 
+> **2026-06-08 파이프라인 사전 감사 수정 (PR `feature/ai-v010-pipeline-fixes`)**
+> GPU 학습 전 다중 에이전트 감사로 확정 버그 다수를 수정하고 합성 데이터로 전 구간 드라이런 검증 완료:
+> - **golden leakage 차단**: `make split-data` 가 `golden/manifest.json` 으로 golden 을 풀에서 자동 제외 + train/val ∩ golden = ∅ 격리 assert. (golden → split 순서만 지키면 됨)
+> - **golden `data.yaml` 3-class 정합** (이전 nc:2/varroa_mite → bee_normal/bee_with_varroa/bee_other_disease) + `train:` 키 추가
+> - **eval/export imgsz 640** 으로 통일 (이전 Makefile 1280 — 학습과 불일치)
+> - **eval 지표 infestation_rate** (이전 VMIR=varroa/normal) — risk.yaml 정의와 일치, 결과 키 `infestation_rate_mae`
+> - **`varroa_recall`** 클래스명 `bee_with_varroa` 로 정정 (이전 `varroa_mite` → 항상 None)
+> - **`--limit` seed 셔플** (경로정렬 첫 N개 편중 → 대표 샘플), bbox 픽셀공간 clip, 메타 부족 시 random fallback fail-fast, 작은 colony 보정
+> - **ultralytics 경로 자동화**: train.py 가 data path 를 절대화(datasets_dir 의존 제거) + project 절대화. 산출물은 `training/runs/yolo/<name>` (gitignored)
+>
+> → **실데이터(521779+521780) 도착 시 §5 `make` 순서 그대로 실행하면 끝.** (단 `make golden` 은 실데이터에서 기본 `--n-varroa 100 --n-normal 200` 사용)
+
 ---
 
 ## 6. 산출물 처리 (학습 끝나고)

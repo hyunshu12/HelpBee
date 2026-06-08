@@ -62,7 +62,7 @@ erasing: 0.4                       # random erasing (cutout)
 close_mosaic: 10                   # 마지막 10 epoch에서 mosaic off
 
 # ===== Logging =====
-project: runs/yolo
+project: training/runs/yolo   # .gitignore 의 training/runs/ 아래로 출력 (산출물 커밋 방지)
 name: v0.1.0-baseline
 exist_ok: false
 save: true
