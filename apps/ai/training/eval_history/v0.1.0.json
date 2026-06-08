@@ -1,0 +1,40 @@
+{
+  "version": "v0.1.0",
+  "date": "2026-06-08",
+  "model": "yolo11s",
+  "imgsz": 640,
+  "train_config": "cls-heavy-hardened (cls=1.5, dfl=1.5, mixup=0.2, close_mosaic=20)",
+  "best_epoch": 180,
+  "train_data": "varroa-v1 (train 4574 / val 1126) — AIHub 71667, 3-class",
+  "golden": "training/datasets/golden/data.yaml",
+  "regression_gate": {
+    "map50_floor": 0.85,
+    "map5095_floor": 0.6,
+    "passed": true
+  },
+  "signoff": "CONDITIONAL-GO",
+  "signoff_blocker": "CPU(ONNX) inference latency unmeasured; CLAUDE.md §8-5 requires <2s/image before 5% canary",
+  "weights": "training/runs/yolo/v0.1.0-baseline/weights/best.pt",
+  "mAP@0.5": 0.9159,
+  "mAP@0.5:0.95": 0.8474,
+  "per_class": {
+    "bee_normal": {
+      "precision": 0.9168594776560179,
+      "recall": 0.7121693768165746
+    },
+    "bee_with_varroa": {
+      "precision": 0.9808386657127022,
+      "recall": 0.95
+    },
+    "bee_other_disease": {
+      "precision": 0.8830377371916529,
+      "recall": 0.9224598930481284
+    }
+  },
+  "varroa_recall": 0.95,
+  "infestation_rate_mae": 0.141,
+  "rate_n_images": 300,
+  "cpu_onnx_latency_ms_p50": null,
+  "cpu_onnx_latency_ms_p95": null,
+  "notes": "infestation_rate_mae=0.141 measured on BIMODAL golden (varroa imgs mean rate 92.75%, median 100%; + 200 zero-rate imgs) -> does NOT validate the 3%/10% tier boundaries. v0.1.1: add per-subset MAE + tier-flip logging + a 1-12% field-rate golden subset. bee_normal recall 0.712 (colony-001 overfit) is the v0.1.1 data-diversification target."
+}
