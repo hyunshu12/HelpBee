@@ -56,10 +56,12 @@ convert-data:
 		--limit $(LIMIT)
 
 # 자동 전략 분할 (farm/device/sequence 자동 감지)
+# ⚠️ golden 을 먼저 실행할 것 — manifest 기반으로 golden 이미지를 풀에서 제외(leakage 방지).
 split-data:
 	$(PY) -m training.data.split_strategy \
 		--input training/datasets/varroa-v1-allraw \
 		--output training/datasets/varroa-v1 \
+		--exclude training/datasets/golden/manifest.json \
 		--val-ratio 0.2 \
 		--seed 42
 
@@ -78,25 +80,26 @@ train:
 # 중단된 학습 이어가기 (optimizer state 보존)
 train-resume:
 	$(PY) -m training.train --config training/configs/yolo.yaml \
-		--resume runs/yolo/v0.1.0-baseline/weights/last.pt
+		--resume training/runs/yolo/v0.1.0-baseline/weights/last.pt
 
 # 데이터 추가 후 재학습 (weight만 가져옴, optimizer는 새로)
 # 사용 예: convert-data로 50,000장 새로 만든 후 → make train-extend NAME=v0.1.1-50k
 NAME ?= v0.1.1-extended
 train-extend:
 	$(PY) -m training.train --config training/configs/yolo.yaml \
-		--pretrained runs/yolo/v0.1.0-baseline/weights/best.pt \
+		--pretrained training/runs/yolo/v0.1.0-baseline/weights/best.pt \
 		--name $(NAME)
 
-# Golden 셋 평가
+# Golden 셋 평가 — imgsz 는 학습(yolo.yaml=640)과 일치해야 함
 eval:
 	$(PY) -m training.eval \
-		--weights runs/yolo/v0.1.0-baseline/weights/best.pt \
+		--weights training/runs/yolo/v0.1.0-baseline/weights/best.pt \
 		--golden training/datasets/golden/data.yaml \
-		--imgsz 1280
+		--imgsz 640
 
 # ONNX export — CPU 추론 서버에서 ultralytics 없이 onnxruntime으로 빠른 추론
+# imgsz 는 학습(640)과 일치 — 1280 export 는 CPU latency ~4배라 운영 SLA 위반
 export-onnx:
 	$(PY) -c "from ultralytics import YOLO; \
-		YOLO('runs/yolo/v0.1.0-baseline/weights/best.pt') \
-		.export(format='onnx', dynamic=True, simplify=True, imgsz=1280)"
+		YOLO('training/runs/yolo/v0.1.0-baseline/weights/best.pt') \
+		.export(format='onnx', dynamic=True, simplify=True, imgsz=640)"

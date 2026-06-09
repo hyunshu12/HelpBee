@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import random
 import shutil
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -146,20 +147,28 @@ def _parse_one_json(json_path: Path) -> Sample | None:
         bbox = ann.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
-        x, y, w, h = bbox  # COCO 표준
+        x, y, w, h = bbox  # COCO 표준 [x, y, w, h] (left-top + size, 픽셀)
         if w <= 0 or h <= 0:
             continue
 
-        # YOLO normalized: cx, cy, w, h
-        cx = (x + w / 2) / img_w
-        cy = (y + h / 2) / img_h
-        nw = w / img_w
-        nh = h / img_h
-        # 경계 클램프 (1.0 초과 라벨 방어)
+        # 픽셀 공간에서 먼저 이미지 경계로 clip (모서리 초과 bbox 방어).
+        # 중심만 clamp 하면 우/하단 모서리가 1.0 을 넘는 라벨이 그대로 남는다.
+        x1 = max(0.0, float(x))
+        y1 = max(0.0, float(y))
+        x2 = min(float(img_w), float(x) + float(w))
+        y2 = min(float(img_h), float(y) + float(h))
+        cw = x2 - x1
+        ch = y2 - y1
+        if cw <= 0 or ch <= 0:
+            continue
+
+        # YOLO normalized: cx, cy, w, h (모두 [0,1] 보장)
+        cx = (x1 + cw / 2) / img_w
+        cy = (y1 + ch / 2) / img_h
+        nw = cw / img_w
+        nh = ch / img_h
         if not (0 < nw <= 1.0 and 0 < nh <= 1.0):
             continue
-        cx = max(0.0, min(1.0, cx))
-        cy = max(0.0, min(1.0, cy))
         yolo_lines.append(f"{our_cls} {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
 
     if not yolo_lines:
@@ -189,7 +198,7 @@ def _parse_one_json(json_path: Path) -> Sample | None:
     )
 
 
-def collect_samples(source: Path, limit: int | None = None) -> list[Sample]:
+def collect_samples(source: Path, limit: int | None = None, seed: int = 42) -> list[Sample]:
     """
     source 트리에서 02.라벨링데이터 안의 모든 JSON → Sample.
     source 가 라벨/이미지 부모인 경우와 라벨 폴더 자체인 경우 모두 처리.
@@ -204,6 +213,13 @@ def collect_samples(source: Path, limit: int | None = None) -> list[Sample]:
 
     label_files = sorted(label_root.rglob("*.json"))
     logger.info(f"발견된 JSON 라벨: {len(label_files)} (루트: {label_root})")
+
+    # ⚠️ label_files 는 경로정렬이라 폴더(클래스/콜로니)별로 뭉쳐 있다.
+    #   --limit 으로 앞 N 개만 취하면 특정 폴더에 편중된 비대표 샘플이 된다
+    #   (콜로니 001 dominance 75% + 응애 인스턴스 2.4% → 응애 통째 누락 위험).
+    #   seed 셔플로 전체 분포를 근사 층화. limit 없으면 전량이라 순서 무관.
+    if limit is not None:
+        random.Random(seed).shuffle(label_files)
 
     samples: list[Sample] = []
     skipped = Counter()
@@ -254,6 +270,7 @@ def main():
     p.add_argument("--source", type=Path, required=True, help="71667 루트 (Sample 또는 풀)")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--limit", type=int, default=None)
+    p.add_argument("--seed", type=int, default=42, help="--limit 적용 시 셔플 seed (대표 샘플)")
     p.add_argument("--no-copy", action="store_true", help="이미지 심볼릭 링크 (디스크 절약)")
     p.add_argument(
         "--split",
@@ -264,7 +281,7 @@ def main():
     )
     args = p.parse_args()
 
-    samples = collect_samples(args.source, limit=args.limit)
+    samples = collect_samples(args.source, limit=args.limit, seed=args.seed)
     if not samples:
         raise SystemExit("샘플 0건. --source 경로 확인.")
 

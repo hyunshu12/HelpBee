@@ -155,7 +155,14 @@ def split_per_colony_time_block(
     summary = []
     for cid, lst in by_colony.items():
         s = sorted(lst, key=lambda i: i.meta.get("captured_at") or "")
+        if len(s) < 2:
+            # 1장짜리 colony 는 전부 train. val 로 빼면 그 colony 를 train 에서 영영 못 봄
+            # (소수 colony 누적 시 val_ratio 도 부풀려짐).
+            train.extend(s)
+            summary.append((cid, len(s), 0))
+            continue
         n_val = max(1, int(len(s) * val_ratio))
+        n_val = min(n_val, len(s) - 1)  # train_part 가 비지 않도록 보장
         train_part = s[:-n_val]
         val_part = s[-n_val:]
         train.extend(train_part)
@@ -275,14 +282,48 @@ def main():
         ],
     )
     p.add_argument("--val-device", type=str, default=None, help="device_holdout 강제 지정")
+    p.add_argument(
+        "--exclude",
+        type=Path,
+        default=None,
+        help="golden manifest.json — 해당 이미지(basename)를 split 풀에서 제외 (leakage 방지)",
+    )
+    p.add_argument(
+        "--allow-random",
+        action="store_true",
+        help="메타 부족으로 strategy=random 귀결 시에도 진행 (기본은 leakage 방지 위해 중단)",
+    )
     args = p.parse_args()
 
     items = _load_items(args.input)
     if not items:
         raise SystemExit("입력 0건")
 
+    # ===== golden holdout 제외 (data leakage 방지) =====
+    # golden_holdout.py 가 copy 만 하고 풀에서 제거하지 않으므로, split 단계에서 manifest 기반 제외.
+    exclude_names: set[str] = set()
+    if args.exclude:
+        if not args.exclude.exists():
+            raise SystemExit(f"--exclude manifest 없음: {args.exclude} (먼저 `make golden` 실행)")
+        manifest = json.loads(args.exclude.read_text(encoding="utf-8"))
+        exclude_names = {e["image"] for e in manifest}
+        before = len(items)
+        items = [it for it in items if it.image.name not in exclude_names]
+        logger.info(
+            f"golden 제외: {before - len(items)}건 (manifest {len(exclude_names)}개) → 잔여 {len(items)}"
+        )
+        if before == len(items) and exclude_names:
+            logger.warning("⚠️ golden manifest 와 일치하는 제외 항목 0건 — 파일명 규약 확인")
+        if not items:
+            raise SystemExit("golden 제외 후 0건 — manifest/입력 경로 확인")
+
     strategy = args.strategy if args.strategy != "auto" else detect_strategy(items)
     logger.info(f"=== strategy = {strategy} (n={len(items)}) ===")
+    if strategy == "random" and not args.allow_random:
+        raise SystemExit(
+            "strategy=random 으로 귀결됨 (메타 부족 → leakage 위험)으로 중단. "
+            "_meta.json 누락/경로를 확인하거나, 의도한 경우 --allow-random 을 명시하세요."
+        )
 
     if strategy == "per_colony_time_block":
         train, val = split_per_colony_time_block(items, args.val_ratio)
@@ -297,6 +338,18 @@ def main():
 
     write_split(train, args.output, "train")
     write_split(val, args.output, "val")
+
+    # ===== golden 격리 검증 (불변식: train/val ∩ golden = ∅) =====
+    if exclude_names:
+        produced = {p.name for p in (args.output / "images" / "train").iterdir()} | {
+            p.name for p in (args.output / "images" / "val").iterdir()
+        }
+        leaked = produced & exclude_names
+        if leaked:
+            raise SystemExit(
+                f"GOLDEN LEAK 감지: {len(leaked)}건이 train/val 에 존재 — {sorted(leaked)[:5]}"
+            )
+        logger.info(f"✅ golden 격리 확인: train/val ∩ golden = ∅ ({len(produced)} imgs)")
 
     # _meta.json 도 복사 (eval 시 사용 가능)
     meta_src = args.input / "_meta.json"

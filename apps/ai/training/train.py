@@ -74,6 +74,36 @@ def main():
         if v is not None:
             cfg[key] = v
 
+    # project 를 cwd 기준 절대경로로 고정.
+    # Ultralytics 의 runs_dir/cwd 차이에 무관하게 산출물이 항상 <cwd>/runs/yolo/<name> 에 떨어지도록 강제한다.
+    # (Makefile 의 eval/export/resume 가 apps/ai 기준 relative `runs/yolo/<name>` 를 참조하므로 일치 필요.)
+    if cfg.get("project") and not Path(str(cfg["project"])).is_absolute():
+        cfg["project"] = str((Path.cwd() / str(cfg["project"])).resolve())
+        logger.info(f"project (절대경로 고정) = {cfg['project']}")
+
+    # dataset.yaml 의 상대 path('../datasets/...') 를 절대경로로 치환한 임시 yaml 을 만들어 전달.
+    # ultralytics 의 datasets_dir 는 import 시점에 고정돼 사후 settings.update 가 안 먹으므로,
+    # data yaml 자체에 절대 path 를 넣어 datasets_dir 의존을 완전히 제거한다.
+    data_path = cfg.get("data")
+    if data_path:
+        data_yaml = Path(str(data_path))
+        if not data_yaml.is_absolute():
+            data_yaml = (Path.cwd() / data_yaml).resolve()
+        if data_yaml.exists():
+            raw = yaml.safe_load(data_yaml.read_text(encoding="utf-8"))
+            p = raw.get("path")
+            if p and not Path(str(p)).is_absolute():
+                raw["path"] = str((data_yaml.parent / str(p)).resolve())
+                import tempfile
+
+                tf = tempfile.NamedTemporaryFile(
+                    mode="w", suffix="_dataset.yaml", delete=False, encoding="utf-8"
+                )
+                yaml.safe_dump(raw, tf, allow_unicode=True, sort_keys=False)
+                tf.close()
+                cfg["data"] = tf.name
+                logger.info(f"data path 절대화 → {raw['path']}")
+
     # ultralytics는 lazy import (로깅 깔끔)
     from ultralytics import YOLO  # type: ignore
 
