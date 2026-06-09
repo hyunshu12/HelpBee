@@ -1,0 +1,41 @@
+{
+  "version": "v0.1.0",
+  "date": "2026-06-08",
+  "model": "yolo11s",
+  "imgsz": 640,
+  "train_config": "cls-heavy-hardened (cls=1.5, dfl=1.5, mixup=0.2, close_mosaic=20)",
+  "best_epoch": 180,
+  "train_data": "varroa-v1 (train 4574 / val 1126) — AIHub 71667, 3-class",
+  "golden": "training/datasets/golden/data.yaml",
+  "regression_gate": {
+    "map50_floor": 0.85,
+    "map5095_floor": 0.6,
+    "passed": true
+  },
+  "signoff": "GO",
+  "s3_uri": "s3://helpbee-models/yolo/v0.1.0/",
+  "weights": "training/runs/yolo/v0.1.0-baseline/weights/best.pt",
+  "mAP@0.5": 0.9159,
+  "mAP@0.5:0.95": 0.8474,
+  "per_class": {
+    "bee_normal": {
+      "precision": 0.9168594776560179,
+      "recall": 0.7121693768165746
+    },
+    "bee_with_varroa": {
+      "precision": 0.9808386657127022,
+      "recall": 0.95
+    },
+    "bee_other_disease": {
+      "precision": 0.8830377371916529,
+      "recall": 0.9224598930481284
+    }
+  },
+  "varroa_recall": 0.95,
+  "infestation_rate_mae": 0.141,
+  "rate_n_images": 300,
+  "cpu_onnx_latency_ms_p50": 245,
+  "cpu_onnx_latency_ms_p95": 263,
+  "cpu_onnx_latency_note": "ONNX intra_op=1 (~Fargate 1vCPU) inference-only P50/P95; 16-core 52/68ms; gate <2s PASS (~7x). Reconfirm on Fargate at canary.",
+  "notes": "infestation_rate_mae=0.141 measured on BIMODAL golden (varroa imgs ~mean 92.75%/median 100% + 200 zero) -> does NOT validate 3%/10% tier boundary. v0.1.1: per-subset MAE + tier-flip + field-rate golden + bee_normal recall(0.712)."
+}
