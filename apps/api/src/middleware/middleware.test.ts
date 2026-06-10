@@ -73,6 +73,12 @@ describe('requireAuth', () => {
     expect((await res.json()).code).toBe('AUTH_TOKEN_EXPIRED');
   });
 
+  it('401 when token has no exp (no perpetual access tokens)', async () => {
+    const noExp = jwt.encode({ sub: 'u1', role: 'user' }, SECRET); // exp 없음
+    const res = await makeApp().request('/me', { headers: { authorization: `Bearer ${noExp}` } });
+    expect(res.status).toBe(401);
+  });
+
   it('rejects alg confusion (token signed HS512, verifier pins HS256)', async () => {
     const hs512 = mint({ sub: 'u1', role: 'user' }, 'HS512');
     const res = await makeApp().request('/me', { headers: { authorization: `Bearer ${hs512}` } });

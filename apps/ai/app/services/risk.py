@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -77,6 +78,22 @@ def thresholds(config: dict | None = None) -> tuple[float, float]:
     return float(th["safe_max"]), float(th["watch_max"])
 
 
+def band_scores(config: dict | None = None) -> tuple[int, int]:
+    """(safe_ceiling_score, watch_ceiling_score) — 임계 rate를 score로 환산(21,70)."""
+    safe_max, watch_max = thresholds(config)
+    return score_from_rate(safe_max, config), score_from_rate(watch_max, config)
+
+
+def tier_from_score(score: int, config: dict | None = None) -> str:
+    """score → tier. tier는 항상 risk_score 밴드에서 파생(저장 행 자기모순 방지)."""
+    safe_s, watch_s = band_scores(config)
+    if score < safe_s:
+        return "safe"
+    if score <= watch_s:
+        return "watch"
+    return "danger"
+
+
 def recommendations_for(
     tier: str,
     *,
@@ -90,7 +107,7 @@ def recommendations_for(
     out = list(recs_all[tier])
     if has_other_disease:
         out += list(recs_all["other_disease"])
-    return out
+    return out[:5]  # CLAUDE.md §6: recommendations ≤5
 
 
 def min_bee_count(config: dict | None = None) -> int:
@@ -110,10 +127,16 @@ def compute_risk(class_counts: dict[int, int], config: dict | None = None) -> Ri
     bee_total = normal + varroa + other
 
     rate = (varroa / bee_total * 100.0) if bee_total > 0 else 0.0
+    if not math.isfinite(rate):
+        rate = 0.0
+    rate = max(0.0, rate)
     low_confidence = bee_total < min_bee_count(config)
     score = score_from_rate(rate, config)
-    # 탐지 벌이 적으면 보수적으로 watch (risk_score는 측정값 그대로 — 베타 보정 예정)
-    tier = "watch" if low_confidence else tier_from_rate(rate, config)
+    if low_confidence:
+        # 저신뢰: 측정 불안정 → score를 watch 밴드로 clamp해 tier와 일관(자기모순 방지)
+        safe_s, watch_s = band_scores(config)
+        score = max(safe_s, min(watch_s, score))
+    tier = tier_from_score(score, config)
     recommendations = recommendations_for(
         tier, low_confidence=low_confidence, has_other_disease=other > 0, config=config
     )

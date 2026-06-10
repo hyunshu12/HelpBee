@@ -32,7 +32,11 @@ export function signInternalBearer(
   return `${body}.${sign(secret, body)}`;
 }
 
-export function verifyInternalBearer(secret: string, token: string): InternalPayload {
+export function verifyInternalBearer(
+  secret: string,
+  token: string,
+  opts: { audience?: string; requestId?: string } = {},
+): InternalPayload {
   const [body, sig] = token.split('.');
   if (!body || !sig) {
     throw new AppError('AUTH_UNAUTHORIZED', 'malformed internal token');
@@ -46,6 +50,12 @@ export function verifyInternalBearer(secret: string, token: string): InternalPay
   const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as InternalPayload;
   if (typeof payload.exp !== 'number' || Date.now() / 1000 > payload.exp) {
     throw new AppError('AUTH_UNAUTHORIZED', 'internal token expired');
+  }
+  if (payload.aud !== (opts.audience ?? 'ai')) {
+    throw new AppError('AUTH_UNAUTHORIZED', 'internal token audience mismatch');
+  }
+  if (opts.requestId && payload.request_id !== opts.requestId) {
+    throw new AppError('AUTH_UNAUTHORIZED', 'internal token request_id mismatch');
   }
   return payload;
 }

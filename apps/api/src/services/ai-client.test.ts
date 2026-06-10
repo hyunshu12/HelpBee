@@ -28,6 +28,16 @@ describe('signInternalBearer / verifyInternalBearer (D10)', () => {
     const t = signInternalBearer(SECRET, { requestId: 'r', ttlSec: -10 });
     expect(() => verifyInternalBearer(SECRET, t)).toThrow();
   });
+
+  it('rejects audience mismatch (default aud=ai)', () => {
+    const t = signInternalBearer(SECRET, { requestId: 'r', audience: 'web' });
+    expect(() => verifyInternalBearer(SECRET, t)).toThrow(AppError);
+  });
+
+  it('rejects request_id mismatch when expected', () => {
+    const t = signInternalBearer(SECRET, { requestId: 'r1' });
+    expect(() => verifyInternalBearer(SECRET, t, { requestId: 'r2' })).toThrow(AppError);
+  });
 });
 
 describe('createAiClient.analyze', () => {

@@ -29,7 +29,10 @@ export function requireAuth(secret: string) {
       throw new AppError('AUTH_UNAUTHORIZED');
     }
 
-    if (typeof payload.exp === 'number' && Date.now() / 1000 > payload.exp) {
+    if (typeof payload.exp !== 'number') {
+      throw new AppError('AUTH_UNAUTHORIZED'); // exp 없는 영구 access 토큰 거부(15m 정책)
+    }
+    if (Date.now() / 1000 > payload.exp) {
       throw new AppError('AUTH_TOKEN_EXPIRED');
     }
     if (!payload.sub) {

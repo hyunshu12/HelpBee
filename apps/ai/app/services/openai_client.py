@@ -31,8 +31,8 @@ _JSON_SCHEMA = {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "infestation_rate": {"type": "number"},
-                "confidence": {"type": "number"},
+                "infestation_rate": {"type": "number", "minimum": 0, "maximum": 100},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             },
             "required": ["infestation_rate", "confidence"],
         },

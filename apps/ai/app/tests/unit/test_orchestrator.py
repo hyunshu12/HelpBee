@@ -109,6 +109,15 @@ def test_both_engines_fail_graceful():
     assert r.recommendations  # graceful 안내
 
 
+def test_openai_nan_rate_does_not_crash():
+    # OpenAI가 NaN rate를 반환해도 500이 아니라 유효 응답(§3.7 비차단)
+    yolo = FakeYolo({0: 2, 1: 1, 2: 0})  # 저신뢰 → 폴백
+    openai = FakeOpenAI(rate=float("nan"), confidence=0.9)
+    r = run_analysis(_jpeg(), engine="auto", yolo=yolo, openai=openai)
+    assert r.risk_score is not None and 0 <= r.risk_score <= 100
+    assert r.engine_used == "openai"
+
+
 def test_yolo_error_paid_falls_back_to_openai():
     yolo = FakeYolo({}, error=True)
     openai = FakeOpenAI(rate=5.0, confidence=0.8)

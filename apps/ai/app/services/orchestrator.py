@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Optional
 
@@ -51,30 +52,41 @@ def _openai_response(
     fallback_reason: str,
     yolo_summary: dict,
 ) -> Optional[AnalysisResponse]:
-    """OpenAI 폴백 시도. 실패 시 None."""
+    """OpenAI 폴백 시도. 실패(호출/파싱/매핑 어디든) 시 None → 호출부가 graceful 처리.
+
+    매핑(score/tier)까지 try 범위에 포함 — OpenAI가 NaN/Inf/비정상 rate를 줘도
+    예외가 run_analysis 밖으로 새어 500이 되지 않도록(§3.7 비차단).
+    """
     try:
         ores = openai.analyze(jpeg)
-    except Exception:  # noqa: BLE001 - 폴백 실패는 graceful로 흡수
+        rate = ores.infestation_rate
+        if not math.isfinite(rate):
+            rate = 0.0
+        rate = max(0.0, rate)
+        low_conf = ores.confidence < DEFAULT_OPENAI_CONF_FLOOR
+        score = risk_mod.score_from_rate(rate, config)
+        if low_conf:
+            safe_s, watch_s = risk_mod.band_scores(config)
+            score = max(safe_s, min(watch_s, score))  # tier와 일관
+        tier = risk_mod.tier_from_score(score, config)
+        return AnalysisResponse(
+            risk_score=score,
+            tier=tier,
+            estimated_count=None,
+            confidence=round(ores.confidence, 4),
+            recommendations=risk_mod.recommendations_for(
+                tier, low_confidence=low_conf, config=config
+            ),
+            model_version=ores.model_version,
+            prompt_version=ores.prompt_version,
+            latency_ms=0,
+            cost_estimate_usd=round(ores.cost_usd, 6),
+            raw_payload={"infestation_rate": rate, "fallback_from": yolo_summary},
+            engine_used="openai",
+            fallback_reason=fallback_reason,
+        )
+    except Exception:  # noqa: BLE001 - 폴백 실패(호출/파싱/매핑)는 graceful로 흡수
         return None
-    rate = ores.infestation_rate
-    low_conf = ores.confidence < DEFAULT_OPENAI_CONF_FLOOR
-    tier = "watch" if low_conf else risk_mod.tier_from_rate(rate, config)
-    return AnalysisResponse(
-        risk_score=risk_mod.score_from_rate(rate, config),
-        tier=tier,
-        estimated_count=None,
-        confidence=round(ores.confidence, 4),
-        recommendations=risk_mod.recommendations_for(
-            tier, low_confidence=low_conf, config=config
-        ),
-        model_version=ores.model_version,
-        prompt_version=ores.prompt_version,
-        latency_ms=0,
-        cost_estimate_usd=round(ores.cost_usd, 6),
-        raw_payload={"infestation_rate": rate, "fallback_from": yolo_summary},
-        engine_used="openai",
-        fallback_reason=fallback_reason,
-    )
 
 
 def run_analysis(

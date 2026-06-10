@@ -4,7 +4,7 @@
 클래스 id: 0=bee_normal, 1=bee_with_varroa, 2=bee_other_disease.
 """
 
-from app.services.risk import compute_risk, RiskResult
+from app.services.risk import compute_risk, RiskResult, tier_from_score
 
 
 def counts(normal: int = 0, varroa: int = 0, other: int = 0) -> dict[int, int]:
@@ -80,6 +80,15 @@ def test_other_disease_appends_recommendation():
     r = compute_risk(counts(normal=90, varroa=1, other=9))  # 1% safe + 다른 질병 존재
     assert r.tier == "safe"
     assert any("질병" in x for x in r.recommendations)
+
+
+def test_low_confidence_score_tier_consistent():
+    # 4마리(<5)·rate 75% → 저신뢰: tier=watch, score는 watch 밴드로 clamp(자기모순 방지)
+    r = compute_risk(counts(normal=1, varroa=3, other=0))
+    assert r.low_confidence is True
+    assert r.tier == "watch"
+    assert r.risk_score <= 70
+    assert tier_from_score(r.risk_score) == r.tier  # score↔tier 일관
 
 
 def test_estimated_count_is_none_for_yolo():
