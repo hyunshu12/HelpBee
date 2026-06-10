@@ -18,9 +18,9 @@ async def health_check():
         "version": "0.1.0"
     }
 
-# Routers will be imported here
-# from .routers import analyze
-# app.include_router(analyze.router, prefix="/api")
+from .routers import analyze  # noqa: E402
+
+app.include_router(analyze.router)
 
 if __name__ == "__main__":
     port = int(os.getenv("AI_PORT", 8000))

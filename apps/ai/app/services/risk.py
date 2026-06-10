@@ -4,13 +4,10 @@
 - apps/ai/training/configs/risk.yaml (임계·score_mapping·recommendations 단일 소스)
 - apps/ai/training/datasets/AIHUB_71667.md (Q3=B: 응애 bbox = "감염된 벌 영역",
   표준 VMIR 직접 계산 불가 → infestation_rate 사용)
+- backend-design §3.5: OpenAI 폴백도 infestation_rate만 추정 → 동일 매핑 함수로 risk_score
+  산출(엔진 전환 시 위험도 점프 방지). 그래서 rate→risk 프리미티브를 공개한다.
 
 클래스 id: 0=bee_normal, 1=bee_with_varroa, 2=bee_other_disease.
-
-infestation_rate(%) = bee_with_varroa / (모든 벌 인스턴스) * 100
-risk_score: 0%→0, 10%→70, 20%+→100 (piecewise linear, clamp 0~100)
-tier: rate < 3 safe / 3~10 watch / >10 danger
-low_confidence: 탐지 벌 < min_bee_count(5) → tier watch 강제 + 안내 문구
 """
 
 from __future__ import annotations
@@ -35,6 +32,10 @@ def _load_config() -> dict:
         return yaml.safe_load(f)
 
 
+def _cfg(config: dict | None) -> dict:
+    return config or _load_config()
+
+
 @dataclass
 class RiskResult:
     risk_score: int  # 0~100
@@ -46,8 +47,9 @@ class RiskResult:
     recommendations: list[str]
 
 
-def _score_from_rate(rate: float, mapping: dict) -> int:
+def score_from_rate(rate: float, config: dict | None = None) -> int:
     """rate(%) → risk_score(0~100). 0→0, r70→70, r100→100 구간 선형, 양끝 clamp."""
+    mapping = _cfg(config)["infestation_rate"]["score_mapping"]
     r70 = float(mapping["rate_at_score_70"])  # 10.0
     r100 = float(mapping["rate_at_score_100"])  # 20.0
     if rate <= 0:
@@ -60,45 +62,61 @@ def _score_from_rate(rate: float, mapping: dict) -> int:
     return int(max(0, min(100, round(score))))
 
 
+def tier_from_rate(rate: float, config: dict | None = None) -> str:
+    th = _cfg(config)["infestation_rate"]["thresholds"]
+    if rate < float(th["safe_max"]):  # <3 safe
+        return "safe"
+    if rate <= float(th["watch_max"]):  # 3~10 watch
+        return "watch"
+    return "danger"  # >10
+
+
+def thresholds(config: dict | None = None) -> tuple[float, float]:
+    """(safe_max, watch_max) — tier 경계. 폴백 ±밴드 판정에 사용."""
+    th = _cfg(config)["infestation_rate"]["thresholds"]
+    return float(th["safe_max"]), float(th["watch_max"])
+
+
+def recommendations_for(
+    tier: str,
+    *,
+    low_confidence: bool = False,
+    has_other_disease: bool = False,
+    config: dict | None = None,
+) -> list[str]:
+    recs_all = _cfg(config)["recommendations"]
+    if low_confidence:
+        return list(recs_all["low_confidence"])
+    out = list(recs_all[tier])
+    if has_other_disease:
+        out += list(recs_all["other_disease"])
+    return out
+
+
+def min_bee_count(config: dict | None = None) -> int:
+    return int(_cfg(config)["infestation_rate"]["min_bee_count"])
+
+
 def compute_risk(class_counts: dict[int, int], config: dict | None = None) -> RiskResult:
-    """클래스별 인스턴스 수 → RiskResult.
+    """클래스별 인스턴스 수 → RiskResult (YOLO 경로).
 
     Args:
         class_counts: {class_id: count} (0/1/2). 누락 키는 0으로 간주.
-        config: risk.yaml 파싱 dict (미지정 시 파일에서 로드). 테스트 주입용.
+        config: risk.yaml 파싱 dict (미지정 시 파일 로드). 테스트 주입용.
     """
-    cfg_root = config or _load_config()
-    cfg = cfg_root["infestation_rate"]
-    safe_max = float(cfg["thresholds"]["safe_max"])  # 3.0
-    watch_max = float(cfg["thresholds"]["watch_max"])  # 10.0
-    min_bee = int(cfg["min_bee_count"])  # 5
-    recs_all = cfg_root["recommendations"]
-
     normal = int(class_counts.get(CLASS_NORMAL, 0))
     varroa = int(class_counts.get(CLASS_VARROA, 0))
     other = int(class_counts.get(CLASS_OTHER, 0))
     bee_total = normal + varroa + other
 
     rate = (varroa / bee_total * 100.0) if bee_total > 0 else 0.0
-    low_confidence = bee_total < min_bee
-    score = _score_from_rate(rate, cfg["score_mapping"])
-
-    if rate < safe_max:
-        tier = "safe"
-    elif rate <= watch_max:
-        tier = "watch"
-    else:
-        tier = "danger"
-
-    if low_confidence:
-        # 탐지 벌이 적으면 진단 신뢰도가 낮음 → watch로 보수적 처리 + 안내.
-        # (risk_score는 측정값 그대로 노출 — 베타에서 회귀 보정 예정)
-        tier = "watch"
-        recommendations = list(recs_all["low_confidence"])
-    else:
-        recommendations = list(recs_all[tier])
-        if other > 0:
-            recommendations += list(recs_all["other_disease"])
+    low_confidence = bee_total < min_bee_count(config)
+    score = score_from_rate(rate, config)
+    # 탐지 벌이 적으면 보수적으로 watch (risk_score는 측정값 그대로 — 베타 보정 예정)
+    tier = "watch" if low_confidence else tier_from_rate(rate, config)
+    recommendations = recommendations_for(
+        tier, low_confidence=low_confidence, has_other_disease=other > 0, config=config
+    )
 
     return RiskResult(
         risk_score=score,
