@@ -1,5 +1,8 @@
 # HelpBee 아키텍처 설계
 
+> ⚠️ **구버전 / 대체됨 (2026-06-10)**: 이 문서는 초기 EKS 마이크로서비스(auth/user/analysis 분리, GPT-4o) 가정으로 작성됐으며 현재 모노레포 구조(Hono `apps/api` + FastAPI `apps/ai` YOLO+OpenAI dual-engine + Drizzle, ECS Fargate)와 맞지 않습니다.
+> **현재 백엔드 권위 설계는 [backend-design.md](backend-design.md)** 를 참조하세요. 본 문서는 이력 보존용입니다.
+
 ## 시스템 아키텍처
 
 ```
