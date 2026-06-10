@@ -10,21 +10,27 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "hono": "^4.0.0",
-    "drizzle-orm": "^0.29.5",
-    "redis": "^4.6.0",
-    "jwt-simple": "^0.5.6",
-    "axios": "^1.6.0",
+    "@helpbee/database": "workspace:*",
     "@helpbee/types": "workspace:*",
-    "@helpbee/database": "workspace:*"
+    "@hono/node-server": "^2.0.4",
+    "@hono/zod-validator": "^0.8.0",
+    "axios": "^1.6.0",
+    "drizzle-orm": "^0.29.5",
+    "hono": "^4.0.0",
+    "jwt-simple": "^0.5.6",
+    "redis": "^4.6.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.3.0",
+    "@types/node": "^20.19.39",
     "tsx": "^4.0.0",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.8"
   },
   "engines": {
     "node": ">=18.0.0"
