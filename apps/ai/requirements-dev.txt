@@ -1,0 +1,4 @@
+# 개발/테스트 전용 의존성 (추론 서버 런타임 아님)
+-r requirements.txt
+pytest==9.0.3
+pytest-asyncio==1.4.0
