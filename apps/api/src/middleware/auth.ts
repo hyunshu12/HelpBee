@@ -24,7 +24,7 @@ export function requireAuth(secret: string, opts: RequireAuthOpts = {}) {
     }
     const token = header.slice('Bearer '.length).trim();
 
-    let payload: { sub?: string; role?: string; exp?: number; iat?: number };
+    let payload: { sub?: string; role?: string; exp?: number; iat?: number; aud?: string };
     try {
       // 4번째 인자로 HS256 강제 → none/RS256/HS512 등 alg confusion 거부.
       payload = jwt.decode(token, secret, false, 'HS256');
@@ -58,6 +58,7 @@ export function requireAuth(secret: string, opts: RequireAuthOpts = {}) {
 
     c.set('userId', payload.sub);
     c.set('role', payload.role ?? 'user');
+    c.set('aud', payload.aud);
     await next();
   });
 }
@@ -65,6 +66,20 @@ export function requireAuth(secret: string, opts: RequireAuthOpts = {}) {
 export function requireRole(role: string) {
   return createMiddleware(async (c, next) => {
     if (c.get('role') !== role) {
+      throw new AppError('FORBIDDEN_ROLE');
+    }
+    await next();
+  });
+}
+
+/**
+ * admin 전용 가드 (backend-design §12.1, §17-4). requireAuth 이후 마운트.
+ * role='admin' + 토큰 audience=admin audience 동시 충족(일반 사용자 토큰으로 admin 접근 불가,
+ * blast radius 축소). 별도 admin 시크릿 분리는 후속 하드닝.
+ */
+export function requireAdmin(adminAudience: string) {
+  return createMiddleware(async (c, next) => {
+    if (c.get('role') !== 'admin' || c.get('aud') !== adminAudience) {
       throw new AppError('FORBIDDEN_ROLE');
     }
     await next();

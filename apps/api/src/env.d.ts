@@ -6,5 +6,7 @@ declare module 'hono' {
     userId: string;
     role: string;
     requestId: string;
+    aud?: string; // access 토큰 audience(admin 스코프 검증, §17-4)
+    webhookBody?: unknown; // webhook 서명 검증 후 파싱된 body(§11.4)
   }
 }

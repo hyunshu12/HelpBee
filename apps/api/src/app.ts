@@ -13,14 +13,22 @@ import { secureHeaders } from 'hono/secure-headers';
 import Redis from 'ioredis';
 
 import { loadEnv } from './config/env';
+import { getClientIp } from './lib/client-ip';
+import { AppError } from './lib/error-codes';
 import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
-import { requireAuth } from './middleware/auth';
+import { requireAuth, requireAdmin } from './middleware/auth';
+import { corsMiddleware } from './middleware/cors';
+import { loggerMiddleware } from './middleware/logger';
+import { rateLimit } from './middleware/rate-limit';
 import { requestId } from './middleware/request-id';
+import { webhookSignatureGuard } from './middleware/webhook-signature';
+import { adminRoutes, type AdminDeps } from './routes/admin';
 import { analysesRoutes, type AnalysesDeps } from './routes/analyses';
 import { authRoutes, type AuthDeps } from './routes/auth';
 import { hivesRoutes, type HivesDeps } from './routes/hives';
 import { imagesRoutes, type ImagesDeps } from './routes/images';
+import { subscriptionsRoutes, type SubscriptionsDeps } from './routes/subscriptions';
 import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
 import {
@@ -119,6 +127,8 @@ export function createApp() {
         role,
         emailVerified,
         ttlSec: env.JWT_ACCESS_TTL_SEC,
+        // admin 토큰은 별도 audience로 스코프(§17-4) — 일반 사용자 토큰으로 admin 접근 불가.
+        audience: role === 'admin' ? env.JWT_ADMIN_AUDIENCE : undefined,
       }),
     generateRefresh: generateRefreshToken,
     hashRefresh: (token) => hashRefreshToken(env.REFRESH_TOKEN_PEPPER, token),
@@ -168,34 +178,99 @@ export function createApp() {
     audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
   };
 
+  const subscriptionsDeps: SubscriptionsDeps = {
+    getSubscription: (userId) => queries.accounts.getSubscriptionForUser(db, userId),
+    audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
+  };
+
+  const adminDeps: AdminDeps = {
+    listUsers: (opts) => queries.admin.listUsers(db, opts),
+    patchUser: async (input) => {
+      try {
+        return await queries.admin.patchUser(db, input);
+      } catch (e) {
+        if (e instanceof queries.admin.SelfDemoteError) {
+          throw new AppError('ADMIN_SELF_DEMOTE_FORBIDDEN');
+        }
+        throw e;
+      }
+    },
+    onBlocked: async (userId) => {
+      await queries.auth.revokeAllRefreshTokensForUser(db, userId);
+      await bumpSessionsValidAfter(redis, userId);
+    },
+    listAuditLogs: (opts) => queries.admin.listAuditLogs(db, opts),
+    metrics: () => queries.admin.metrics(db),
+    getDualByImage: (imageId) => queries.admin.getDualByImage(db, imageId),
+  };
+
   // 보호 미들웨어: requireAuth(alg핀) + sessions_valid_after 즉시 회수 마커(§7.9).
   const protectedAuth = requireAuth(env.JWT_SECRET, {
     isRevoked: (userId, iat) => isSessionRevoked(redis, userId, iat),
   });
-  // 도메인 라우터를 보호 그룹으로 감싸 마운트(컬렉션·하위경로 모두 커버).
+  // 인증 사용자 전역 레이트리밋(300/min/user, §7.5). fail-closed.
+  const userRateLimit = rateLimit({
+    redis,
+    limit: 300,
+    windowSec: 60,
+    prefix: 'user',
+    keyFn: (c) => (c.get('userId') as string | undefined) ?? 'anon',
+  });
+  // 도메인 라우터를 보호 그룹으로 감싸 마운트(컬렉션·하위경로 모두 커버). auth→limiter 순서.
   const protectedMount = (router: Hono) => {
     const g = new Hono();
     g.use('*', protectedAuth);
+    g.use('*', userRateLimit);
     g.route('/', router);
     return g;
   };
 
-  // Auth: signup/login/refresh 공개, logout/me만 보호(전역 /v1/* 가드 금지 — 공개 엔드포인트 보존).
+  // 인증 전 IP 레이트리밋(brute-force 방어, account-protection과 별개 계층, §7.5/§8.5.3).
+  const ipLimit = (prefix: string, limit: number) =>
+    rateLimit({ redis, limit, windowSec: 60, prefix, keyFn: (c) => getClientIp(c) });
+
+  // Auth: signup/login/refresh 공개(+IP 레이트리밋), logout/me만 보호.
   const authApp = new Hono();
+  authApp.use('/signup', ipLimit('signup', 5));
+  authApp.use('/login', ipLimit('auth', 10));
+  authApp.use('/refresh', ipLimit('auth', 10));
   authApp.use('/logout', protectedAuth);
   authApp.use('/me', protectedAuth);
   authApp.route('/', authRoutes(authDeps));
 
+  // Subscriptions: /plans 공개, /me 보호, /webhook 서명 가드(인증 대신).
+  const subsApp = new Hono();
+  subsApp.use('/me', protectedAuth);
+  subsApp.use(
+    '/webhook',
+    webhookSignatureGuard({
+      secret: env.WEBHOOK_HMAC_SECRET,
+      enabled: env.SUBSCRIPTION_WEBHOOK_ENABLED,
+    }),
+  );
+  subsApp.route('/', subscriptionsRoutes(subscriptionsDeps));
+
+  // Admin: requireAuth + requireAdmin(role + audience) 단일 마운트(§12.1).
+  const adminApp = new Hono();
+  adminApp.use('*', protectedAuth);
+  adminApp.use('*', requireAdmin(env.JWT_ADMIN_AUDIENCE));
+  adminApp.use('*', userRateLimit);
+  adminApp.route('/', adminRoutes(adminDeps));
+
   const app = new Hono();
   app.onError(errorHandler);
   app.use('*', requestId);
+  app.use('*', loggerMiddleware());
+  app.use('*', corsMiddleware(env.CORS_ALLOWLIST));
   app.use('*', secureHeaders());
   app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
   app.route('/v1/auth', authApp);
+  app.route('/v1/subscriptions', subsApp);
   app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
   app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
+  app.route('/v1/admin', adminApp);
 
   return app;
 }

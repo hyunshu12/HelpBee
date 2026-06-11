@@ -31,6 +31,9 @@ const envSchema = z
     AUTH_LOCKOUT_WINDOW_SEC: z.coerce.number().int().positive().default(900),
     AI_BASE_URL: z.string().min(1),
     AI_INTERNAL_HMAC_SECRET: z.string().min(32),
+    WEBHOOK_HMAC_SECRET: z.string().min(32).optional(), // 결제 webhook 서명(§11.4). 미설정 시 WEBHOOK_DISABLED.
+    SUBSCRIPTION_WEBHOOK_ENABLED: z.coerce.boolean().default(false), // MVP inert 기본
+    SENTRY_DSN: z.string().optional(),
     AWS_REGION: z.string().min(1).default('ap-northeast-2'),
     S3_IMAGES_BUCKET: z.string().min(1),
     PORT: z.coerce.number().int().positive().default(3001),

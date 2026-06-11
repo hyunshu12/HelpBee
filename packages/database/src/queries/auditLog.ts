@@ -18,9 +18,15 @@ export type AuditEntry = {
   userAgent?: string | null;
 };
 
-/** 트랜잭션/원자 기록용 raw insert(admin mutation은 tx로 호출). 실패 시 throw. */
-export async function insertAuditLog(db: Database, entry: AuditEntry): Promise<void> {
-  await db.insert(auditLog).values({
+/**
+ * 트랜잭션/원자 기록용 raw insert(admin mutation은 tx로 호출 — §12.7 동일 트랜잭션). 실패 시 throw.
+ * exec는 db 또는 tx (둘 다 .insert 보유) — Pick으로 트랜잭션 객체도 수용.
+ */
+export async function insertAuditLog(
+  exec: Pick<Database, 'insert'>,
+  entry: AuditEntry,
+): Promise<void> {
+  await exec.insert(auditLog).values({
     actorId: entry.actorId ?? null,
     action: entry.action,
     entity: entry.entity,
