@@ -13,3 +13,4 @@ export * as models from './models';
 export * as accounts from './accounts';
 export * as auth from './auth';
 export * as auditLog from './auditLog';
+export * as admin from './admin';
