@@ -5,6 +5,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "moduleResolution": "bundler",
     "outDir": "./dist",
     "rootDir": "./src"
   },

@@ -45,7 +45,7 @@ const SEED_AI_MODELS = [
   },
   {
     provider: 'yolo' as const,
-    name: 'helpbee-yolov8s',
+    name: 'helpbee-yolov11s', // ADR-0001: YOLOv11s (구 yolov8s 표기 폐기)
     version: '0.1.0',
   },
 ];
