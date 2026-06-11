@@ -6,13 +6,99 @@ import { hives, type Hive } from '../schema/hives';
 
 /**
  * 사용자별 hive 목록 (soft delete 제외, 최신 update 순).
+ * limit/offset은 헬퍼 내부에서 방어적 클램프(zod 우회 직접호출 대비, §9.3 SHOULD):
+ * limit=min(opts.limit??50,100), offset=clamp(0..10000).
  */
-export async function listHivesByUser(db: Database, userId: string): Promise<Hive[]> {
+export async function listHivesByUser(
+  db: Database,
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<Hive[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 100);
+  const offset = Math.min(Math.max(opts.offset ?? 0, 0), 10000);
   return db
     .select()
     .from(hives)
     .where(and(eq(hives.userId, userId), isNull(hives.deletedAt)))
-    .orderBy(desc(hives.updatedAt));
+    .orderBy(desc(hives.updatedAt))
+    .limit(limit)
+    .offset(offset);
+}
+
+export type CreateHiveInput = {
+  name: string;
+  note?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
+  installedAt?: Date | null;
+};
+
+/** hive 생성 — 명시 화이트리스트만 set(userId/id/deleted_at/timestamps는 코드 결정, Mass Assignment 차단). */
+export async function createHive(
+  db: Database,
+  userId: string,
+  input: CreateHiveInput,
+): Promise<Hive> {
+  const [row] = await db
+    .insert(hives)
+    .values({
+      userId,
+      name: input.name,
+      note: input.note ?? null,
+      latitude: input.latitude != null ? String(input.latitude) : null,
+      longitude: input.longitude != null ? String(input.longitude) : null,
+      address: input.address ?? null,
+      installedAt: input.installedAt ?? null,
+    })
+    .returning();
+  return row!;
+}
+
+export type UpdateHivePatch = Partial<CreateHiveInput>;
+
+/**
+ * hive 부분 수정 (소유 + soft delete 제외 조건부). 비소유/없음 → undefined(라우트 404).
+ * 제공된 필드만 화이트리스트로 set(스프레드 금지). updated_at은 $onUpdate 자동.
+ */
+export async function updateHive(
+  db: Database,
+  hiveId: string,
+  userId: string,
+  patch: UpdateHivePatch,
+): Promise<Hive | undefined> {
+  const set: Record<string, unknown> = {};
+  if (patch.name !== undefined) set.name = patch.name;
+  if (patch.note !== undefined) set.note = patch.note;
+  if (patch.latitude !== undefined) set.latitude = patch.latitude != null ? String(patch.latitude) : null;
+  if (patch.longitude !== undefined) {
+    set.longitude = patch.longitude != null ? String(patch.longitude) : null;
+  }
+  if (patch.address !== undefined) set.address = patch.address;
+  if (patch.installedAt !== undefined) set.installedAt = patch.installedAt;
+  if (Object.keys(set).length === 0) {
+    return getHiveByIdForUser(db, hiveId, userId);
+  }
+  const [row] = await db
+    .update(hives)
+    .set(set)
+    .where(and(eq(hives.id, hiveId), eq(hives.userId, userId), isNull(hives.deletedAt)))
+    .returning();
+  return row;
+}
+
+/** soft delete (hard delete 금지). 비소유/이미삭제 → undefined(라우트 404). */
+export async function softDeleteHive(
+  db: Database,
+  hiveId: string,
+  userId: string,
+): Promise<{ id: string; deletedAt: Date | null } | undefined> {
+  const [row] = await db
+    .update(hives)
+    .set({ deletedAt: new Date() })
+    .where(and(eq(hives.id, hiveId), eq(hives.userId, userId), isNull(hives.deletedAt)))
+    .returning({ id: hives.id, deletedAt: hives.deletedAt });
+  return row;
 }
 
 /**

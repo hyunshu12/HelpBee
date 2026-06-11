@@ -57,8 +57,7 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    // postgres-js 연결 종료 (열린 핸들로 vitest 미종료 방지)
-    await (db as unknown as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+    // 연결은 vitest 워커 종료 시 정리(여러 통합 스위트가 공유 싱글톤을 쓰므로 개별 end() 금지).
   });
 
   it('resolveActiveModel: provider별 활성 모델', () => {

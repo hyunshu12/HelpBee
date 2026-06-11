@@ -19,7 +19,7 @@ describe.skipIf(!RUN)('Auth queries (real PostgreSQL)', () => {
 
   afterAll(async () => {
     await db.delete(schema.users).where(sql`email LIKE 'authq-%@itest.local'`);
-    await (db as unknown as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+    // 연결은 vitest 워커 종료 시 정리(여러 통합 스위트가 공유 싱글톤을 쓰므로 개별 end() 금지).
   });
 
   it('createUserWithSubscription: user + subscription(free/active) tx', async () => {
