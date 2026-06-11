@@ -20,6 +20,18 @@ HelpBee 운영팀(내부 임직원, CS, 데이터 분석가)을 위한 **백오�
 
 ---
 
+## 🔌 백엔드 API 연동 (필독)
+
+백엔드(`apps/api`)는 코드 완성·계약 고정(2026-06 develop 머지분). 연동 시:
+**→ [`docs/01-development/frontend-api-integration.md`](../../docs/01-development/frontend-api-integration.md)** — 특히 **§6 Admin**, §0 봉투/에러, §9 로컬 기동.
+
+- 이 앱은 `/v1/admin/*`(`users` · `users/:id` PATCH · `audit-logs` · `metrics` · `analyses/:imageId/dual`) + `/v1/auth/login` 사용.
+- **admin 토큰 필요**: `role==='admin'` + 토큰 audience=admin. 일반 사용자 토큰은 **403 `FORBIDDEN_ROLE`**, 무인증은 401. admin 계정은 일반 signup으론 못 만들고 **DB/타 admin 승격 후 재로그인**해야 admin 토큰을 받는다(위 문서 §6).
+- 응답 `{data, meta}` 봉투 / 에러 `problem+json`의 `code`로 분기 / `audit-logs`는 **cursor 페이지네이션**(`{items, nextCursor}`).
+- ⚠️ `analyses/:imageId/dual`은 실제 추론·dual 데이터가 있어야 의미 있음(**현재 AI 추론 미동작** — 위 문서 §10). 사용자 차단(PATCH status=blocked) 시 백엔드가 즉시 세션 회수.
+
+---
+
 ## 2. 기술 스택 (Tech Stack)
 
 | 영역            | 선택                                                                              |
