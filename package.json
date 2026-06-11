@@ -20,6 +20,12 @@
   "devDependencies": {
     "turbo": "^1.10.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "argon2",
+      "esbuild"
+    ]
+  },
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"

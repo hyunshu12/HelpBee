@@ -21,6 +21,7 @@
     "@helpbee/types": "workspace:*",
     "@hono/node-server": "^2.0.4",
     "@hono/zod-validator": "^0.8.0",
+    "argon2": "0.31.2",
     "axios": "^1.6.0",
     "drizzle-orm": "^0.29.5",
     "file-type": "^22.0.1",
