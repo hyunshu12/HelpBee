@@ -1,23 +1,16 @@
-import { Hono } from 'hono';
+/**
+ * 부트스트랩 — @hono/node-server로 listen만 담당. 앱 구성은 app.ts(createApp).
+ * createApp()이 env fail-fast 검증 → 누락 시 부팅 거부.
+ */
+import { serve } from '@hono/node-server';
 
-const app = new Hono();
+import { createApp } from './app';
 
-// Health check
-app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+const port = parseInt(process.env.PORT ?? '3001', 10);
+const app = createApp();
 
-// API routes will be imported here
-// import authRoutes from './routes/auth';
-// import hivesRoutes from './routes/hives';
-// import analysesRoutes from './routes/analyses';
-
-// app.route('/api/auth', authRoutes);
-// app.route('/api/hives', hivesRoutes);
-// app.route('/api/analyses', analysesRoutes);
-
-const port = parseInt(process.env.PORT || '3001', 10);
-
-console.log(`🚀 API Server is running on http://localhost:${port}`);
+serve({ fetch: app.fetch, port });
+// eslint-disable-next-line no-console
+console.log(`🚀 API Server running on http://localhost:${port}`);
 
 export default app;

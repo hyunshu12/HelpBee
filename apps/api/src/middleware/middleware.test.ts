@@ -8,7 +8,7 @@ import { requestId } from './request-id';
 
 const SECRET = 'x'.repeat(64);
 
-function mint(payload: Record<string, unknown>, algorithm = 'HS256') {
+function mint(payload: Record<string, unknown>, algorithm: 'HS256' | 'HS512' = 'HS256') {
   return jwt.encode({ exp: Math.floor(Date.now() / 1000) + 900, ...payload }, SECRET, algorithm);
 }
 

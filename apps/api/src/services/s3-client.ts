@@ -100,3 +100,30 @@ export async function headObject(s3: S3Client, bucket: string, key: string) {
 export async function deleteObject(s3: S3Client, bucket: string, key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
+
+/** S3 객체 다운로드 → Buffer (confirm 검증용). 실 IO, 통합 검증 대상. */
+export async function getObjectBytes(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+): Promise<Buffer> {
+  // pragma: no cover
+  const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const body = res.Body as { transformToByteArray(): Promise<Uint8Array> } | undefined;
+  if (!body) throw new AppError('IMAGE_NOT_FOUND_IN_STORAGE');
+  return Buffer.from(await body.transformToByteArray());
+}
+
+/** strip된 이미지 재업로드. 실 IO, 통합 검증 대상. */
+export async function putObjectBytes(
+  s3: S3Client,
+  bucket: string,
+  key: string,
+  bytes: Buffer,
+  contentType: string,
+): Promise<void> {
+  // pragma: no cover
+  await s3.send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: contentType }),
+  );
+}
