@@ -19,6 +19,22 @@ HelpBee의 메인 사용자 클라이언트(iOS / Android). 양봉가가 벌통�
 
 ---
 
+## 🔌 백엔드 API 연동 (필독)
+
+백엔드(`apps/api`)는 **코드 완성 + HTTP 계약 고정** 상태다(2026-06 develop 머지분). 연동 전 **반드시** 읽을 것:
+**→ [`docs/01-development/frontend-api-integration.md`](../../docs/01-development/frontend-api-integration.md)** — 실제 구현 기준 엔드포인트·요청/응답·에러코드·토큰 정책·로컬 기동법.
+
+이 앱이 쓰는 핵심: `/v1/auth/*`(로그인·토큰 회전), `/v1/hives`(벌통 CRUD), `/v1/images/presign|confirm`(S3 직업로드), `/v1/analyses`(진단), `/v1/subscriptions/me`.
+
+⚠️ **현재 주의 (상세 = 위 문서 §10 Readiness)**:
+- **AI 추론 아직 미동작** → `POST /v1/analyses`는 현재 `status:'failed'`(200)로만 응답. **결과 화면은 실패 상태 UI부터** 만들 것.
+- **이메일 인증 발송 미구현** → 무료 사용자(현재 전원)는 `AUTH_EMAIL_NOT_VERIFIED`(403)로 분석 차단. 개발 중 우회는 위 문서 참조.
+- **권장조치(recommendations)는 어떤 분석 응답에도 미포함** → 결과 화면 처방 문구는 백엔드 보강 후.
+- 토큰: access 15분(메모리)·refresh 7일(secure storage, **헤더 아닌 body로 전달**), 회전+grace 처리(위 문서 §1.1).
+- 응답은 `{data, meta}` 봉투, 에러는 `problem+json`의 `code`로 분기. lat/lng는 문자열로 옴(parseFloat).
+
+---
+
 ## 2. 초기 셋업 (아직 미실행 — 다음 작업자가 실행)
 
 본 디렉터리는 `flutter create` 이전 상태다. `lib/`, `test/`, `assets/` 등의 디렉터리 골격이 미리 잡혀 있어, `flutter create`가 그 위에 `main.dart`, `pubspec.yaml`, 플랫폼 폴더(`ios/`, `android/`)만 채워 넣게 된다.
