@@ -19,6 +19,7 @@ import { requireAuth } from './middleware/auth';
 import { requestId } from './middleware/request-id';
 import { analysesRoutes, type AnalysesDeps } from './routes/analyses';
 import { authRoutes, type AuthDeps } from './routes/auth';
+import { hivesRoutes, type HivesDeps } from './routes/hives';
 import { imagesRoutes, type ImagesDeps } from './routes/images';
 import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
@@ -134,6 +135,39 @@ export function createApp() {
     now: () => Date.now(),
   };
 
+  const hivesCacheKey = (userId: string) => `cache:hives:${userId}`;
+  const hivesDeps: HivesDeps = {
+    list: (userId, opts) => queries.hives.listHivesByUser(db, userId, opts),
+    create: (userId, input) => queries.hives.createHive(db, userId, input),
+    getById: (hiveId, userId) => queries.hives.getHiveByIdForUser(db, hiveId, userId),
+    update: (hiveId, userId, patch) => queries.hives.updateHive(db, hiveId, userId, patch as never),
+    softDelete: (hiveId, userId) => queries.hives.softDeleteHive(db, hiveId, userId),
+    // 캐시는 best-effort: Redis 장애 시 null/no-op로 DB fallthrough(가용성 우선, §9.6).
+    cacheGet: async (userId) => {
+      try {
+        const raw = await redis.get(hivesCacheKey(userId));
+        return raw ? (JSON.parse(raw) as unknown[]) : null;
+      } catch {
+        return null;
+      }
+    },
+    cacheSet: async (userId, rows) => {
+      try {
+        await redis.setex(hivesCacheKey(userId), 60, JSON.stringify(rows));
+      } catch {
+        /* best-effort */
+      }
+    },
+    cacheInvalidate: async (userId) => {
+      try {
+        await redis.del(hivesCacheKey(userId));
+      } catch {
+        /* best-effort */
+      }
+    },
+    audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
+  };
+
   // 보호 미들웨어: requireAuth(alg핀) + sessions_valid_after 즉시 회수 마커(§7.9).
   const protectedAuth = requireAuth(env.JWT_SECRET, {
     isRevoked: (userId, iat) => isSessionRevoked(redis, userId, iat),
@@ -159,6 +193,7 @@ export function createApp() {
   app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
   app.route('/v1/auth', authApp);
+  app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
   app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
 
