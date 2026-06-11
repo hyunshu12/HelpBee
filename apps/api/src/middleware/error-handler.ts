@@ -11,7 +11,7 @@ import { problem } from '../lib/problem';
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof AppError) {
-    return problem(c, err.code, err.detail);
+    return problem(c, err.code, err.detail, { retryAfterSec: err.retryAfterSec });
   }
   if (err instanceof ZodError) {
     const paths = err.issues.map((i) => i.path.join('.')).filter(Boolean);

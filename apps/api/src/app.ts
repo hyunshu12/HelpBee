@@ -13,12 +13,21 @@ import { secureHeaders } from 'hono/secure-headers';
 import Redis from 'ioredis';
 
 import { loadEnv } from './config/env';
+import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
 import { requireAuth } from './middleware/auth';
 import { requestId } from './middleware/request-id';
 import { analysesRoutes, type AnalysesDeps } from './routes/analyses';
+import { authRoutes, type AuthDeps } from './routes/auth';
 import { imagesRoutes, type ImagesDeps } from './routes/images';
+import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
+import {
+  generateRefreshToken,
+  hashRefreshToken,
+  signAccessToken,
+} from './services/jwt-service';
+import { getDummyHash, hashPassword, verifyPassword } from './services/password-service';
 import * as quota from './services/quota-service';
 import * as s3 from './services/s3-client';
 
@@ -88,16 +97,70 @@ export function createApp() {
     createImage: (input) => queries.images.createAnalysisImage(db, input as never),
   };
 
+  const authDeps: AuthDeps = {
+    createUser: (input) => queries.auth.createUserWithSubscription(db, input),
+    getUserByEmail: (email) => queries.auth.getUserByEmailForAuth(db, email),
+    getActiveUserById: (userId) => queries.auth.getActiveUserById(db, userId),
+    getSubscription: async (userId) => {
+      const sub = await queries.accounts.getSubscriptionForUser(db, userId);
+      return sub ? { plan: sub.plan, status: sub.status } : undefined;
+    },
+    getRefreshByHash: (hash) => queries.auth.getRefreshTokenByHash(db, hash),
+    createRefresh: (input) => queries.auth.createRefreshToken(db, input),
+    revokeRefreshById: (id) => queries.auth.revokeRefreshTokenById(db, id),
+    revokeAllRefresh: (userId) => queries.auth.revokeAllRefreshTokensForUser(db, userId),
+    hashPassword,
+    verifyPassword,
+    getDummyHash,
+    signAccess: ({ userId, role, emailVerified }) =>
+      signAccessToken(env.JWT_SECRET, {
+        userId,
+        role,
+        emailVerified,
+        ttlSec: env.JWT_ACCESS_TTL_SEC,
+      }),
+    generateRefresh: generateRefreshToken,
+    hashRefresh: (token) => hashRefreshToken(env.REFRESH_TOKEN_PEPPER, token),
+    refreshExpiry: () => new Date(Date.now() + env.JWT_REFRESH_TTL_SEC * 1000),
+    assertNotLocked: ({ email, ip }) =>
+      accountProtection.assertNotLocked(redis, { email, ip, maxFails: env.AUTH_LOGIN_MAX_FAILS }),
+    recordLoginFailure: ({ email, ip }) =>
+      accountProtection
+        .recordFailure(redis, { email, ip, windowSec: env.AUTH_LOCKOUT_WINDOW_SEC })
+        .then(() => undefined),
+    clearLoginFailures: ({ email, ip }) => accountProtection.clearFailures(redis, { email, ip }),
+    bumpSessions: (userId) => bumpSessionsValidAfter(redis, userId),
+    audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
+    now: () => Date.now(),
+  };
+
+  // 보호 미들웨어: requireAuth(alg핀) + sessions_valid_after 즉시 회수 마커(§7.9).
+  const protectedAuth = requireAuth(env.JWT_SECRET, {
+    isRevoked: (userId, iat) => isSessionRevoked(redis, userId, iat),
+  });
+  // 도메인 라우터를 보호 그룹으로 감싸 마운트(컬렉션·하위경로 모두 커버).
+  const protectedMount = (router: Hono) => {
+    const g = new Hono();
+    g.use('*', protectedAuth);
+    g.route('/', router);
+    return g;
+  };
+
+  // Auth: signup/login/refresh 공개, logout/me만 보호(전역 /v1/* 가드 금지 — 공개 엔드포인트 보존).
+  const authApp = new Hono();
+  authApp.use('/logout', protectedAuth);
+  authApp.use('/me', protectedAuth);
+  authApp.route('/', authRoutes(authDeps));
+
   const app = new Hono();
   app.onError(errorHandler);
   app.use('*', requestId);
   app.use('*', secureHeaders());
   app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-  // 보호 라우트(/v1/*)는 requireAuth 이후 마운트
-  app.use('/v1/*', requireAuth(env.JWT_SECRET));
-  app.route('/v1/images', imagesRoutes(imagesDeps));
-  app.route('/v1/analyses', analysesRoutes(analysesDeps));
+  app.route('/v1/auth', authApp);
+  app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
+  app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
 
   return app;
 }
