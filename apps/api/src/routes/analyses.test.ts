@@ -33,6 +33,7 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
     }),
     listForUser: async () => [{ id: 'an1' }, { id: 'an2' }],
     getByIdForUser: async () => ({ id: 'an1' }),
+    getTrend: async () => [{ bucket: '2026-06-10', avgRisk: 35, analysisCount: 2 }],
     ...over,
   };
 }
@@ -203,5 +204,12 @@ describe('GET /v1/analyses', () => {
       '/v1/analyses/an-x',
     );
     expect(res.status).toBe(404);
+  });
+
+  it('GET /trend returns trend buckets (not caught by /:id)', async () => {
+    const res = await makeApp(baseDeps()).request(`/v1/analyses/trend?hiveId=${HIVE}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data[0].bucket).toBe('2026-06-10');
   });
 });

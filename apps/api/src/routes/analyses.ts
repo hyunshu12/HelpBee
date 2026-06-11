@@ -12,7 +12,11 @@ import { Hono } from 'hono';
 
 import { created, ok } from '../lib/envelope';
 import { problem } from '../lib/problem';
-import { createAnalysisSchema, listAnalysesQuerySchema } from '../schemas/analyses';
+import {
+  createAnalysisSchema,
+  listAnalysesQuerySchema,
+  trendQuerySchema,
+} from '../schemas/analyses';
 
 type Tier = 'safe' | 'watch' | 'danger';
 
@@ -55,7 +59,10 @@ export type AnalysesDeps = {
     opts: { limit: number; offset: number },
   ): Promise<unknown[]>;
   getByIdForUser(id: string, userId: string): Promise<unknown | undefined>;
+  getTrend(hiveId: string, userId: string, from: Date, to: Date): Promise<unknown[]>;
 };
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const HEALTH: Record<Tier, string> = { safe: 'healthy', watch: 'warning', danger: 'critical' };
 const SEVERITY: Record<Tier, string> = { safe: 'info', watch: 'warn', danger: 'danger' };
@@ -155,6 +162,16 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const { hiveId, limit, offset } = c.req.valid('query');
     const rows = await deps.listForUser(hiveId, userId, { limit, offset });
     return ok(c, rows, { pagination: { limit, offset, total: rows.length } });
+  });
+
+  // /:id 보다 먼저 등록 (정적 경로 우선)
+  app.get('/trend', zValidator('query', trendQuerySchema), async (c) => {
+    const userId = c.get('userId') as string;
+    const { hiveId, from, to } = c.req.valid('query');
+    const toDate = to ? new Date(to) : new Date();
+    const fromDate = from ? new Date(from) : new Date(toDate.getTime() - THIRTY_DAYS_MS);
+    const trend = await deps.getTrend(hiveId, userId, fromDate, toDate);
+    return ok(c, trend);
   });
 
   app.get('/:id', async (c) => {

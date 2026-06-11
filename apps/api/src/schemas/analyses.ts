@@ -21,4 +21,10 @@ export const listAnalysesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+export const trendQuerySchema = z.object({
+  hiveId: uuid,
+  from: z.string().optional(), // ISO; 미지정 시 최근 30일
+  to: z.string().optional(),
+});
+
 export type CreateAnalysisInput = z.infer<typeof createAnalysisSchema>;
