@@ -47,6 +47,8 @@ export class AppError extends Error {
   constructor(
     public readonly code: ErrorCode,
     public readonly detail?: string,
+    /** 429(잠금/레이트리밋) 시 Retry-After 헤더로 노출할 초. */
+    public readonly retryAfterSec?: number,
   ) {
     super(code);
     this.name = 'AppError';

@@ -5,9 +5,11 @@ import { users } from './users';
 
 /**
  * JWT refresh 토큰 해시 저장.
- * - token_hash: argon2 해시된 refresh token (raw token 저장 금지)
+ * - token_hash: **HMAC-SHA256(server pepper)** 로 해시된 refresh token (raw token 저장 금지).
+ *   결정적 해시라야 raw→row 조회·재사용 감지가 가능(argon2 같은 랜덤 솔트 해시 금지 — backend-design §8.0 MUST).
+ *   비밀번호는 argon2id(별도 서비스). 두 해싱은 스왑 불가하게 분리.
  * - 회전(rotation) 시 revoked_at 마킹 + 새 row insert
- * - 재사용 감지 시 해당 user의 모든 row revoke
+ * - 재사용 감지 시 해당 user의 모든 row revoke + sessions_valid_after 마커 bump
  */
 export const refreshTokens = pgTable(
   'refresh_tokens',

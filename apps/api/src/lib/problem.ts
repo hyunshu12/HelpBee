@@ -7,7 +7,12 @@ import type { Context } from 'hono';
 
 import { ERROR_CATALOG, errorType, type ErrorCode } from './error-codes';
 
-export function problem(c: Context, code: ErrorCode, detail?: string) {
+export function problem(
+  c: Context,
+  code: ErrorCode,
+  detail?: string,
+  opts?: { retryAfterSec?: number },
+) {
   const { status, title } = ERROR_CATALOG[code];
   const requestId = (c.get('requestId') as string | undefined) ?? '';
   const payload = {
@@ -19,7 +24,9 @@ export function problem(c: Context, code: ErrorCode, detail?: string) {
     instance: c.req.path,
     requestId,
   };
-  return c.json(payload, status as never, {
-    'content-type': 'application/problem+json',
-  });
+  const headers: Record<string, string> = { 'content-type': 'application/problem+json' };
+  if (opts?.retryAfterSec != null && opts.retryAfterSec > 0) {
+    headers['retry-after'] = String(Math.ceil(opts.retryAfterSec));
+  }
+  return c.json(payload, status as never, headers);
 }

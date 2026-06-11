@@ -13,7 +13,7 @@
     "check": "drizzle-kit check:pg",
     "studio": "drizzle-kit studio",
     "seed:dev": "tsx src/seeds/dev.ts",
-    "test:integration": "DB_ITEST=1 vitest run src/queries/integration.test.ts",
+    "test:integration": "DB_ITEST=1 vitest run",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

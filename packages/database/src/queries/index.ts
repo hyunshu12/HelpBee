@@ -11,3 +11,5 @@ export * as analyses from './analyses';
 export * as images from './images';
 export * as models from './models';
 export * as accounts from './accounts';
+export * as auth from './auth';
+export * as auditLog from './auditLog';
