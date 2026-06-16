@@ -164,3 +164,11 @@ final latestAnalysisProvider =
       await ref.read(analysesApiProvider).listByHive(hiveId, limit: 1);
   return result.items.isEmpty ? null : result.items.first;
 });
+
+/// Recent analyses for a hive (detail timeline, most-recent first).
+final hiveAnalysesProvider =
+    FutureProvider.autoDispose.family<List<Analysis>, String>((ref, hiveId) async {
+  final result =
+      await ref.read(analysesApiProvider).listByHive(hiveId, limit: 20);
+  return result.items;
+});

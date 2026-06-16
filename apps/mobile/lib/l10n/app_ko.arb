@@ -92,6 +92,33 @@
   "deleteHive": "벌통 삭제",
   "deleteHiveConfirm": "이 벌통을 삭제할까요? 삭제하면 목록에서 사라져요.",
   "hiveDetailTitle": "벌통 정보",
+  "hiveRiskSubtitle": "현재 감염 심각 수준",
+  "hiveLocationCard": "벌통 위치",
+  "installDateLabel": "설치날짜",
+  "statusLabel": "상태",
+  "memoTitle": "메모",
+  "historyRecentTitle": "과거 진단 이력 (최신순)",
+  "seeMore": "더보기",
+  "aiAutoDiagnosis": "AI 자동 정밀 판독",
+  "retakePhoto": "벌통 다시 촬영하기",
+  "editHive": "수정",
+  "today": "오늘",
+  "yesterday": "어제",
+  "daysAgo": "{count}일 전",
+  "@daysAgo": {
+    "description": "Relative day label for diagnosis history.",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "scoreWithTier": "{score}점 ({tier})",
+  "@scoreWithTier": {
+    "description": "History row value, e.g. 84점 (위험).",
+    "placeholders": {
+      "score": { "type": "int" },
+      "tier": { "type": "String" }
+    }
+  },
   "hiveLocationLabel": "위치(위도, 경도)",
   "hiveInstalledAtLabel": "설치일",
   "hiveCreatedAtLabel": "등록일",

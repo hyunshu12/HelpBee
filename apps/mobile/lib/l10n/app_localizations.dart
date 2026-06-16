@@ -556,6 +556,90 @@ abstract class AppLocalizations {
   /// **'벌통 정보'**
   String get hiveDetailTitle;
 
+  /// No description provided for @hiveRiskSubtitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 감염 심각 수준'**
+  String get hiveRiskSubtitle;
+
+  /// No description provided for @hiveLocationCard.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 위치'**
+  String get hiveLocationCard;
+
+  /// No description provided for @installDateLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'설치날짜'**
+  String get installDateLabel;
+
+  /// No description provided for @statusLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'상태'**
+  String get statusLabel;
+
+  /// No description provided for @memoTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'메모'**
+  String get memoTitle;
+
+  /// No description provided for @historyRecentTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'과거 진단 이력 (최신순)'**
+  String get historyRecentTitle;
+
+  /// No description provided for @seeMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더보기'**
+  String get seeMore;
+
+  /// No description provided for @aiAutoDiagnosis.
+  ///
+  /// In ko, this message translates to:
+  /// **'AI 자동 정밀 판독'**
+  String get aiAutoDiagnosis;
+
+  /// No description provided for @retakePhoto.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 다시 촬영하기'**
+  String get retakePhoto;
+
+  /// No description provided for @editHive.
+  ///
+  /// In ko, this message translates to:
+  /// **'수정'**
+  String get editHive;
+
+  /// No description provided for @today.
+  ///
+  /// In ko, this message translates to:
+  /// **'오늘'**
+  String get today;
+
+  /// No description provided for @yesterday.
+  ///
+  /// In ko, this message translates to:
+  /// **'어제'**
+  String get yesterday;
+
+  /// Relative day label for diagnosis history.
+  ///
+  /// In ko, this message translates to:
+  /// **'{count}일 전'**
+  String daysAgo(int count);
+
+  /// History row value, e.g. 84점 (위험).
+  ///
+  /// In ko, this message translates to:
+  /// **'{score}점 ({tier})'**
+  String scoreWithTier(int score, String tier);
+
   /// No description provided for @hiveLocationLabel.
   ///
   /// In ko, this message translates to:

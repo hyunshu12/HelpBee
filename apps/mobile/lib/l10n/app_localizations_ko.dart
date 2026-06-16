@@ -244,6 +244,52 @@ class AppLocalizationsKo extends AppLocalizations {
   String get hiveDetailTitle => '벌통 정보';
 
   @override
+  String get hiveRiskSubtitle => '현재 감염 심각 수준';
+
+  @override
+  String get hiveLocationCard => '벌통 위치';
+
+  @override
+  String get installDateLabel => '설치날짜';
+
+  @override
+  String get statusLabel => '상태';
+
+  @override
+  String get memoTitle => '메모';
+
+  @override
+  String get historyRecentTitle => '과거 진단 이력 (최신순)';
+
+  @override
+  String get seeMore => '더보기';
+
+  @override
+  String get aiAutoDiagnosis => 'AI 자동 정밀 판독';
+
+  @override
+  String get retakePhoto => '벌통 다시 촬영하기';
+
+  @override
+  String get editHive => '수정';
+
+  @override
+  String get today => '오늘';
+
+  @override
+  String get yesterday => '어제';
+
+  @override
+  String daysAgo(int count) {
+    return '$count일 전';
+  }
+
+  @override
+  String scoreWithTier(int score, String tier) {
+    return '$score점 ($tier)';
+  }
+
+  @override
   String get hiveLocationLabel => '위치(위도, 경도)';
 
   @override
