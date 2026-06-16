@@ -68,5 +68,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 |---|---|---|---|
 | 2026-05-11 | Database 9-table schema + types 동기화 + impl log 체계 도입 | (TBD) | [2026-05-11-database-schema.md](./2026-05-11-database-schema.md) |
 | 2026-06-08 | YOLO v0.1.0 varroa 검출기 베이스라인 전체 사이클 (스윕→학습→golden→sign-off GO, copy_paste no-op 발견) | (이 PR) | [2026-06-08-v010-yolo-baseline.md](./2026-06-08-v010-yolo-baseline.md) |
+| 2026-06-16 | Flutter 모바일 scaffold + 인증 플로우 (스플래시/온보딩/로그인/회원가입, 토큰 회전·single-flight refresh, Figma 토큰) | (예정) | [2026-06-16-mobile-scaffold-auth.md](./2026-06-16-mobile-scaffold-auth.md) |
 
 (새 기록 추가 시 위 표 갱신)
