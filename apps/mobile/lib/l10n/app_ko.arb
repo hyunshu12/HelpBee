@@ -236,5 +236,7 @@
   "hiveNotePlaceholder": "벌통의 초기 상태, 여왕벌 정보 등을 입력하세요",
   "useCurrentLocationA11y": "현재 위치 사용",
   "pickDateA11y": "설치일 선택",
-  "installDateRequired": "설치일을 선택해 주세요"
+  "installDateRequired": "설치일을 선택해 주세요",
+  "hiveEditTitle": "벌통 수정",
+  "hiveUpdated": "벌통 정보를 수정했어요"
 }
