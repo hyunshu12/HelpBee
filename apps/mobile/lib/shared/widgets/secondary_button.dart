@@ -31,8 +31,10 @@ class SecondaryButton extends StatelessWidget {
         width: double.infinity,
         child: Material(
           color: Colors.transparent,
-          borderRadius: AppRadius.buttonRadius,
           clipBehavior: Clip.antiAlias,
+          // NOTE: `shape` and `borderRadius` are mutually exclusive on Material
+          // (asserts otherwise). The outline needs a `side`, so the rounded
+          // corners come from the shape — do NOT also set `borderRadius`.
           shape: const RoundedRectangleBorder(
             borderRadius: AppRadius.buttonRadius,
             side: BorderSide(color: AppColors.hintBorder, width: 1),
