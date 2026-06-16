@@ -6,8 +6,8 @@
   2. RGBA/LA/P → RGB 평탄화 (흰 배경)
   3. HEIC → JPEG (pillow-heif, 설치 시에만)
   4. 긴 변 1024px 다운스케일 (LANCZOS, 업스케일 안 함)
-  5. JPEG q=85 인코딩
-  6. 10MB 가드 — 초과 시 q80→q75 순차 다운, 그래도 초과면 ImageTooLargeError
+  5. JPEG q=95 인코딩 (아래 QUALITY_CASCADE 참조)
+  6. 10MB 가드 — 초과 시 q90→q85 순차 다운, 그래도 초과면 ImageTooLargeError
 """
 
 from __future__ import annotations
@@ -28,7 +28,12 @@ except Exception:  # pragma: no cover
 
 MAX_BYTES = 10 * 1024 * 1024
 MAX_EDGE = 1024
-QUALITY_CASCADE = (85, 80, 75)
+# q95 인코딩. q85는 응애의 미세 신호를 약화시켜 YOLO 검출 앵커의 argmax를
+# varroa→normal로 뒤집어 false negative(safe 오진)를 유발 → train/serve skew.
+# (golden eval은 원본을 직접 letterbox해 이 재압축을 안 거침.) 단일 이미지 측정:
+# q85 varroa 0 (safe) → q95 varroa 1 (watch), 동일 normal 셋에서 FP 증가 0.
+# 정식 라벨 기반 golden 서빙경로 평가는 후속 과제. 공유 전처리라 OpenAI 경로도 q95 사용.
+QUALITY_CASCADE = (95, 90, 85)
 
 
 class ImageDecodeError(Exception):
