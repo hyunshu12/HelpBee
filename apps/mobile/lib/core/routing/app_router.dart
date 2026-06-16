@@ -1,8 +1,14 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/analyses/presentation/analysis_flow_args.dart';
 import '../../features/analyses/presentation/analysis_history_screen.dart';
+import '../../features/analyses/presentation/analyzing_screen.dart';
+import '../../features/analyses/presentation/capture_screen.dart';
+import '../../features/analyses/presentation/photo_review_screen.dart';
+import '../../features/analyses/presentation/report_screen.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/auth_flow_state.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -83,6 +89,38 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             HiveDetailScreen(hiveId: state.pathParameters['id']!),
       ),
+      // Diagnosis flow (full screen). Args travel via `state.extra`; a missing
+      // /wrong extra (e.g. deep-link or hot-restart) falls back to home.
+      GoRoute(
+        path: RoutePaths.capture,
+        builder: (context, state) {
+          final a = state.extra;
+          return a is CaptureArgs ? CaptureScreen(args: a) : const _FlowMissing();
+        },
+      ),
+      GoRoute(
+        path: RoutePaths.review,
+        builder: (context, state) {
+          final a = state.extra;
+          return a is PhotoArgs
+              ? PhotoReviewScreen(args: a)
+              : const _FlowMissing();
+        },
+      ),
+      GoRoute(
+        path: RoutePaths.analyzing,
+        builder: (context, state) {
+          final a = state.extra;
+          return a is PhotoArgs ? AnalyzingScreen(args: a) : const _FlowMissing();
+        },
+      ),
+      GoRoute(
+        path: RoutePaths.report,
+        builder: (context, state) {
+          final a = state.extra;
+          return a is ReportArgs ? ReportScreen(args: a) : const _FlowMissing();
+        },
+      ),
       // Bottom-nav shell with three tabs.
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
@@ -123,3 +161,17 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+/// Fallback when a diagnosis-flow route is entered without its `extra` payload
+/// (deep link / hot restart). Redirects to home on the next frame.
+class _FlowMissing extends StatelessWidget {
+  const _FlowMissing();
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) context.go(RoutePaths.home);
+    });
+    return const Scaffold(body: SizedBox.shrink());
+  }
+}

@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 벌통 촬영(진단)용 카메라 권한. image_picker 갤러리는 Android 13+ Photo Picker라 별도 저장소 권한 불요. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="helpbee"
         android:name="${applicationName}"

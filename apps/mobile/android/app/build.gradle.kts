@@ -24,7 +24,8 @@ android {
         applicationId = "kr.helpbee.helpbee"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // flutter_image_compress requires minSdk 24; pin it explicitly (camera/image_picker need ≤21).
+        minSdk = maxOf(24, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

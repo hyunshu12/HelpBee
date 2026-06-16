@@ -951,6 +951,288 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'진단 필요'**
   String get tierUnknown;
+
+  /// No description provided for @captureGuide.
+  ///
+  /// In ko, this message translates to:
+  /// **'가이드 안에 벌통을 맞추고 흔들리지 않게\n찍어주세요'**
+  String get captureGuide;
+
+  /// No description provided for @captureNoCamera.
+  ///
+  /// In ko, this message translates to:
+  /// **'시뮬레이터에는 카메라가 없어요.\n갤러리에서 사진을 선택해 주세요'**
+  String get captureNoCamera;
+
+  /// No description provided for @captureCameraRetry.
+  ///
+  /// In ko, this message translates to:
+  /// **'카메라를 열 수 없어요. 화면을 탭해 다시 시도하거나 갤러리를 사용해 주세요'**
+  String get captureCameraRetry;
+
+  /// No description provided for @captureGallery.
+  ///
+  /// In ko, this message translates to:
+  /// **'갤러리'**
+  String get captureGallery;
+
+  /// No description provided for @captureFlash.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시'**
+  String get captureFlash;
+
+  /// No description provided for @captureFlashOff.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 꺼짐'**
+  String get captureFlashOff;
+
+  /// No description provided for @captureFlashAuto.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 자동'**
+  String get captureFlashAuto;
+
+  /// No description provided for @captureFlashOn.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 켜짐'**
+  String get captureFlashOn;
+
+  /// No description provided for @captureShutterA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'촬영'**
+  String get captureShutterA11y;
+
+  /// No description provided for @captureCloseA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'닫기'**
+  String get captureCloseA11y;
+
+  /// No description provided for @reviewTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 프레임이 선명한가요?'**
+  String get reviewTitle;
+
+  /// No description provided for @reviewBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'정확한 분석을 위해 벌집과 벌이 선명하게\n보이도록 찍어주세요'**
+  String get reviewBody;
+
+  /// No description provided for @reviewAnalyzeCta.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 사진으로 분석하기'**
+  String get reviewAnalyzeCta;
+
+  /// No description provided for @reviewRetake.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 찍기'**
+  String get reviewRetake;
+
+  /// No description provided for @analyzingTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통을 분석하고 있어요'**
+  String get analyzingTitle;
+
+  /// No description provided for @analyzingBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'AI 모델이 소비판 내부의 진드기를\n정밀 카운팅하고 있습니다.\n약 3초 소요됩니다'**
+  String get analyzingBody;
+
+  /// No description provided for @analyzingFailedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'분석을 완료하지 못했어요'**
+  String get analyzingFailedTitle;
+
+  /// No description provided for @reportTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 결과 레포트'**
+  String get reportTitle;
+
+  /// No description provided for @reportRiskStageTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'응애 감염 위험 단계'**
+  String get reportRiskStageTitle;
+
+  /// No description provided for @reportAnalyzedPhoto.
+  ///
+  /// In ko, this message translates to:
+  /// **'분석된 사진'**
+  String get reportAnalyzedPhoto;
+
+  /// No description provided for @reportRecommendTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'권장 조치'**
+  String get reportRecommendTitle;
+
+  /// No description provided for @reportRecommendDisclaimer.
+  ///
+  /// In ko, this message translates to:
+  /// **'※ AI 처방이 아닌 일반 안내예요. 정확한 처방은 전문가와 상담하세요'**
+  String get reportRecommendDisclaimer;
+
+  /// No description provided for @reportHome.
+  ///
+  /// In ko, this message translates to:
+  /// **'홈으로'**
+  String get reportHome;
+
+  /// No description provided for @reportSaveToHistory.
+  ///
+  /// In ko, this message translates to:
+  /// **'상세 이력에 기록'**
+  String get reportSaveToHistory;
+
+  /// No description provided for @reportSavedSnack.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단이 이력에 기록되었어요'**
+  String get reportSavedSnack;
+
+  /// No description provided for @reportShareA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유'**
+  String get reportShareA11y;
+
+  /// No description provided for @gaugeCaptionSafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'양호 수준'**
+  String get gaugeCaptionSafe;
+
+  /// No description provided for @gaugeCaptionWatch.
+  ///
+  /// In ko, this message translates to:
+  /// **'주의 수준'**
+  String get gaugeCaptionWatch;
+
+  /// No description provided for @gaugeCaptionDanger.
+  ///
+  /// In ko, this message translates to:
+  /// **'심각 수준'**
+  String get gaugeCaptionDanger;
+
+  /// No description provided for @gaugeCaptionUnknown.
+  ///
+  /// In ko, this message translates to:
+  /// **'측정 불가'**
+  String get gaugeCaptionUnknown;
+
+  /// No description provided for @recSafe1.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 응애 위험은 낮아요. 정기 점검을 유지하세요'**
+  String get recSafe1;
+
+  /// No description provided for @recSafe2.
+  ///
+  /// In ko, this message translates to:
+  /// **'2~4주 간격으로 재진단을 권장해요'**
+  String get recSafe2;
+
+  /// No description provided for @recWatch1.
+  ///
+  /// In ko, this message translates to:
+  /// **'1~2주 내 재촬영으로 추세를 확인하세요'**
+  String get recWatch1;
+
+  /// No description provided for @recWatch2.
+  ///
+  /// In ko, this message translates to:
+  /// **'천연 응애 예방제(개미산 등) 사용을 검토하세요'**
+  String get recWatch2;
+
+  /// No description provided for @recWatch3.
+  ///
+  /// In ko, this message translates to:
+  /// **'인접 벌통도 함께 관찰하세요'**
+  String get recWatch3;
+
+  /// No description provided for @recDanger1.
+  ///
+  /// In ko, this message translates to:
+  /// **'해당 벌통을 즉시 외부와 분리 격리하세요'**
+  String get recDanger1;
+
+  /// No description provided for @recDanger2.
+  ///
+  /// In ko, this message translates to:
+  /// **'친환경 응애 약제 처방이 긴급히 요구됩니다'**
+  String get recDanger2;
+
+  /// No description provided for @recDanger3.
+  ///
+  /// In ko, this message translates to:
+  /// **'반경 5미터 내 모든 벌통을 점검하세요'**
+  String get recDanger3;
+
+  /// No description provided for @recDanger4.
+  ///
+  /// In ko, this message translates to:
+  /// **'7일 후 추적 진단을 예약하세요'**
+  String get recDanger4;
+
+  /// No description provided for @pickHiveTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'촬영할 벌통 선택'**
+  String get pickHiveTitle;
+
+  /// No description provided for @pickHiveEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'먼저 벌통을 등록해 주세요'**
+  String get pickHiveEmpty;
+
+  /// No description provided for @am.
+  ///
+  /// In ko, this message translates to:
+  /// **'오전'**
+  String get am;
+
+  /// No description provided for @pm.
+  ///
+  /// In ko, this message translates to:
+  /// **'오후'**
+  String get pm;
+
+  /// No description provided for @errImageUnsupported.
+  ///
+  /// In ko, this message translates to:
+  /// **'지원하지 않는 이미지 형식이에요. JPG·PNG·WEBP만 가능해요'**
+  String get errImageUnsupported;
+
+  /// No description provided for @errImageTooLarge.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지가 너무 커요. 10MB 이하로 다시 시도해 주세요'**
+  String get errImageTooLarge;
+
+  /// No description provided for @errImageInvalid.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지를 읽지 못했어요. 다른 사진으로 다시 시도해 주세요'**
+  String get errImageInvalid;
+
+  /// No description provided for @errUploadIncomplete.
+  ///
+  /// In ko, this message translates to:
+  /// **'업로드가 완료되지 않았어요. 다시 시도해 주세요'**
+  String get errUploadIncomplete;
 }
 
 class _AppLocalizationsDelegate

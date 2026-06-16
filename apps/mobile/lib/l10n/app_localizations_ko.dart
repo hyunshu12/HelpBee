@@ -448,4 +448,146 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get tierUnknown => '진단 필요';
+
+  @override
+  String get captureGuide => '가이드 안에 벌통을 맞추고 흔들리지 않게\n찍어주세요';
+
+  @override
+  String get captureNoCamera => '시뮬레이터에는 카메라가 없어요.\n갤러리에서 사진을 선택해 주세요';
+
+  @override
+  String get captureCameraRetry => '카메라를 열 수 없어요. 화면을 탭해 다시 시도하거나 갤러리를 사용해 주세요';
+
+  @override
+  String get captureGallery => '갤러리';
+
+  @override
+  String get captureFlash => '플래시';
+
+  @override
+  String get captureFlashOff => '플래시 꺼짐';
+
+  @override
+  String get captureFlashAuto => '플래시 자동';
+
+  @override
+  String get captureFlashOn => '플래시 켜짐';
+
+  @override
+  String get captureShutterA11y => '촬영';
+
+  @override
+  String get captureCloseA11y => '닫기';
+
+  @override
+  String get reviewTitle => '벌통 프레임이 선명한가요?';
+
+  @override
+  String get reviewBody => '정확한 분석을 위해 벌집과 벌이 선명하게\n보이도록 찍어주세요';
+
+  @override
+  String get reviewAnalyzeCta => '이 사진으로 분석하기';
+
+  @override
+  String get reviewRetake => '다시 찍기';
+
+  @override
+  String get analyzingTitle => '벌통을 분석하고 있어요';
+
+  @override
+  String get analyzingBody => 'AI 모델이 소비판 내부의 진드기를\n정밀 카운팅하고 있습니다.\n약 3초 소요됩니다';
+
+  @override
+  String get analyzingFailedTitle => '분석을 완료하지 못했어요';
+
+  @override
+  String get reportTitle => '진단 결과 레포트';
+
+  @override
+  String get reportRiskStageTitle => '응애 감염 위험 단계';
+
+  @override
+  String get reportAnalyzedPhoto => '분석된 사진';
+
+  @override
+  String get reportRecommendTitle => '권장 조치';
+
+  @override
+  String get reportRecommendDisclaimer =>
+      '※ AI 처방이 아닌 일반 안내예요. 정확한 처방은 전문가와 상담하세요';
+
+  @override
+  String get reportHome => '홈으로';
+
+  @override
+  String get reportSaveToHistory => '상세 이력에 기록';
+
+  @override
+  String get reportSavedSnack => '진단이 이력에 기록되었어요';
+
+  @override
+  String get reportShareA11y => '공유';
+
+  @override
+  String get gaugeCaptionSafe => '양호 수준';
+
+  @override
+  String get gaugeCaptionWatch => '주의 수준';
+
+  @override
+  String get gaugeCaptionDanger => '심각 수준';
+
+  @override
+  String get gaugeCaptionUnknown => '측정 불가';
+
+  @override
+  String get recSafe1 => '현재 응애 위험은 낮아요. 정기 점검을 유지하세요';
+
+  @override
+  String get recSafe2 => '2~4주 간격으로 재진단을 권장해요';
+
+  @override
+  String get recWatch1 => '1~2주 내 재촬영으로 추세를 확인하세요';
+
+  @override
+  String get recWatch2 => '천연 응애 예방제(개미산 등) 사용을 검토하세요';
+
+  @override
+  String get recWatch3 => '인접 벌통도 함께 관찰하세요';
+
+  @override
+  String get recDanger1 => '해당 벌통을 즉시 외부와 분리 격리하세요';
+
+  @override
+  String get recDanger2 => '친환경 응애 약제 처방이 긴급히 요구됩니다';
+
+  @override
+  String get recDanger3 => '반경 5미터 내 모든 벌통을 점검하세요';
+
+  @override
+  String get recDanger4 => '7일 후 추적 진단을 예약하세요';
+
+  @override
+  String get pickHiveTitle => '촬영할 벌통 선택';
+
+  @override
+  String get pickHiveEmpty => '먼저 벌통을 등록해 주세요';
+
+  @override
+  String get am => '오전';
+
+  @override
+  String get pm => '오후';
+
+  @override
+  String get errImageUnsupported => '지원하지 않는 이미지 형식이에요. JPG·PNG·WEBP만 가능해요';
+
+  @override
+  String get errImageTooLarge => '이미지가 너무 커요. 10MB 이하로 다시 시도해 주세요';
+
+  @override
+  String get errImageInvalid => '이미지를 읽지 못했어요. 다른 사진으로 다시 시도해 주세요';
+
+  @override
+  String get errUploadIncomplete => '업로드가 완료되지 않았어요. 다시 시도해 주세요';
 }

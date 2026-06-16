@@ -21,4 +21,17 @@ class RoutePaths {
 
   /// Builds a concrete hive-detail path (e.g. `/hives/abc-123`).
   static String hiveDetailTo(String id) => '/hives/$id';
+
+  // ── Diagnosis flow (full-screen, pushed over the shell; args via extra) ──
+  /// Camera capture (CaptureArgs).
+  static const String capture = '/capture';
+
+  /// Photo review before analysis (PhotoArgs).
+  static const String review = '/photo-review';
+
+  /// Upload + analyze in progress (PhotoArgs).
+  static const String analyzing = '/analyzing';
+
+  /// Diagnosis report (ReportArgs).
+  static const String report = '/report';
 }

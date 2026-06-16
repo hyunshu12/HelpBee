@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../hives/presentation/create_hive_sheet.dart';
 import '../../hives/presentation/hives_list_view.dart';
 import '../../subscriptions/presentation/quota_banner.dart';
+import 'capture_launcher.dart';
 
 /// Signed-in home (Figma "양봉장 현황"): app bar with add-hive (+), free-tier
 /// quota banner, the hive summary list, and the 진단하기 (capture) FAB.
@@ -34,9 +35,7 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(SnackBar(content: Text(l10n.comingSoon))),
+        onPressed: () => launchCapture(context, ref),
         backgroundColor: AppColors.honeyPrimary,
         foregroundColor: AppColors.textPrimary,
         icon: const Icon(Icons.camera_alt),

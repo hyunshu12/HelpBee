@@ -60,6 +60,10 @@ String errorCodeMessage(AppLocalizations l10n, ErrorCode code) {
     case ErrorCode.notFound:
     case ErrorCode.quotaExceeded:
     case ErrorCode.aiUnavailable:
+    case ErrorCode.imageUnsupported:
+    case ErrorCode.imageTooLarge:
+    case ErrorCode.imageInvalid:
+    case ErrorCode.imageNotFoundInStorage:
     case ErrorCode.unknown:
       return l10n.errUnknown;
   }

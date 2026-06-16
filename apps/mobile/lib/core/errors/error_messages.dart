@@ -50,6 +50,14 @@ String errorCodeMessage(AppLocalizations l10n, ErrorCode code) {
       return l10n.errValidation;
     case ErrorCode.aiUnavailable:
       return l10n.errAiUnavailable;
+    case ErrorCode.imageUnsupported:
+      return l10n.errImageUnsupported;
+    case ErrorCode.imageTooLarge:
+      return l10n.errImageTooLarge;
+    case ErrorCode.imageInvalid:
+      return l10n.errImageInvalid;
+    case ErrorCode.imageNotFoundInStorage:
+      return l10n.errUploadIncomplete;
     case ErrorCode.serverError:
       return l10n.errServer;
     case ErrorCode.network:

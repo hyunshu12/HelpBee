@@ -22,6 +22,11 @@ enum ErrorCode {
   notFound,
   quotaExceeded,
   aiUnavailable,
+  // --- image upload (presign → S3 PUT → confirm) ---
+  imageUnsupported,
+  imageTooLarge,
+  imageInvalid,
+  imageNotFoundInStorage,
   serverError,
   // --- transport / client-side ---
   network,
@@ -61,6 +66,14 @@ ErrorCode errorCodeFromWire(String? wire) {
       return ErrorCode.quotaExceeded;
     case 'AI_UNAVAILABLE':
       return ErrorCode.aiUnavailable;
+    case 'UNSUPPORTED_MEDIA':
+      return ErrorCode.imageUnsupported;
+    case 'IMAGE_TOO_LARGE':
+      return ErrorCode.imageTooLarge;
+    case 'IMAGE_INVALID':
+      return ErrorCode.imageInvalid;
+    case 'IMAGE_NOT_FOUND_IN_STORAGE':
+      return ErrorCode.imageNotFoundInStorage;
     case 'INTERNAL':
     case 'SERVER_ERROR':
       return ErrorCode.serverError;

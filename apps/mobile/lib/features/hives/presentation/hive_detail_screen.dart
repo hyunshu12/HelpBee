@@ -6,6 +6,7 @@ import 'package:helpbee/l10n/app_localizations.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/risk_tier.dart';
+import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -14,6 +15,7 @@ import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/risk_badge.dart';
 import '../../analyses/data/analyses_api.dart';
 import '../../analyses/data/analysis_dto.dart';
+import '../../analyses/presentation/analysis_flow_args.dart';
 import '../data/hive_dto.dart';
 import 'hive_detail_controller.dart';
 import 'hives_list_controller.dart';
@@ -106,7 +108,13 @@ class HiveDetailScreen extends ConsumerWidget {
             actionLabel: l10n.commonRetry,
             onAction: () => ref.invalidate(hiveDetailProvider(hiveId)),
           ),
-          data: (hive) => _Body(hive: hive, onRetake: () => _comingSoon(context)),
+          data: (hive) => _Body(
+            hive: hive,
+            onRetake: () => context.push(
+              RoutePaths.capture,
+              extra: CaptureArgs(hiveId: hive.id, hiveName: hive.name),
+            ),
+          ),
         ),
       ),
     );
