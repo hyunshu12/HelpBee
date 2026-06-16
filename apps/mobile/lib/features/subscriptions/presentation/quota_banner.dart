@@ -35,7 +35,7 @@ class QuotaBanner extends ConsumerWidget {
               l10n.quotaBanner(n),
               style: const TextStyle(
                 color: AppColors.textPrimary,
-                fontSize: 16,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -45,17 +45,25 @@ class QuotaBanner extends ConsumerWidget {
             borderRadius: const BorderRadius.all(Radius.circular(8)),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              onTap: () => ScaffoldMessenger.of(context)
-                ..clearSnackBars()
-                ..showSnackBar(SnackBar(content: Text(l10n.comingSoon))),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                child: Text(
-                  'UPGRADE',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+              onTap: () {
+                ScaffoldMessenger.of(context)
+                  ..clearSnackBars()
+                  ..showSnackBar(SnackBar(content: Text(l10n.comingSoon)));
+              },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Center(
+                  widthFactor: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      l10n.upgradeCta,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
               ),

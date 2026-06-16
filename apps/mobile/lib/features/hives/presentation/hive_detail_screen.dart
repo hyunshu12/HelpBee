@@ -154,23 +154,12 @@ class _Body extends ConsumerWidget {
           _MemoCard(note: hive.note!),
         ],
         AppSpacing.gapXl,
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              l10n.historyRecentTitle,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            if (analyses.length > 1)
-              TextButton(
-                onPressed: () => context.go('/history'),
-                child: Text(l10n.seeMore,
-                    style: const TextStyle(color: AppColors.amberDeep)),
+        Text(
+          l10n.historyRecentTitle,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
               ),
-          ],
         ),
         AppSpacing.gapSm,
         if (analyses.isEmpty)
@@ -268,7 +257,7 @@ class _LocationCard extends StatelessWidget {
             height: 44,
             decoration: BoxDecoration(
               color: AppColors.honeyLight.withValues(alpha: 0.4),
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              borderRadius: AppRadius.inputRadius,
             ),
             child: const Icon(Icons.location_on, color: AppColors.amberDeep),
           ),
@@ -498,8 +487,9 @@ String _tierShort(AppLocalizations l10n, RiskTier tier) => switch (tier) {
 
 String _relative(AppLocalizations l10n, DateTime d) {
   final now = DateTime.now();
+  final l = d.toLocal(); // backend timestamps are UTC; match _fmtDate's local day
   final days = DateTime(now.year, now.month, now.day)
-      .difference(DateTime(d.year, d.month, d.day))
+      .difference(DateTime(l.year, l.month, l.day))
       .inDays;
   if (days <= 0) return l10n.today;
   if (days == 1) return l10n.yesterday;

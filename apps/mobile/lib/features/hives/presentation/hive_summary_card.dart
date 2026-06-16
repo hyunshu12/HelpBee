@@ -34,6 +34,14 @@ class HiveSummaryCard extends ConsumerWidget {
     final tierColor = riskTierColor(tier);
     final int? score = analysis?.varroaInfectionRisk;
 
+    // Distinguish "no analysis yet" from "still loading" / "failed to load" so
+    // a transient/errored fetch doesn't masquerade as a never-diagnosed hive.
+    final String statusText = analysis != null
+        ? _fmtDate(analysis.analyzedAt ?? analysis.createdAt)
+        : latest.isLoading
+            ? '…'
+            : (latest.hasError ? l10n.cardLoadFailed : l10n.noAnalysisYet);
+
     return Material(
       color: AppColors.surface,
       borderRadius: AppRadius.cardRadius,
@@ -103,11 +111,7 @@ class HiveSummaryCard extends ConsumerWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          analysis?.analyzedAt != null
-                              ? _fmtDate(analysis!.analyzedAt!)
-                              : (score != null
-                                  ? _fmtDate(analysis!.createdAt)
-                                  : l10n.noAnalysisYet),
+                          statusText,
                           style: theme.textTheme.bodyLarge?.copyWith(
                             color: AppColors.textPrimary,
                           ),

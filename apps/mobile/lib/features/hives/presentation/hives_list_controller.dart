@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../analyses/data/analyses_api.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/auth_flow_state.dart';
 import '../data/hive_dto.dart';
@@ -35,6 +36,9 @@ class HivesListController extends AsyncNotifier<List<Hive>> {
   /// [AsyncValue.guard] does not emit an intermediate loading state, so the
   /// in-place RefreshIndicator spinner is used instead of a full-screen one.
   Future<void> refresh() async {
+    // Home cards show each hive's latest analysis (tier/score) from a separate
+    // family provider — refresh those too so a new diagnosis is reflected.
+    ref.invalidate(latestAnalysisProvider);
     state = await AsyncValue.guard(() => _repo.listHives());
   }
 

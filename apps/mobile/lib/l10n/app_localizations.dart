@@ -682,6 +682,18 @@ abstract class AppLocalizations {
   /// **'아직 진단 없음'**
   String get noAnalysisYet;
 
+  /// No description provided for @cardLoadFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'불러오지 못함'**
+  String get cardLoadFailed;
+
+  /// No description provided for @upgradeCta.
+  ///
+  /// In ko, this message translates to:
+  /// **'UPGRADE'**
+  String get upgradeCta;
+
   /// No description provided for @badgeSafe.
   ///
   /// In ko, this message translates to:
@@ -709,7 +721,7 @@ abstract class AppLocalizations {
   /// Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).
   ///
   /// In ko, this message translates to:
-  /// **'이번 달 무료 진단 {count}회 남음'**
+  /// **'이번 달 무료 진단 {count}회'**
   String quotaBanner(int count);
 
   /// No description provided for @hiveAnalysesSectionTitle.
@@ -883,13 +895,13 @@ abstract class AppLocalizations {
   /// No description provided for @quotaRemaining.
   ///
   /// In ko, this message translates to:
-  /// **'이번 달 남은 무료 진단'**
+  /// **'이번 달 무료 진단'**
   String get quotaRemaining;
 
   /// Remaining free analyses this month.
   ///
   /// In ko, this message translates to:
-  /// **'{count}회 남음'**
+  /// **'{count}회'**
   String quotaCount(int count);
 
   /// No description provided for @quotaUnlimited.

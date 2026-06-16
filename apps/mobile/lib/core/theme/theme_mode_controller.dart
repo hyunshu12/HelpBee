@@ -10,21 +10,28 @@ import '../storage/app_prefs.dart';
 class ThemeModeController extends Notifier<ThemeMode> {
   AppPrefs get _prefs => ref.read(appPrefsProvider);
 
+  /// Set once the user explicitly picks a mode, so an in-flight async load of
+  /// the persisted value can't clobber a fresh selection (flip-back race).
+  bool _userSet = false;
+
   @override
   ThemeMode build() {
+    _userSet = false;
     Future.microtask(_load);
     return ThemeMode.system;
   }
 
   Future<void> _load() async {
     try {
-      state = _parse(await _prefs.getThemeMode());
+      final loaded = _parse(await _prefs.getThemeMode());
+      if (!_userSet) state = loaded;
     } catch (_) {
       // Best-effort: keep system default if prefs read fails.
     }
   }
 
   Future<void> setMode(ThemeMode mode) async {
+    _userSet = true;
     state = mode;
     try {
       await _prefs.setThemeMode(_serialize(mode));

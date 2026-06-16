@@ -126,11 +126,13 @@
   "lastMeasuredAt": "최근 측정일",
   "scoreSuffix": "점",
   "noAnalysisYet": "아직 진단 없음",
+  "cardLoadFailed": "불러오지 못함",
+  "upgradeCta": "UPGRADE",
   "badgeSafe": "안전 단계",
   "badgeWatch": "주의 단계",
   "badgeDanger": "위험 단계",
   "badgeUnknown": "진단 필요",
-  "quotaBanner": "이번 달 무료 진단 {count}회 남음",
+  "quotaBanner": "이번 달 무료 진단 {count}회",
   "@quotaBanner": {
     "description": "Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).",
     "placeholders": {
@@ -165,8 +167,8 @@
   "planFree": "무료",
   "planBasic": "베이직",
   "planPro": "프로",
-  "quotaRemaining": "이번 달 남은 무료 진단",
-  "quotaCount": "{count}회 남음",
+  "quotaRemaining": "이번 달 무료 진단",
+  "quotaCount": "{count}회",
   "@quotaCount": {
     "description": "Remaining free analyses this month.",
     "placeholders": {

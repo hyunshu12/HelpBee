@@ -47,9 +47,8 @@ class Analysis {
   /// Derived tier: prefer overallHealth, fall back to risk thresholds
   /// (<30 safe / <70 watch / else danger), unknown when not a usable success.
   RiskTier get tier {
-    if (status != 'success' || varroaInfectionRisk == null) {
-      return RiskTier.unknown;
-    }
+    if (status != 'success') return RiskTier.unknown;
+    // overallHealth is the primary signal — map it regardless of risk.
     switch (overallHealth) {
       case 'healthy':
         return RiskTier.safe;
@@ -58,7 +57,9 @@ class Analysis {
       case 'critical':
         return RiskTier.danger;
     }
-    final r = varroaInfectionRisk!;
+    // Fall back to risk bands only when overallHealth is absent.
+    final r = varroaInfectionRisk;
+    if (r == null) return RiskTier.unknown;
     return r < 30 ? RiskTier.safe : (r < 70 ? RiskTier.watch : RiskTier.danger);
   }
 

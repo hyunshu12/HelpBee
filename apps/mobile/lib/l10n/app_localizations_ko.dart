@@ -311,6 +311,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noAnalysisYet => '아직 진단 없음';
 
   @override
+  String get cardLoadFailed => '불러오지 못함';
+
+  @override
+  String get upgradeCta => 'UPGRADE';
+
+  @override
   String get badgeSafe => '안전 단계';
 
   @override
@@ -324,7 +330,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String quotaBanner(int count) {
-    return '이번 달 무료 진단 $count회 남음';
+    return '이번 달 무료 진단 $count회';
   }
 
   @override
@@ -412,11 +418,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get planPro => '프로';
 
   @override
-  String get quotaRemaining => '이번 달 남은 무료 진단';
+  String get quotaRemaining => '이번 달 무료 진단';
 
   @override
   String quotaCount(int count) {
-    return '$count회 남음';
+    return '$count회';
   }
 
   @override
