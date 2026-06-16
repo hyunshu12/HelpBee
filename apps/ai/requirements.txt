@@ -8,3 +8,10 @@ pillow-heif==1.3.0
 pyyaml==6.0.3
 requests==2.31.0
 httpx==0.25.0
+
+# YOLO ONNX 추론 (CPU) — app/services/yolo_engine.py
+# numpy는 모듈 top import(부팅 체인)라 필수. onnxruntime/boto3는 lazy지만 추론 1회에 필수.
+# numpy<2.0 = requirements-gpu.txt(torch/ultralytics ABI)와 동일 정책 단일 소스.
+numpy>=1.24,<2.0
+onnxruntime==1.23.2
+boto3==1.43.30
