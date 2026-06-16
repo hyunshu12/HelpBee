@@ -105,7 +105,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get goLogin => '로그인';
 
   @override
-  String get homeTitle => '내 벌통';
+  String get homeTitle => '양봉장 현황';
 
   @override
   String get homePlaceholderBody => '로그인 완료! 홈 화면은 다음 단계에서 만들어집니다.';
@@ -254,6 +254,32 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureCta => '진단하기';
+
+  @override
+  String get lastMeasuredAt => '최근 측정일';
+
+  @override
+  String get scoreSuffix => '점';
+
+  @override
+  String get noAnalysisYet => '아직 진단 없음';
+
+  @override
+  String get badgeSafe => '안전 단계';
+
+  @override
+  String get badgeWatch => '주의 단계';
+
+  @override
+  String get badgeDanger => '위험 단계';
+
+  @override
+  String get badgeUnknown => '진단 필요';
+
+  @override
+  String quotaBanner(int count) {
+    return '이번 달 무료 진단 $count회 남음';
+  }
 
   @override
   String get hiveAnalysesSectionTitle => '진단 이력';

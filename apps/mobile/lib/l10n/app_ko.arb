@@ -35,7 +35,7 @@
   "signupCta": "가입하기",
   "haveAccount": "이미 계정이 있으신가요?",
   "goLogin": "로그인",
-  "homeTitle": "내 벌통",
+  "homeTitle": "양봉장 현황",
   "homePlaceholderBody": "로그인 완료! 홈 화면은 다음 단계에서 만들어집니다.",
   "logout": "로그아웃",
   "valEmail": "올바른 이메일 형식이 아니에요",
@@ -96,6 +96,20 @@
   "hiveInstalledAtLabel": "설치일",
   "hiveCreatedAtLabel": "등록일",
   "captureCta": "진단하기",
+  "lastMeasuredAt": "최근 측정일",
+  "scoreSuffix": "점",
+  "noAnalysisYet": "아직 진단 없음",
+  "badgeSafe": "안전 단계",
+  "badgeWatch": "주의 단계",
+  "badgeDanger": "위험 단계",
+  "badgeUnknown": "진단 필요",
+  "quotaBanner": "이번 달 무료 진단 {count}회 남음",
+  "@quotaBanner": {
+    "description": "Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "hiveAnalysesSectionTitle": "진단 이력",
   "hiveAnalysesComingSoon": "아직 이 벌통의 진단 기록이 없어요",
   "errNotFound": "요청한 정보를 찾을 수 없어요",

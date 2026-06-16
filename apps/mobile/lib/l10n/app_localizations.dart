@@ -289,7 +289,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeTitle.
   ///
   /// In ko, this message translates to:
-  /// **'내 벌통'**
+  /// **'양봉장 현황'**
   String get homeTitle;
 
   /// No description provided for @homePlaceholderBody.
@@ -579,6 +579,54 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'진단하기'**
   String get captureCta;
+
+  /// No description provided for @lastMeasuredAt.
+  ///
+  /// In ko, this message translates to:
+  /// **'최근 측정일'**
+  String get lastMeasuredAt;
+
+  /// No description provided for @scoreSuffix.
+  ///
+  /// In ko, this message translates to:
+  /// **'점'**
+  String get scoreSuffix;
+
+  /// No description provided for @noAnalysisYet.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 진단 없음'**
+  String get noAnalysisYet;
+
+  /// No description provided for @badgeSafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'안전 단계'**
+  String get badgeSafe;
+
+  /// No description provided for @badgeWatch.
+  ///
+  /// In ko, this message translates to:
+  /// **'주의 단계'**
+  String get badgeWatch;
+
+  /// No description provided for @badgeDanger.
+  ///
+  /// In ko, this message translates to:
+  /// **'위험 단계'**
+  String get badgeDanger;
+
+  /// No description provided for @badgeUnknown.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 필요'**
+  String get badgeUnknown;
+
+  /// Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).
+  ///
+  /// In ko, this message translates to:
+  /// **'이번 달 무료 진단 {count}회 남음'**
+  String quotaBanner(int count);
 
   /// No description provided for @hiveAnalysesSectionTitle.
   ///

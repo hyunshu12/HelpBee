@@ -7,25 +7,14 @@ import '../../../core/errors/error_messages.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/empty_state.dart';
-import '../../../shared/widgets/hive_card.dart';
-import '../data/hive_dto.dart';
 import 'create_hive_sheet.dart';
+import 'hive_summary_card.dart';
 import 'hives_list_controller.dart';
 
-/// Renders the signed-in user's hive list — loading / error / empty / list —
-/// with pull-to-refresh and navigation to each hive's detail. Hosted by the
-/// HomeScreen shell so the hives feature owns its own list rendering.
+/// The signed-in user's hive list (loading / error / empty / list) with
+/// pull-to-refresh and navigation to each hive's detail. Hosted by HomeScreen.
 class HivesListView extends ConsumerWidget {
   const HivesListView({super.key});
-
-  String _subtitleFor(Hive hive) {
-    if (hive.address != null && hive.address!.isNotEmpty) return hive.address!;
-    if (hive.hasLocation) {
-      return '${hive.latitude!.toStringAsFixed(4)}, '
-          '${hive.longitude!.toStringAsFixed(4)}';
-    }
-    return '';
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,12 +52,11 @@ class HivesListView extends ConsumerWidget {
               96, // room for the extended FAB
             ),
             itemCount: items.length,
-            separatorBuilder: (_, _) => AppSpacing.gapSm,
+            separatorBuilder: (_, _) => AppSpacing.gapMd,
             itemBuilder: (context, index) {
               final hive = items[index];
-              return HiveCard(
-                name: hive.name,
-                subtitle: _subtitleFor(hive),
+              return HiveSummaryCard(
+                hive: hive,
                 onTap: () => context.push(RoutePaths.hiveDetailTo(hive.id)),
               );
             },
