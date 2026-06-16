@@ -590,4 +590,25 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get errUploadIncomplete => '업로드가 완료되지 않았어요. 다시 시도해 주세요';
+
+  @override
+  String get hiveNamePlaceholder => '벌통의 이름';
+
+  @override
+  String get hiveLocationHint => 'GPS 좌표 또는 주소';
+
+  @override
+  String get hiveInstalledHint => '벌통 설치 날짜';
+
+  @override
+  String get hiveNotePlaceholder => '벌통의 초기 상태, 여왕벌 정보 등을 입력하세요';
+
+  @override
+  String get useCurrentLocationA11y => '현재 위치 사용';
+
+  @override
+  String get pickDateA11y => '설치일 선택';
+
+  @override
+  String get installDateRequired => '설치일을 선택해 주세요';
 }

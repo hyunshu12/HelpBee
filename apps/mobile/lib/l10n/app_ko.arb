@@ -229,5 +229,12 @@
   "errImageUnsupported": "지원하지 않는 이미지 형식이에요. JPG·PNG·WEBP만 가능해요",
   "errImageTooLarge": "이미지가 너무 커요. 10MB 이하로 다시 시도해 주세요",
   "errImageInvalid": "이미지를 읽지 못했어요. 다른 사진으로 다시 시도해 주세요",
-  "errUploadIncomplete": "업로드가 완료되지 않았어요. 다시 시도해 주세요"
+  "errUploadIncomplete": "업로드가 완료되지 않았어요. 다시 시도해 주세요",
+  "hiveNamePlaceholder": "벌통의 이름",
+  "hiveLocationHint": "GPS 좌표 또는 주소",
+  "hiveInstalledHint": "벌통 설치 날짜",
+  "hiveNotePlaceholder": "벌통의 초기 상태, 여왕벌 정보 등을 입력하세요",
+  "useCurrentLocationA11y": "현재 위치 사용",
+  "pickDateA11y": "설치일 선택",
+  "installDateRequired": "설치일을 선택해 주세요"
 }
