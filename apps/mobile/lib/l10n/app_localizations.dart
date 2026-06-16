@@ -1275,6 +1275,18 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'설치일을 선택해 주세요'**
   String get installDateRequired;
+
+  /// No description provided for @hiveEditTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 수정'**
+  String get hiveEditTitle;
+
+  /// No description provided for @hiveUpdated.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 정보를 수정했어요'**
+  String get hiveUpdated;
 }
 
 class _AppLocalizationsDelegate

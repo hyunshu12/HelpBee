@@ -26,6 +26,10 @@ class RoutePaths {
   /// [Hive] (or null if cancelled).
   static const String hiveCreate = '/hives/new';
 
+  /// Full-screen hive edit form (pushed over the shell; the Hive to edit is
+  /// passed via `extra`). Pops the updated [Hive] (or null if cancelled).
+  static const String hiveEdit = '/hives/edit';
+
   // ── Diagnosis flow (full-screen, pushed over the shell; args via extra) ──
   /// Camera capture (CaptureArgs).
   static const String capture = '/capture';

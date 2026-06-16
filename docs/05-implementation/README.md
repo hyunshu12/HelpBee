@@ -73,6 +73,7 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-16 | 모바일 벌통(Hive) CRUD + 실데이터 홈 `/v1/hives` 연동 + 로컬 DB·백엔드 기동·라이브 검증 | #28 (머지) | [2026-06-16-mobile-hives-integration.md](./2026-06-16-mobile-hives-integration.md) |
 | 2026-06-16 | 모바일 앱 셸(하단 네비)+설정/이력/프로필 + 홈·벌통상세 Figma 정합 + 분석 백엔드 온라인화(AI서버·S3·E2E) + 적대적 리뷰 수정 | (예정) | [2026-06-16-mobile-app-shell-and-analysis-online.md](./2026-06-16-mobile-app-shell-and-analysis-online.md) |
 | 2026-06-17 | 모바일 진단 흐름 5화면(카메라→검토→분석중→레포트) + 이미지 업로드 파이프라인(presign/S3/confirm) + RiskGauge + 적대적 리뷰 수정 | #29 (머지) | [2026-06-17-mobile-analysis-flow.md](./2026-06-17-mobile-analysis-flow.md) |
-| 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | (예정) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
+| 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | #30 (머지) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
+| 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | (예정) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
 
 (새 기록 추가 시 위 표 갱신)

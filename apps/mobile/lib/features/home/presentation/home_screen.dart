@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../hives/presentation/create_hive_screen.dart';
+import '../../hives/presentation/hive_form_screen.dart';
 import '../../hives/presentation/hives_list_view.dart';
 import '../../subscriptions/presentation/quota_banner.dart';
 import 'capture_launcher.dart';

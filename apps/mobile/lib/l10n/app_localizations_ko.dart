@@ -611,4 +611,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get installDateRequired => '설치일을 선택해 주세요';
+
+  @override
+  String get hiveEditTitle => '벌통 수정';
+
+  @override
+  String get hiveUpdated => '벌통 정보를 수정했어요';
 }

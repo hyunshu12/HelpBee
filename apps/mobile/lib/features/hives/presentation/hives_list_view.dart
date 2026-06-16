@@ -7,7 +7,7 @@ import '../../../core/errors/error_messages.dart';
 import '../../../core/routing/route_paths.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/empty_state.dart';
-import 'create_hive_screen.dart';
+import 'hive_form_screen.dart';
 import 'hive_summary_card.dart';
 import 'hives_list_controller.dart';
 

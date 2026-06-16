@@ -14,9 +14,8 @@ import '../../../shared/widgets/primary_button.dart';
 import '../data/hive_dto.dart';
 import 'hives_list_controller.dart';
 
-/// Pushes the full-screen hive register form and shows a success snackbar on
-/// creation. Shared by the home (+) action and the empty-state CTA so the
-/// "created" feedback is consistent.
+/// Pushes the register form and shows a success snackbar on creation. Shared by
+/// the home (+) action and the empty-state CTA.
 Future<void> createHiveAndNotify(BuildContext context) async {
   final l10n = AppLocalizations.of(context);
   final created = await context.push<Hive>(RoutePaths.hiveCreate);
@@ -27,24 +26,44 @@ Future<void> createHiveAndNotify(BuildContext context) async {
   }
 }
 
-/// 벌통 등록 (Figma 15:2): full-screen form — name* / location (+GPS) /
-/// installed-date* / memo, with a decorative hero banner and the 등록하기 CTA.
-/// Pops the created [Hive] on success.
-class CreateHiveScreen extends ConsumerStatefulWidget {
-  const CreateHiveScreen({super.key});
-
-  @override
-  ConsumerState<CreateHiveScreen> createState() => _CreateHiveScreenState();
+/// Pushes the edit form prefilled with [hive]; returns the updated [Hive] (or
+/// null if cancelled). The caller refreshes/notifies.
+Future<Hive?> editHive(BuildContext context, Hive hive) {
+  return context.push<Hive>(RoutePaths.hiveEdit, extra: hive);
 }
 
-class _CreateHiveScreenState extends ConsumerState<CreateHiveScreen> {
+/// 벌통 등록/수정 공용 폼 (Figma 15:2): 히어로 배너 + 이름* / 위치(+GPS) /
+/// 설치일*(날짜) / 메모 + CTA. [initial] null = 등록, 있으면 수정. 성공 시 생성/
+/// 수정된 [Hive]를 pop.
+class HiveFormScreen extends ConsumerStatefulWidget {
+  const HiveFormScreen({super.key, this.initial});
+
+  final Hive? initial;
+
+  @override
+  ConsumerState<HiveFormScreen> createState() => _HiveFormScreenState();
+}
+
+class _HiveFormScreenState extends ConsumerState<HiveFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _noteController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _addressController;
+  late final TextEditingController _noteController;
   DateTime? _installedAt;
   bool _dateError = false;
   bool _submitting = false;
+
+  bool get _isEdit => widget.initial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final h = widget.initial;
+    _nameController = TextEditingController(text: h?.name ?? '');
+    _addressController = TextEditingController(text: h?.address ?? '');
+    _noteController = TextEditingController(text: h?.note ?? '');
+    _installedAt = h?.installedAt;
+  }
 
   @override
   void dispose() {
@@ -93,15 +112,26 @@ class _CreateHiveScreenState extends ConsumerState<CreateHiveScreen> {
     if (!nameOk || !dateOk || _submitting) return;
 
     setState(() => _submitting = true);
+    final notifier = ref.read(hivesListControllerProvider.notifier);
+    final name = _nameController.text.trim();
+    final address = _emptyToNull(_addressController.text);
+    final note = _emptyToNull(_noteController.text);
     try {
-      final created =
-          await ref.read(hivesListControllerProvider.notifier).createHive(
-                name: _nameController.text.trim(),
-                address: _emptyToNull(_addressController.text),
-                note: _emptyToNull(_noteController.text),
-                installedAt: _installedAt,
-              );
-      if (mounted) context.pop(created);
+      final Hive result = _isEdit
+          ? await notifier.updateHive(
+              widget.initial!.id,
+              name: name,
+              address: address,
+              note: note,
+              installedAt: _installedAt,
+            )
+          : await notifier.createHive(
+              name: name,
+              address: address,
+              note: note,
+              installedAt: _installedAt,
+            );
+      if (mounted) context.pop(result);
     } on AppException catch (e) {
       _showSnack(appErrorMessage(l10n, e));
       if (mounted) setState(() => _submitting = false);
@@ -119,7 +149,7 @@ class _CreateHiveScreenState extends ConsumerState<CreateHiveScreen> {
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         backgroundColor: AppColors.bgLight,
-        title: Text(l10n.addHive),
+        title: Text(_isEdit ? l10n.hiveEditTitle : l10n.addHive),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -187,7 +217,7 @@ class _CreateHiveScreenState extends ConsumerState<CreateHiveScreen> {
               padding: const EdgeInsets.fromLTRB(AppSpacing.screenH,
                   AppSpacing.xs, AppSpacing.screenH, AppSpacing.md),
               child: PrimaryButton(
-                label: l10n.createHive,
+                label: _isEdit ? l10n.commonSave : l10n.createHive,
                 loading: _submitting,
                 onPressed: _submitting ? null : _submit,
               ),

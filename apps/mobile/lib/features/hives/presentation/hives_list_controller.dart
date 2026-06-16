@@ -69,6 +69,36 @@ class HivesListController extends AsyncNotifier<List<Hive>> {
     return created;
   }
 
+  /// Partially updates a hive then replaces it in the loaded list (or re-fetches
+  /// if the list isn't loaded). Rethrows [AppException] on failure.
+  Future<Hive> updateHive(
+    String id, {
+    String? name,
+    String? note,
+    double? latitude,
+    double? longitude,
+    String? address,
+    DateTime? installedAt,
+  }) async {
+    final updated = await _repo.updateHive(
+      id,
+      name: name,
+      note: note,
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+      installedAt: installedAt,
+    );
+    if (state.hasValue) {
+      state = AsyncValue.data([
+        for (final h in state.requireValue) h.id == id ? updated : h,
+      ]);
+    } else {
+      state = await AsyncValue.guard(() => _repo.listHives());
+    }
+    return updated;
+  }
+
   /// Soft-deletes a hive. Removes it from the loaded list, or re-fetches if the
   /// list is not currently loaded. Rethrows on failure (the row stays on error).
   Future<void> deleteHive(String id) async {

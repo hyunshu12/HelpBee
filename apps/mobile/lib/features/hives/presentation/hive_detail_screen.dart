@@ -18,6 +18,7 @@ import '../../analyses/data/analysis_dto.dart';
 import '../../analyses/presentation/analysis_flow_args.dart';
 import '../data/hive_dto.dart';
 import 'hive_detail_controller.dart';
+import 'hive_form_screen.dart';
 import 'hives_list_controller.dart';
 
 /// 벌통 상세 (Figma): 위험 요약 카드 · 위치 · 설치날짜/상태 · 메모 ·
@@ -65,11 +66,15 @@ class HiveDetailScreen extends ConsumerWidget {
     }
   }
 
-  void _comingSoon(BuildContext context) {
+  Future<void> _editHive(BuildContext context, WidgetRef ref, Hive hive) async {
     final l10n = AppLocalizations.of(context);
-    ScaffoldMessenger.of(context)
-      ..clearSnackBars()
-      ..showSnackBar(SnackBar(content: Text(l10n.comingSoon)));
+    final updated = await editHive(context, hive);
+    if (updated != null && context.mounted) {
+      ref.invalidate(hiveDetailProvider(hive.id));
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(l10n.hiveUpdated)));
+    }
   }
 
   @override
@@ -87,8 +92,8 @@ class HiveDetailScreen extends ConsumerWidget {
               onSelected: (v) {
                 if (v == 'delete') {
                   _confirmDelete(context, ref);
-                } else {
-                  _comingSoon(context);
+                } else if (v == 'edit') {
+                  _editHive(context, ref, detail.requireValue);
                 }
               },
               itemBuilder: (_) => [
