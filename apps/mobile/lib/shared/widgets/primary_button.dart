@@ -7,7 +7,8 @@ import 'package:helpbee/core/theme/app_radius.dart';
 ///
 /// Spec: fill [AppColors.honeyPrimary], label [AppColors.textPrimary] bold ~17,
 /// height 56, radius 14. Disabled = 45% opacity. Loading = centered
-/// [CircularProgressIndicator] (strokeWidth 2, color textPrimary).
+/// [CircularProgressIndicator] (strokeWidth 2, color textPrimary). Optional
+/// leading [icon].
 ///
 /// [onPressed] null OR [loading] true disables interaction.
 class PrimaryButton extends StatelessWidget {
@@ -16,11 +17,13 @@ class PrimaryButton extends StatelessWidget {
     required this.label,
     this.onPressed,
     this.loading = false,
+    this.icon,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool loading;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -47,13 +50,22 @@ class PrimaryButton extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     )
-                  : Text(
-                      label,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  : Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icon != null) ...[
+                          Icon(icon, size: 20, color: AppColors.textPrimary),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
             ),
           ),

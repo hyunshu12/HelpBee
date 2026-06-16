@@ -424,6 +424,12 @@ abstract class AppLocalizations {
   /// **'삭제'**
   String get commonDelete;
 
+  /// No description provided for @commonSave.
+  ///
+  /// In ko, this message translates to:
+  /// **'저장'**
+  String get commonSave;
+
   /// No description provided for @back.
   ///
   /// In ko, this message translates to:
@@ -436,10 +442,28 @@ abstract class AppLocalizations {
   /// **'{name}님, 안녕하세요'**
   String homeGreeting(String name);
 
+  /// No description provided for @navHives.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통'**
+  String get navHives;
+
+  /// No description provided for @navHistory.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 이력'**
+  String get navHistory;
+
+  /// No description provided for @navSettings.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get navSettings;
+
   /// No description provided for @addHive.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장 등록'**
+  /// **'벌통 등록'**
   String get addHive;
 
   /// No description provided for @createHive.
@@ -451,31 +475,31 @@ abstract class AppLocalizations {
   /// No description provided for @hivesEmptyTitle.
   ///
   /// In ko, this message translates to:
-  /// **'등록된 양봉장이 없어요'**
+  /// **'등록된 벌통이 없어요'**
   String get hivesEmptyTitle;
 
   /// No description provided for @hivesEmptyBody.
   ///
   /// In ko, this message translates to:
-  /// **'아래 버튼으로 첫 양봉장을 등록해 보세요'**
+  /// **'아래 버튼으로 첫 벌통을 등록해 보세요'**
   String get hivesEmptyBody;
 
   /// No description provided for @hivesErrorTitle.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장을 불러오지 못했어요'**
+  /// **'벌통을 불러오지 못했어요'**
   String get hivesErrorTitle;
 
   /// No description provided for @hiveNameLabel.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장 이름'**
+  /// **'벌통 이름'**
   String get hiveNameLabel;
 
   /// No description provided for @hiveNameHint.
   ///
   /// In ko, this message translates to:
-  /// **'예: 양봉장 1호'**
+  /// **'예: 1번 벌통'**
   String get hiveNameHint;
 
   /// No description provided for @hiveAddressLabel.
@@ -505,32 +529,116 @@ abstract class AppLocalizations {
   /// No description provided for @hiveCreated.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장을 등록했어요'**
+  /// **'벌통을 등록했어요'**
   String get hiveCreated;
 
   /// No description provided for @hiveDeleted.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장을 삭제했어요'**
+  /// **'벌통을 삭제했어요'**
   String get hiveDeleted;
 
   /// No description provided for @deleteHive.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장 삭제'**
+  /// **'벌통 삭제'**
   String get deleteHive;
 
   /// No description provided for @deleteHiveConfirm.
   ///
   /// In ko, this message translates to:
-  /// **'이 양봉장을 삭제할까요? 삭제하면 목록에서 사라져요.'**
+  /// **'이 벌통을 삭제할까요? 삭제하면 목록에서 사라져요.'**
   String get deleteHiveConfirm;
 
   /// No description provided for @hiveDetailTitle.
   ///
   /// In ko, this message translates to:
-  /// **'양봉장 정보'**
+  /// **'벌통 정보'**
   String get hiveDetailTitle;
+
+  /// No description provided for @hiveRiskSubtitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 감염 심각 수준'**
+  String get hiveRiskSubtitle;
+
+  /// No description provided for @hiveLocationCard.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 위치'**
+  String get hiveLocationCard;
+
+  /// No description provided for @installDateLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'설치날짜'**
+  String get installDateLabel;
+
+  /// No description provided for @statusLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'상태'**
+  String get statusLabel;
+
+  /// No description provided for @memoTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'메모'**
+  String get memoTitle;
+
+  /// No description provided for @historyRecentTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'과거 진단 이력 (최신순)'**
+  String get historyRecentTitle;
+
+  /// No description provided for @seeMore.
+  ///
+  /// In ko, this message translates to:
+  /// **'더보기'**
+  String get seeMore;
+
+  /// No description provided for @aiAutoDiagnosis.
+  ///
+  /// In ko, this message translates to:
+  /// **'AI 자동 정밀 판독'**
+  String get aiAutoDiagnosis;
+
+  /// No description provided for @retakePhoto.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 다시 촬영하기'**
+  String get retakePhoto;
+
+  /// No description provided for @editHive.
+  ///
+  /// In ko, this message translates to:
+  /// **'수정'**
+  String get editHive;
+
+  /// No description provided for @today.
+  ///
+  /// In ko, this message translates to:
+  /// **'오늘'**
+  String get today;
+
+  /// No description provided for @yesterday.
+  ///
+  /// In ko, this message translates to:
+  /// **'어제'**
+  String get yesterday;
+
+  /// Relative day label for diagnosis history.
+  ///
+  /// In ko, this message translates to:
+  /// **'{count}일 전'**
+  String daysAgo(int count);
+
+  /// History row value, e.g. 84점 (위험).
+  ///
+  /// In ko, this message translates to:
+  /// **'{score}점 ({tier})'**
+  String scoreWithTier(int score, String tier);
 
   /// No description provided for @hiveLocationLabel.
   ///
@@ -550,6 +658,72 @@ abstract class AppLocalizations {
   /// **'등록일'**
   String get hiveCreatedAtLabel;
 
+  /// No description provided for @captureCta.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단하기'**
+  String get captureCta;
+
+  /// No description provided for @lastMeasuredAt.
+  ///
+  /// In ko, this message translates to:
+  /// **'최근 측정일'**
+  String get lastMeasuredAt;
+
+  /// No description provided for @scoreSuffix.
+  ///
+  /// In ko, this message translates to:
+  /// **'점'**
+  String get scoreSuffix;
+
+  /// No description provided for @noAnalysisYet.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 진단 없음'**
+  String get noAnalysisYet;
+
+  /// No description provided for @cardLoadFailed.
+  ///
+  /// In ko, this message translates to:
+  /// **'불러오지 못함'**
+  String get cardLoadFailed;
+
+  /// No description provided for @upgradeCta.
+  ///
+  /// In ko, this message translates to:
+  /// **'UPGRADE'**
+  String get upgradeCta;
+
+  /// No description provided for @badgeSafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'안전 단계'**
+  String get badgeSafe;
+
+  /// No description provided for @badgeWatch.
+  ///
+  /// In ko, this message translates to:
+  /// **'주의 단계'**
+  String get badgeWatch;
+
+  /// No description provided for @badgeDanger.
+  ///
+  /// In ko, this message translates to:
+  /// **'위험 단계'**
+  String get badgeDanger;
+
+  /// No description provided for @badgeUnknown.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 필요'**
+  String get badgeUnknown;
+
+  /// Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).
+  ///
+  /// In ko, this message translates to:
+  /// **'이번 달 무료 진단 {count}회'**
+  String quotaBanner(int count);
+
   /// No description provided for @hiveAnalysesSectionTitle.
   ///
   /// In ko, this message translates to:
@@ -559,7 +733,7 @@ abstract class AppLocalizations {
   /// No description provided for @hiveAnalysesComingSoon.
   ///
   /// In ko, this message translates to:
-  /// **'진단 기능은 다음 업데이트에서 제공돼요'**
+  /// **'아직 이 벌통의 진단 기록이 없어요'**
   String get hiveAnalysesComingSoon;
 
   /// No description provided for @errNotFound.
@@ -571,7 +745,7 @@ abstract class AppLocalizations {
   /// No description provided for @errQuota.
   ///
   /// In ko, this message translates to:
-  /// **'이번 달 무료 분석 횟수를 모두 사용했어요'**
+  /// **'이번 달 무료 진단 횟수를 모두 사용했어요'**
   String get errQuota;
 
   /// No description provided for @errAiUnavailable.
@@ -579,6 +753,486 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'AI 분석 서비스가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요'**
   String get errAiUnavailable;
+
+  /// No description provided for @historyTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 이력'**
+  String get historyTitle;
+
+  /// No description provided for @historyEmptyTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'아직 진단 기록이 없어요'**
+  String get historyEmptyTitle;
+
+  /// No description provided for @historyEmptyBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통을 촬영해 첫 진단을 시작해 보세요'**
+  String get historyEmptyBody;
+
+  /// No description provided for @historyErrorTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 이력을 불러오지 못했어요'**
+  String get historyErrorTitle;
+
+  /// No description provided for @settingsTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'설정'**
+  String get settingsTitle;
+
+  /// No description provided for @settingsAccountSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'계정'**
+  String get settingsAccountSection;
+
+  /// No description provided for @settingsAppSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'앱 설정'**
+  String get settingsAppSection;
+
+  /// No description provided for @settingsPlanSection.
+  ///
+  /// In ko, this message translates to:
+  /// **'구독'**
+  String get settingsPlanSection;
+
+  /// No description provided for @profileEditTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'프로필 편집'**
+  String get profileEditTitle;
+
+  /// No description provided for @fieldEmail.
+  ///
+  /// In ko, this message translates to:
+  /// **'이메일'**
+  String get fieldEmail;
+
+  /// No description provided for @fieldName.
+  ///
+  /// In ko, this message translates to:
+  /// **'이름'**
+  String get fieldName;
+
+  /// No description provided for @fieldRole.
+  ///
+  /// In ko, this message translates to:
+  /// **'역할'**
+  String get fieldRole;
+
+  /// No description provided for @fieldMemberSince.
+  ///
+  /// In ko, this message translates to:
+  /// **'가입일'**
+  String get fieldMemberSince;
+
+  /// No description provided for @roleUser.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉가'**
+  String get roleUser;
+
+  /// No description provided for @roleAdmin.
+  ///
+  /// In ko, this message translates to:
+  /// **'관리자'**
+  String get roleAdmin;
+
+  /// No description provided for @themeMode.
+  ///
+  /// In ko, this message translates to:
+  /// **'화면 테마'**
+  String get themeMode;
+
+  /// No description provided for @themeSystem.
+  ///
+  /// In ko, this message translates to:
+  /// **'시스템 설정'**
+  String get themeSystem;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In ko, this message translates to:
+  /// **'밝게'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In ko, this message translates to:
+  /// **'어둡게'**
+  String get themeDark;
+
+  /// No description provided for @planLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'요금제'**
+  String get planLabel;
+
+  /// No description provided for @planFree.
+  ///
+  /// In ko, this message translates to:
+  /// **'무료'**
+  String get planFree;
+
+  /// No description provided for @planBasic.
+  ///
+  /// In ko, this message translates to:
+  /// **'베이직'**
+  String get planBasic;
+
+  /// No description provided for @planPro.
+  ///
+  /// In ko, this message translates to:
+  /// **'프로'**
+  String get planPro;
+
+  /// No description provided for @quotaRemaining.
+  ///
+  /// In ko, this message translates to:
+  /// **'이번 달 무료 진단'**
+  String get quotaRemaining;
+
+  /// Remaining free analyses this month.
+  ///
+  /// In ko, this message translates to:
+  /// **'{count}회'**
+  String quotaCount(int count);
+
+  /// No description provided for @quotaUnlimited.
+  ///
+  /// In ko, this message translates to:
+  /// **'무제한'**
+  String get quotaUnlimited;
+
+  /// No description provided for @appVersion.
+  ///
+  /// In ko, this message translates to:
+  /// **'앱 버전'**
+  String get appVersion;
+
+  /// No description provided for @logoutConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'로그아웃할까요?'**
+  String get logoutConfirm;
+
+  /// No description provided for @profileSaveComingSoon.
+  ///
+  /// In ko, this message translates to:
+  /// **'프로필 수정은 곧 제공될 예정이에요'**
+  String get profileSaveComingSoon;
+
+  /// No description provided for @tierSafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'안전'**
+  String get tierSafe;
+
+  /// No description provided for @tierWatch.
+  ///
+  /// In ko, this message translates to:
+  /// **'주의'**
+  String get tierWatch;
+
+  /// No description provided for @tierDanger.
+  ///
+  /// In ko, this message translates to:
+  /// **'위험'**
+  String get tierDanger;
+
+  /// No description provided for @tierUnknown.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 필요'**
+  String get tierUnknown;
+
+  /// No description provided for @captureGuide.
+  ///
+  /// In ko, this message translates to:
+  /// **'가이드 안에 벌통을 맞추고 흔들리지 않게\n찍어주세요'**
+  String get captureGuide;
+
+  /// No description provided for @captureNoCamera.
+  ///
+  /// In ko, this message translates to:
+  /// **'시뮬레이터에는 카메라가 없어요.\n갤러리에서 사진을 선택해 주세요'**
+  String get captureNoCamera;
+
+  /// No description provided for @captureCameraRetry.
+  ///
+  /// In ko, this message translates to:
+  /// **'카메라를 열 수 없어요. 화면을 탭해 다시 시도하거나 갤러리를 사용해 주세요'**
+  String get captureCameraRetry;
+
+  /// No description provided for @captureGallery.
+  ///
+  /// In ko, this message translates to:
+  /// **'갤러리'**
+  String get captureGallery;
+
+  /// No description provided for @captureFlash.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시'**
+  String get captureFlash;
+
+  /// No description provided for @captureFlashOff.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 꺼짐'**
+  String get captureFlashOff;
+
+  /// No description provided for @captureFlashAuto.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 자동'**
+  String get captureFlashAuto;
+
+  /// No description provided for @captureFlashOn.
+  ///
+  /// In ko, this message translates to:
+  /// **'플래시 켜짐'**
+  String get captureFlashOn;
+
+  /// No description provided for @captureShutterA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'촬영'**
+  String get captureShutterA11y;
+
+  /// No description provided for @captureCloseA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'닫기'**
+  String get captureCloseA11y;
+
+  /// No description provided for @reviewTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 프레임이 선명한가요?'**
+  String get reviewTitle;
+
+  /// No description provided for @reviewBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'정확한 분석을 위해 벌집과 벌이 선명하게\n보이도록 찍어주세요'**
+  String get reviewBody;
+
+  /// No description provided for @reviewAnalyzeCta.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 사진으로 분석하기'**
+  String get reviewAnalyzeCta;
+
+  /// No description provided for @reviewRetake.
+  ///
+  /// In ko, this message translates to:
+  /// **'다시 찍기'**
+  String get reviewRetake;
+
+  /// No description provided for @analyzingTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통을 분석하고 있어요'**
+  String get analyzingTitle;
+
+  /// No description provided for @analyzingBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'AI 모델이 소비판 내부의 진드기를\n정밀 카운팅하고 있습니다.\n약 3초 소요됩니다'**
+  String get analyzingBody;
+
+  /// No description provided for @analyzingFailedTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'분석을 완료하지 못했어요'**
+  String get analyzingFailedTitle;
+
+  /// No description provided for @reportTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 결과 레포트'**
+  String get reportTitle;
+
+  /// No description provided for @reportRiskStageTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'응애 감염 위험 단계'**
+  String get reportRiskStageTitle;
+
+  /// No description provided for @reportAnalyzedPhoto.
+  ///
+  /// In ko, this message translates to:
+  /// **'분석된 사진'**
+  String get reportAnalyzedPhoto;
+
+  /// No description provided for @reportRecommendTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'권장 조치'**
+  String get reportRecommendTitle;
+
+  /// No description provided for @reportRecommendDisclaimer.
+  ///
+  /// In ko, this message translates to:
+  /// **'※ AI 처방이 아닌 일반 안내예요. 정확한 처방은 전문가와 상담하세요'**
+  String get reportRecommendDisclaimer;
+
+  /// No description provided for @reportHome.
+  ///
+  /// In ko, this message translates to:
+  /// **'홈으로'**
+  String get reportHome;
+
+  /// No description provided for @reportSaveToHistory.
+  ///
+  /// In ko, this message translates to:
+  /// **'상세 이력에 기록'**
+  String get reportSaveToHistory;
+
+  /// No description provided for @reportSavedSnack.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단이 이력에 기록되었어요'**
+  String get reportSavedSnack;
+
+  /// No description provided for @reportShareA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'공유'**
+  String get reportShareA11y;
+
+  /// No description provided for @gaugeCaptionSafe.
+  ///
+  /// In ko, this message translates to:
+  /// **'양호 수준'**
+  String get gaugeCaptionSafe;
+
+  /// No description provided for @gaugeCaptionWatch.
+  ///
+  /// In ko, this message translates to:
+  /// **'주의 수준'**
+  String get gaugeCaptionWatch;
+
+  /// No description provided for @gaugeCaptionDanger.
+  ///
+  /// In ko, this message translates to:
+  /// **'심각 수준'**
+  String get gaugeCaptionDanger;
+
+  /// No description provided for @gaugeCaptionUnknown.
+  ///
+  /// In ko, this message translates to:
+  /// **'측정 불가'**
+  String get gaugeCaptionUnknown;
+
+  /// No description provided for @recSafe1.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 응애 위험은 낮아요. 정기 점검을 유지하세요'**
+  String get recSafe1;
+
+  /// No description provided for @recSafe2.
+  ///
+  /// In ko, this message translates to:
+  /// **'2~4주 간격으로 재진단을 권장해요'**
+  String get recSafe2;
+
+  /// No description provided for @recWatch1.
+  ///
+  /// In ko, this message translates to:
+  /// **'1~2주 내 재촬영으로 추세를 확인하세요'**
+  String get recWatch1;
+
+  /// No description provided for @recWatch2.
+  ///
+  /// In ko, this message translates to:
+  /// **'천연 응애 예방제(개미산 등) 사용을 검토하세요'**
+  String get recWatch2;
+
+  /// No description provided for @recWatch3.
+  ///
+  /// In ko, this message translates to:
+  /// **'인접 벌통도 함께 관찰하세요'**
+  String get recWatch3;
+
+  /// No description provided for @recDanger1.
+  ///
+  /// In ko, this message translates to:
+  /// **'해당 벌통을 즉시 외부와 분리 격리하세요'**
+  String get recDanger1;
+
+  /// No description provided for @recDanger2.
+  ///
+  /// In ko, this message translates to:
+  /// **'친환경 응애 약제 처방이 긴급히 요구됩니다'**
+  String get recDanger2;
+
+  /// No description provided for @recDanger3.
+  ///
+  /// In ko, this message translates to:
+  /// **'반경 5미터 내 모든 벌통을 점검하세요'**
+  String get recDanger3;
+
+  /// No description provided for @recDanger4.
+  ///
+  /// In ko, this message translates to:
+  /// **'7일 후 추적 진단을 예약하세요'**
+  String get recDanger4;
+
+  /// No description provided for @pickHiveTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'촬영할 벌통 선택'**
+  String get pickHiveTitle;
+
+  /// No description provided for @pickHiveEmpty.
+  ///
+  /// In ko, this message translates to:
+  /// **'먼저 벌통을 등록해 주세요'**
+  String get pickHiveEmpty;
+
+  /// No description provided for @am.
+  ///
+  /// In ko, this message translates to:
+  /// **'오전'**
+  String get am;
+
+  /// No description provided for @pm.
+  ///
+  /// In ko, this message translates to:
+  /// **'오후'**
+  String get pm;
+
+  /// No description provided for @errImageUnsupported.
+  ///
+  /// In ko, this message translates to:
+  /// **'지원하지 않는 이미지 형식이에요. JPG·PNG·WEBP만 가능해요'**
+  String get errImageUnsupported;
+
+  /// No description provided for @errImageTooLarge.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지가 너무 커요. 10MB 이하로 다시 시도해 주세요'**
+  String get errImageTooLarge;
+
+  /// No description provided for @errImageInvalid.
+  ///
+  /// In ko, this message translates to:
+  /// **'이미지를 읽지 못했어요. 다른 사진으로 다시 시도해 주세요'**
+  String get errImageInvalid;
+
+  /// No description provided for @errUploadIncomplete.
+  ///
+  /// In ko, this message translates to:
+  /// **'업로드가 완료되지 않았어요. 다시 시도해 주세요'**
+  String get errUploadIncomplete;
 }
 
 class _AppLocalizationsDelegate

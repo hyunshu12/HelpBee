@@ -70,6 +70,8 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-08 | YOLO v0.1.0 varroa 검출기 베이스라인 전체 사이클 (스윕→학습→golden→sign-off GO, copy_paste no-op 발견) | (이 PR) | [2026-06-08-v010-yolo-baseline.md](./2026-06-08-v010-yolo-baseline.md) |
 | 2026-06-16 | Flutter 모바일 scaffold + 인증 플로우 (스플래시/온보딩/로그인/회원가입, 토큰 회전·single-flight refresh, Figma 토큰) | (예정) | [2026-06-16-mobile-scaffold-auth.md](./2026-06-16-mobile-scaffold-auth.md) |
 | 2026-06-16 | YOLO 추론 수정: ONNX decode(nms=False raw 대응) + 전처리 q95(응애 false negative/train-serve skew 해소) | #24, #25 (OPEN/미머지) | [2026-06-16-yolo-inference-decode-and-preprocess-fixes.md](./2026-06-16-yolo-inference-decode-and-preprocess-fixes.md) |
-| 2026-06-16 | 모바일 벌통(Hive) CRUD + 실데이터 홈 `/v1/hives` 연동 + 로컬 DB·백엔드 기동·라이브 검증 | (예정) | [2026-06-16-mobile-hives-integration.md](./2026-06-16-mobile-hives-integration.md) |
+| 2026-06-16 | 모바일 벌통(Hive) CRUD + 실데이터 홈 `/v1/hives` 연동 + 로컬 DB·백엔드 기동·라이브 검증 | #28 (머지) | [2026-06-16-mobile-hives-integration.md](./2026-06-16-mobile-hives-integration.md) |
+| 2026-06-16 | 모바일 앱 셸(하단 네비)+설정/이력/프로필 + 홈·벌통상세 Figma 정합 + 분석 백엔드 온라인화(AI서버·S3·E2E) + 적대적 리뷰 수정 | (예정) | [2026-06-16-mobile-app-shell-and-analysis-online.md](./2026-06-16-mobile-app-shell-and-analysis-online.md) |
+| 2026-06-17 | 모바일 진단 흐름 5화면(카메라→검토→분석중→레포트) + 이미지 업로드 파이프라인(presign/S3/confirm) + RiskGauge + 적대적 리뷰 수정 | (예정) | [2026-06-17-mobile-analysis-flow.md](./2026-06-17-mobile-analysis-flow.md) |
 
 (새 기록 추가 시 위 표 갱신)
