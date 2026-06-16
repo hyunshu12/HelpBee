@@ -32,16 +32,7 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: l10n.logout,
-            onPressed: () => ref.read(authControllerProvider.notifier).logout(),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(title)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => createHiveAndNotify(context),
         backgroundColor: AppColors.honeyPrimary,

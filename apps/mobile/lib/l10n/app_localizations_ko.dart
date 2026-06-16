@@ -105,7 +105,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get goLogin => '로그인';
 
   @override
-  String get homeTitle => '양봉장 현황';
+  String get homeTitle => '내 벌통';
 
   @override
   String get homePlaceholderBody => '로그인 완료! 홈 화면은 다음 단계에서 만들어집니다.';
@@ -176,6 +176,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get commonDelete => '삭제';
 
   @override
+  String get commonSave => '저장';
+
+  @override
   String get back => '뒤로';
 
   @override
@@ -184,25 +187,34 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get addHive => '양봉장 등록';
+  String get navHives => '벌통';
+
+  @override
+  String get navHistory => '진단 이력';
+
+  @override
+  String get navSettings => '설정';
+
+  @override
+  String get addHive => '벌통 등록';
 
   @override
   String get createHive => '등록하기';
 
   @override
-  String get hivesEmptyTitle => '등록된 양봉장이 없어요';
+  String get hivesEmptyTitle => '등록된 벌통이 없어요';
 
   @override
-  String get hivesEmptyBody => '아래 버튼으로 첫 양봉장을 등록해 보세요';
+  String get hivesEmptyBody => '아래 버튼으로 첫 벌통을 등록해 보세요';
 
   @override
-  String get hivesErrorTitle => '양봉장을 불러오지 못했어요';
+  String get hivesErrorTitle => '벌통을 불러오지 못했어요';
 
   @override
-  String get hiveNameLabel => '양봉장 이름';
+  String get hiveNameLabel => '벌통 이름';
 
   @override
-  String get hiveNameHint => '예: 양봉장 1호';
+  String get hiveNameHint => '예: 1번 벌통';
 
   @override
   String get hiveAddressLabel => '주소 (선택)';
@@ -217,19 +229,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get hiveNoteHint => '특이사항을 적어 두세요';
 
   @override
-  String get hiveCreated => '양봉장을 등록했어요';
+  String get hiveCreated => '벌통을 등록했어요';
 
   @override
-  String get hiveDeleted => '양봉장을 삭제했어요';
+  String get hiveDeleted => '벌통을 삭제했어요';
 
   @override
-  String get deleteHive => '양봉장 삭제';
+  String get deleteHive => '벌통 삭제';
 
   @override
-  String get deleteHiveConfirm => '이 양봉장을 삭제할까요? 삭제하면 목록에서 사라져요.';
+  String get deleteHiveConfirm => '이 벌통을 삭제할까요? 삭제하면 목록에서 사라져요.';
 
   @override
-  String get hiveDetailTitle => '양봉장 정보';
+  String get hiveDetailTitle => '벌통 정보';
 
   @override
   String get hiveLocationLabel => '위치(위도, 경도)';
@@ -241,17 +253,121 @@ class AppLocalizationsKo extends AppLocalizations {
   String get hiveCreatedAtLabel => '등록일';
 
   @override
+  String get captureCta => '진단하기';
+
+  @override
   String get hiveAnalysesSectionTitle => '진단 이력';
 
   @override
-  String get hiveAnalysesComingSoon => '진단 기능은 다음 업데이트에서 제공돼요';
+  String get hiveAnalysesComingSoon => '아직 이 벌통의 진단 기록이 없어요';
 
   @override
   String get errNotFound => '요청한 정보를 찾을 수 없어요';
 
   @override
-  String get errQuota => '이번 달 무료 분석 횟수를 모두 사용했어요';
+  String get errQuota => '이번 달 무료 진단 횟수를 모두 사용했어요';
 
   @override
   String get errAiUnavailable => 'AI 분석 서비스가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요';
+
+  @override
+  String get historyTitle => '진단 이력';
+
+  @override
+  String get historyEmptyTitle => '아직 진단 기록이 없어요';
+
+  @override
+  String get historyEmptyBody => '벌통을 촬영해 첫 진단을 시작해 보세요';
+
+  @override
+  String get historyErrorTitle => '진단 이력을 불러오지 못했어요';
+
+  @override
+  String get settingsTitle => '설정';
+
+  @override
+  String get settingsAccountSection => '계정';
+
+  @override
+  String get settingsAppSection => '앱 설정';
+
+  @override
+  String get settingsPlanSection => '구독';
+
+  @override
+  String get profileEditTitle => '프로필 편집';
+
+  @override
+  String get fieldEmail => '이메일';
+
+  @override
+  String get fieldName => '이름';
+
+  @override
+  String get fieldRole => '역할';
+
+  @override
+  String get fieldMemberSince => '가입일';
+
+  @override
+  String get roleUser => '양봉가';
+
+  @override
+  String get roleAdmin => '관리자';
+
+  @override
+  String get themeMode => '화면 테마';
+
+  @override
+  String get themeSystem => '시스템 설정';
+
+  @override
+  String get themeLight => '밝게';
+
+  @override
+  String get themeDark => '어둡게';
+
+  @override
+  String get planLabel => '요금제';
+
+  @override
+  String get planFree => '무료';
+
+  @override
+  String get planBasic => '베이직';
+
+  @override
+  String get planPro => '프로';
+
+  @override
+  String get quotaRemaining => '이번 달 남은 무료 진단';
+
+  @override
+  String quotaCount(int count) {
+    return '$count회 남음';
+  }
+
+  @override
+  String get quotaUnlimited => '무제한';
+
+  @override
+  String get appVersion => '앱 버전';
+
+  @override
+  String get logoutConfirm => '로그아웃할까요?';
+
+  @override
+  String get profileSaveComingSoon => '프로필 수정은 곧 제공될 예정이에요';
+
+  @override
+  String get tierSafe => '안전';
+
+  @override
+  String get tierWatch => '주의';
+
+  @override
+  String get tierDanger => '위험';
+
+  @override
+  String get tierUnknown => '진단 필요';
 }

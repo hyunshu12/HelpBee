@@ -11,6 +11,7 @@ class AppPrefs {
 
   static const String _kOnboardingSeen = 'hb_onboarding_seen';
   static const String _kKeepLoggedIn = 'hb_keep_logged_in';
+  static const String _kThemeMode = 'hb_theme_mode';
 
   final SharedPreferencesAsync _prefs;
 
@@ -29,6 +30,14 @@ class AppPrefs {
   /// Persists the "keep logged in" choice from the login screen.
   Future<void> setKeepLoggedIn(bool value) =>
       _prefs.setBool(_kKeepLoggedIn, value);
+
+  /// Theme preference: 'system' (default) | 'light' | 'dark'.
+  Future<String> getThemeMode() async =>
+      await _prefs.getString(_kThemeMode) ?? 'system';
+
+  /// Persists the theme preference from settings.
+  Future<void> setThemeMode(String value) =>
+      _prefs.setString(_kThemeMode, value);
 }
 
 /// App-wide singleton. Override in tests with a fake [AppPrefs].
