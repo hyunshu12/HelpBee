@@ -150,8 +150,8 @@ class AnalysisResponse(BaseModel):
 2. RGBA → RGB 평탄화
 3. HEIC → JPEG (`pillow-heif`)
 4. 긴 변 1024px 다운스케일 (`Image.LANCZOS`)
-5. JPEG quality=85 인코딩
-6. **10MB 가드** — 초과 시 q=80, 75 순차 다운, 그래도 초과면 400
+5. JPEG quality=95 인코딩 (q85는 응애 신호 약화 → YOLO false negative 유발하는 train/serve skew. `preprocess.py:QUALITY_CASCADE` 주석 참조)
+6. **10MB 가드** — 초과 시 q=90, 85 순차 다운, 그래도 초과면 400
 
 ### 7-5. 재시도·타임아웃
 - `tenacity` 지수 백오프 `wait_exponential(min=1, max=8)`, `stop_after_attempt(3)`
