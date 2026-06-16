@@ -1233,6 +1233,48 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'업로드가 완료되지 않았어요. 다시 시도해 주세요'**
   String get errUploadIncomplete;
+
+  /// No description provided for @hiveNamePlaceholder.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통의 이름'**
+  String get hiveNamePlaceholder;
+
+  /// No description provided for @hiveLocationHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'GPS 좌표 또는 주소'**
+  String get hiveLocationHint;
+
+  /// No description provided for @hiveInstalledHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통 설치 날짜'**
+  String get hiveInstalledHint;
+
+  /// No description provided for @hiveNotePlaceholder.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌통의 초기 상태, 여왕벌 정보 등을 입력하세요'**
+  String get hiveNotePlaceholder;
+
+  /// No description provided for @useCurrentLocationA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'현재 위치 사용'**
+  String get useCurrentLocationA11y;
+
+  /// No description provided for @pickDateA11y.
+  ///
+  /// In ko, this message translates to:
+  /// **'설치일 선택'**
+  String get pickDateA11y;
+
+  /// No description provided for @installDateRequired.
+  ///
+  /// In ko, this message translates to:
+  /// **'설치일을 선택해 주세요'**
+  String get installDateRequired;
 }
 
 class _AppLocalizationsDelegate

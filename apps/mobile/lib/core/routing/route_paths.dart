@@ -22,6 +22,10 @@ class RoutePaths {
   /// Builds a concrete hive-detail path (e.g. `/hives/abc-123`).
   static String hiveDetailTo(String id) => '/hives/$id';
 
+  /// Full-screen hive register form (pushed over the shell). Pops the created
+  /// [Hive] (or null if cancelled).
+  static const String hiveCreate = '/hives/new';
+
   // ── Diagnosis flow (full-screen, pushed over the shell; args via extra) ──
   /// Camera capture (CaptureArgs).
   static const String capture = '/capture';

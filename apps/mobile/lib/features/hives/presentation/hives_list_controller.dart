@@ -51,6 +51,7 @@ class HivesListController extends AsyncNotifier<List<Hive>> {
     double? latitude,
     double? longitude,
     String? address,
+    DateTime? installedAt,
   }) async {
     final created = await _repo.createHive(
       name: name,
@@ -58,6 +59,7 @@ class HivesListController extends AsyncNotifier<List<Hive>> {
       latitude: latitude,
       longitude: longitude,
       address: address,
+      installedAt: installedAt,
     );
     if (state.hasValue) {
       state = AsyncValue.data([created, ...state.requireValue]);

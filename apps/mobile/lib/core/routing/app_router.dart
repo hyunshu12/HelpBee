@@ -15,6 +15,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/onboarding_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
+import '../../features/hives/presentation/create_hive_screen.dart';
 import '../../features/hives/presentation/hive_detail_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/settings/presentation/profile_edit_screen.dart';
@@ -84,6 +85,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SignupScreen(),
       ),
       // Pushed over the shell (full screen, no bottom nav).
+      GoRoute(
+        path: RoutePaths.hiveCreate,
+        builder: (context, state) => const CreateHiveScreen(),
+      ),
       GoRoute(
         path: RoutePaths.hiveDetail,
         builder: (context, state) =>
