@@ -19,6 +19,9 @@ def get_yolo_engine() -> OnnxYoloEngine:  # pragma: no cover - 런타임 의존
     return OnnxYoloEngine(
         model_version=os.getenv("YOLO_MODEL_VERSION", "v0.1.0"),
         s3_bucket=os.getenv("AWS_S3_MODELS_BUCKET", "helpbee-models"),
+        # YOLO_CACHE_DIR overridable so the weight cache can live in a writable
+        # path on dev machines (the prod default /var/cache needs root on macOS).
+        cache_dir=os.getenv("YOLO_CACHE_DIR", "/var/cache/helpbee/yolo"),
     )
 
 
