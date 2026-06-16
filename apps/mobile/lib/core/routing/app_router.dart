@@ -8,7 +8,8 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/onboarding_screen.dart';
 import '../../features/auth/presentation/signup_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
-import '../../features/home/presentation/home_placeholder_screen.dart';
+import '../../features/hives/presentation/hive_detail_screen.dart';
+import '../../features/home/presentation/home_screen.dart';
 import 'route_paths.dart';
 
 /// App-wide router. Declarative tree + a redirect that is fully driven by the
@@ -76,7 +77,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: RoutePaths.home,
-        builder: (context, state) => const HomePlaceholderScreen(),
+        builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: RoutePaths.hiveDetail,
+        builder: (context, state) =>
+            HiveDetailScreen(hiveId: state.pathParameters['id']!),
       ),
     ],
   );
