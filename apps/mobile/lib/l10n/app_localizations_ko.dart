@@ -173,5 +173,85 @@ class AppLocalizationsKo extends AppLocalizations {
   String get commonConfirm => '확인';
 
   @override
+  String get commonDelete => '삭제';
+
+  @override
   String get back => '뒤로';
+
+  @override
+  String homeGreeting(String name) {
+    return '$name님, 안녕하세요';
+  }
+
+  @override
+  String get addHive => '양봉장 등록';
+
+  @override
+  String get createHive => '등록하기';
+
+  @override
+  String get hivesEmptyTitle => '등록된 양봉장이 없어요';
+
+  @override
+  String get hivesEmptyBody => '아래 버튼으로 첫 양봉장을 등록해 보세요';
+
+  @override
+  String get hivesErrorTitle => '양봉장을 불러오지 못했어요';
+
+  @override
+  String get hiveNameLabel => '양봉장 이름';
+
+  @override
+  String get hiveNameHint => '예: 양봉장 1호';
+
+  @override
+  String get hiveAddressLabel => '주소 (선택)';
+
+  @override
+  String get hiveAddressHint => '예: 경기도 양평군';
+
+  @override
+  String get hiveNoteLabel => '메모 (선택)';
+
+  @override
+  String get hiveNoteHint => '특이사항을 적어 두세요';
+
+  @override
+  String get hiveCreated => '양봉장을 등록했어요';
+
+  @override
+  String get hiveDeleted => '양봉장을 삭제했어요';
+
+  @override
+  String get deleteHive => '양봉장 삭제';
+
+  @override
+  String get deleteHiveConfirm => '이 양봉장을 삭제할까요? 삭제하면 목록에서 사라져요.';
+
+  @override
+  String get hiveDetailTitle => '양봉장 정보';
+
+  @override
+  String get hiveLocationLabel => '위치(위도, 경도)';
+
+  @override
+  String get hiveInstalledAtLabel => '설치일';
+
+  @override
+  String get hiveCreatedAtLabel => '등록일';
+
+  @override
+  String get hiveAnalysesSectionTitle => '진단 이력';
+
+  @override
+  String get hiveAnalysesComingSoon => '진단 기능은 다음 업데이트에서 제공돼요';
+
+  @override
+  String get errNotFound => '요청한 정보를 찾을 수 없어요';
+
+  @override
+  String get errQuota => '이번 달 무료 분석 횟수를 모두 사용했어요';
+
+  @override
+  String get errAiUnavailable => 'AI 분석 서비스가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요';
 }

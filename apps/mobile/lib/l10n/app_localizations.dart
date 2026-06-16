@@ -418,11 +418,167 @@ abstract class AppLocalizations {
   /// **'확인'**
   String get commonConfirm;
 
+  /// No description provided for @commonDelete.
+  ///
+  /// In ko, this message translates to:
+  /// **'삭제'**
+  String get commonDelete;
+
   /// No description provided for @back.
   ///
   /// In ko, this message translates to:
   /// **'뒤로'**
   String get back;
+
+  /// Home app bar greeting using the signed-in user's name.
+  ///
+  /// In ko, this message translates to:
+  /// **'{name}님, 안녕하세요'**
+  String homeGreeting(String name);
+
+  /// No description provided for @addHive.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장 등록'**
+  String get addHive;
+
+  /// No description provided for @createHive.
+  ///
+  /// In ko, this message translates to:
+  /// **'등록하기'**
+  String get createHive;
+
+  /// No description provided for @hivesEmptyTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'등록된 양봉장이 없어요'**
+  String get hivesEmptyTitle;
+
+  /// No description provided for @hivesEmptyBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'아래 버튼으로 첫 양봉장을 등록해 보세요'**
+  String get hivesEmptyBody;
+
+  /// No description provided for @hivesErrorTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장을 불러오지 못했어요'**
+  String get hivesErrorTitle;
+
+  /// No description provided for @hiveNameLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장 이름'**
+  String get hiveNameLabel;
+
+  /// No description provided for @hiveNameHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'예: 양봉장 1호'**
+  String get hiveNameHint;
+
+  /// No description provided for @hiveAddressLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'주소 (선택)'**
+  String get hiveAddressLabel;
+
+  /// No description provided for @hiveAddressHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'예: 경기도 양평군'**
+  String get hiveAddressHint;
+
+  /// No description provided for @hiveNoteLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'메모 (선택)'**
+  String get hiveNoteLabel;
+
+  /// No description provided for @hiveNoteHint.
+  ///
+  /// In ko, this message translates to:
+  /// **'특이사항을 적어 두세요'**
+  String get hiveNoteHint;
+
+  /// No description provided for @hiveCreated.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장을 등록했어요'**
+  String get hiveCreated;
+
+  /// No description provided for @hiveDeleted.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장을 삭제했어요'**
+  String get hiveDeleted;
+
+  /// No description provided for @deleteHive.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장 삭제'**
+  String get deleteHive;
+
+  /// No description provided for @deleteHiveConfirm.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 양봉장을 삭제할까요? 삭제하면 목록에서 사라져요.'**
+  String get deleteHiveConfirm;
+
+  /// No description provided for @hiveDetailTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'양봉장 정보'**
+  String get hiveDetailTitle;
+
+  /// No description provided for @hiveLocationLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'위치(위도, 경도)'**
+  String get hiveLocationLabel;
+
+  /// No description provided for @hiveInstalledAtLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'설치일'**
+  String get hiveInstalledAtLabel;
+
+  /// No description provided for @hiveCreatedAtLabel.
+  ///
+  /// In ko, this message translates to:
+  /// **'등록일'**
+  String get hiveCreatedAtLabel;
+
+  /// No description provided for @hiveAnalysesSectionTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 이력'**
+  String get hiveAnalysesSectionTitle;
+
+  /// No description provided for @hiveAnalysesComingSoon.
+  ///
+  /// In ko, this message translates to:
+  /// **'진단 기능은 다음 업데이트에서 제공돼요'**
+  String get hiveAnalysesComingSoon;
+
+  /// No description provided for @errNotFound.
+  ///
+  /// In ko, this message translates to:
+  /// **'요청한 정보를 찾을 수 없어요'**
+  String get errNotFound;
+
+  /// No description provided for @errQuota.
+  ///
+  /// In ko, this message translates to:
+  /// **'이번 달 무료 분석 횟수를 모두 사용했어요'**
+  String get errQuota;
+
+  /// No description provided for @errAiUnavailable.
+  ///
+  /// In ko, this message translates to:
+  /// **'AI 분석 서비스가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요'**
+  String get errAiUnavailable;
 }
 
 class _AppLocalizationsDelegate

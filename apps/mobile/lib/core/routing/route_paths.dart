@@ -8,4 +8,10 @@ class RoutePaths {
   static const String login = '/login';
   static const String signup = '/signup';
   static const String home = '/home';
+
+  /// Hive detail (pushed on top of /home). `:id` is the hive uuid.
+  static const String hiveDetail = '/hives/:id';
+
+  /// Builds a concrete hive-detail path (e.g. `/hives/abc-123`).
+  static String hiveDetailTo(String id) => '/hives/$id';
 }
