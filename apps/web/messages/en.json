@@ -353,5 +353,90 @@
       "subtitle": "Precisely diagnose your hive's health with just your smartphone.",
       "button": "Download the app"
     }
+  },
+  "download": {
+    "title": "Download the App",
+    "subtitle": "Install HelpBee now and diagnose your hive's health with your smartphone.",
+    "qrLabel": "QR code",
+    "note": "Available on iOS and Android. (Store links coming soon)"
+  },
+  "about": {
+    "title": "About Us",
+    "subtitle": "Making beekeeping easier and healthier through technology.",
+    "teamLabel": "Team image",
+    "blocks": [
+      {
+        "heading": "Mission",
+        "body": "(dummy) We help every beekeeper manage healthy hives based on data."
+      },
+      {
+        "heading": "Story",
+        "body": "(dummy) HelpBee is an AI diagnosis service born from real challenges in the field."
+      },
+      {
+        "heading": "Team",
+        "body": "(dummy) Experts in beekeeping, AI, and product work together."
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: June 17, 2026",
+    "intro": "This is a dummy document for skeleton verification. Legal review is required before launch.",
+    "sections": [
+      {
+        "heading": "1. Personal data we collect",
+        "body": "(dummy) Email, name, service usage records, etc."
+      },
+      {
+        "heading": "2. Purpose of use",
+        "body": "(dummy) Service delivery, inquiry response, quality improvement."
+      },
+      {
+        "heading": "3. Retention period",
+        "body": "(dummy) Until the purpose is fulfilled or as required by law."
+      },
+      {
+        "heading": "4. Cookies and analytics",
+        "body": "(dummy) GA4/Hotjar are used only after consent and can be declined in browser settings."
+      },
+      {
+        "heading": "5. Data protection officer",
+        "body": "(dummy) support@helpbee.com"
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "updated": "Last updated: June 17, 2026",
+    "intro": "This is a dummy document for skeleton verification. Legal review is required before launch.",
+    "sections": [
+      {
+        "heading": "Article 1 (Purpose)",
+        "body": "(dummy) These terms govern the use of the HelpBee service."
+      },
+      {
+        "heading": "Article 2 (Definitions)",
+        "body": "(dummy) Definitions of terms such as service and user."
+      },
+      {
+        "heading": "Article 3 (Provision of service)",
+        "body": "(dummy) Provided free of charge during the beta period."
+      },
+      {
+        "heading": "Article 4 (Limitation of liability)",
+        "body": "(dummy) AI diagnosis results are for reference only and carry no legal liability."
+      },
+      {
+        "heading": "Article 5 (Governing law)",
+        "body": "(dummy) Governed by the laws of the Republic of Korea."
+      }
+    ]
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Guides and news about beekeeping, varroa mites, and AI diagnosis.",
+    "readMore": "Read more",
+    "backToList": "Back to list"
   }
 }
