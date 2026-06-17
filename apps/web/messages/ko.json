@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "service": "서비스 소개",
+    "howItWorks": "이용 방법",
+    "pricing": "요금제",
+    "contact": "문의하기",
+    "download": "다운로드"
+  },
+  "footer": {
+    "columns": {
+      "service": "Service",
+      "support": "Support",
+      "company": "Company",
+      "contact": "Contact"
+    },
+    "links": {
+      "serviceIntro": "서비스 소개",
+      "howItWorks": "이용방법",
+      "pricing": "요금제",
+      "help": "도움말",
+      "contactUs": "문의하기",
+      "faq": "FAQ",
+      "about": "회사 소개",
+      "careers": "인재 채용",
+      "blog": "블로그",
+      "privacy": "개인정보처리방침",
+      "terms": "이용약관"
+    },
+    "contactInfo": {
+      "email": "이메일: support@helpbee.com",
+      "phone": "전화: 02-1234-5678",
+      "address": "주소: 한국디지털미디어고등학교"
+    },
+    "copyright": "© 2026 HelpBee. All rights reserved."
+  },
+  "cookie": {
+    "message": "더 나은 경험을 위해 쿠키를 사용합니다. 동의하시면 분석 도구가 활성화됩니다.",
+    "accept": "동의",
+    "decline": "거부",
+    "detail": "자세히 보기"
+  },
+  "cta": {
+    "downloadBand": {
+      "title": "지금 바로 시작하세요",
+      "subtitle": "무료 체험으로 HelpBee의 강력한 기능을 경험해보세요",
+      "button": "앱 다운로드"
+    }
+  },
+  "common": {
+    "skipToContent": "본문으로 건너뛰기",
+    "languageName": "한국어"
+  },
+  "shell": {
+    "ready": "웹 쉘 준비 완료 — 페이지는 다음 단계에서 구현됩니다."
+  }
+}

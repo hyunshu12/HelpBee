@@ -1,0 +1,56 @@
+{
+  "nav": {
+    "service": "Overview",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "contact": "Contact",
+    "download": "Download"
+  },
+  "footer": {
+    "columns": {
+      "service": "Service",
+      "support": "Support",
+      "company": "Company",
+      "contact": "Contact"
+    },
+    "links": {
+      "serviceIntro": "Overview",
+      "howItWorks": "How it works",
+      "pricing": "Pricing",
+      "help": "Help",
+      "contactUs": "Contact",
+      "faq": "FAQ",
+      "about": "About",
+      "careers": "Careers",
+      "blog": "Blog",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service"
+    },
+    "contactInfo": {
+      "email": "Email: support@helpbee.com",
+      "phone": "Phone: 02-1234-5678",
+      "address": "Address: Korea Digital Media High School"
+    },
+    "copyright": "© 2026 HelpBee. All rights reserved."
+  },
+  "cookie": {
+    "message": "We use cookies to improve your experience. Accepting enables analytics tools.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "detail": "Learn more"
+  },
+  "cta": {
+    "downloadBand": {
+      "title": "Get started now",
+      "subtitle": "Experience HelpBee's powerful features with a free trial",
+      "button": "Download app"
+    }
+  },
+  "common": {
+    "skipToContent": "Skip to content",
+    "languageName": "English"
+  },
+  "shell": {
+    "ready": "Web shell ready — pages are implemented in the next step."
+  }
+}
