@@ -49,10 +49,9 @@ export default function ContactPage({ params }: { params: { locale: string } }) 
         </Container>
       </section>
 
-      {/* 4) CONTACT FORM */}
-      <section className="py-16 md:py-24">
+      {/* 4) CONTACT FORM — '직접 문의하기' 헤딩은 채널 섹션(3)에서 한 번만 노출 */}
+      <section className="pb-16 md:pb-24">
         <Container>
-          <SectionHeading title={t('form.title')} subtitle={t('form.subtitle')} />
           <ContactForm />
         </Container>
       </section>
