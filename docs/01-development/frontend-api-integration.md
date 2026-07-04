@@ -239,16 +239,19 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 
 ## 10. ⚠️ 현재 가동 상태 (Readiness) — 프론트 붙이기 전 반드시 확인
 
+> 최종 현행화: **2026-07-04** (로컬 전체 라이브 E2E 점검 — 상세: `docs/05-implementation/2026-07-04-system-check.md`)
+
 | 영역 | 상태 | 프론트 영향 |
 |---|---|---|
 | Auth / Hives / Images(presign·confirm) / Subscriptions / Admin **계약** | ✅ 코드 완성·로컬 검증 | 그대로 붙이면 됨 |
-| **AI 추론 실제 동작** | ❌ **아직 안 됨** | AI 서버 미기동 + YOLO 모델(`best.onnx`) 미배포. 현재 `POST /analyses`는 **graceful `status:'failed'`(200)** 로만 응답. 결과 화면은 `failed` 상태 처리 UI를 먼저 만들 것 |
-| **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, 백엔드에 발송 추가 후 테스트 |
-| **권장조치(recommendations) 응답** | ⚠️ 미반환 | 결과 화면 처방 문구 불가 — 백엔드 보강 선행 필요(§4) |
+| **AI 추론 실제 동작** | ✅ **로컬 동작 (2026-07-04 확인)** | AI 서버(:8000, `.env` 로드 필수) + YOLO v0.1.0 ONNX(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`)로 presign→S3→confirm→`POST /analyses` E2E 성공(응애 샘플 risk 70/warning, 197ms). ⚠️ 단, **AI 실패로 `status:'failed'` 저장된 이미지는 재분석 불가**(UNIQUE 제약 + 기존 row 반환) — `failed` 상태 UI는 여전히 필요, 재시도 경로는 루트 CLAUDE.md P0-1 |
+| **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, **시드 계정**(`beekeeper1@helpbee.local` / `helpbee-dev-2026`, verified 상태) 사용 |
+| **권장조치(recommendations) 응답** | ⚠️ 미반환 | 결과 화면 처방 문구 불가 — 백엔드 보강 선행 필요(§4, 루트 CLAUDE.md P0-3) |
+| **문의(`/v1/inquiries`)** | 🔴 라우트 없음 (404) | `apps/web` 문의 폼이 붙을 백엔드 부재 — 루트 CLAUDE.md P1-1 |
 | **인프라 배포(staging/prod)** | 🔴 미배포 | 원격 base URL 없음. 현재 **localhost:3001** 만. 배포 후 환경별 URL 주입 |
 | **결제** | 🟡 inert | 전원 무료. 유료 UI는 표시만(`/plans`) |
 
-> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드 흐름은 **지금 바로 붙여 개발 가능**. **AI 분석 결과 화면**은 (a) 실패 상태 UI 먼저 + (b) 추론 환경(모델·AI서버)·이메일 인증·recommendations 반환이 갖춰지면 실데이터로 완성. admin 화면은 admin 토큰 발급(DB 승격)만 되면 전부 동작.
+> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드/**AI 분석(로컬)** 흐름은 **지금 바로 붙여 개발 가능**. 남은 프론트 차단 요소는 recommendations 미반환(처방 문구)·이메일 인증 발송·`/inquiries` 부재. admin 화면은 admin 토큰 발급(DB 승격 또는 시드 `admin@helpbee.local`)만 되면 전부 동작. 서버 기동 시 **`.env` 수동 로드 필수**(`set -a; source .env; set +a`) — 자동 로드 개선은 루트 CLAUDE.md P0-2.
 
 ---
 
