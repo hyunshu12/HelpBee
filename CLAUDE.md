@@ -49,6 +49,115 @@ refactor: 리팩토링
 
 ---
 
+## 🧪 2026-07-04 전체 시스템 점검 결과 & 개선 계획 (다음 Claude 필독 ★)
+
+> 2026-07-04에 로컬에서 앱·웹·백엔드 전체를 실제 구동/테스트한 결과와, 안 되는 부분의 근본 원인 + 상세 개선 계획.
+> **새 세션에서 작업을 시작하면 이 섹션과 `docs/05-implementation/README.md` 인덱스를 먼저 읽을 것.**
+> 로컬 환경: Docker 미설치. brew Postgres 16 + Redis 7 상시 가동. `apps/api/.env`, `apps/ai/.env` 구성 완료(gitignored).
+
+### A. 초기 계획 대비 진행 현황 (도메인별)
+
+| 도메인 | 계획 (마일스톤) | 현재 상태 | 판정 |
+|---|---|---|---|
+| DB (`packages/database`) | 5월 W1~W4: 9테이블 + dual-engine | ✅ 완료. 9테이블·마이그레이션·시드 정상 (PR ~#22까지) | **완료** |
+| Backend API (`apps/api`) | 5월 W1~W4: auth/hives/images/analyses/subs/admin | ✅ 코드 완성 + 계약 고정. vitest **166/166 PASS**, type-check PASS | **완료** |
+| AI (`apps/ai`) | 5~6월: OpenAI + YOLO dual | 🟡 YOLO v0.1.0 학습·ONNX 서빙 완료(decode/전처리 수정 PR #24/#25 **머지됨**). pytest 65/65 PASS. OpenAI 엔진은 `OPENAI_API_KEY` 미설정(유료 폴백용, 현재 불필요). **회귀 fixture 부재** | **핵심 동작** |
+| Mobile (`apps/mobile`) | 5월 W1~W4 + 6월 베타 | ✅ 인증→벌통 CRUD→카메라→분석→레포트 전 플로우 구현 (PR #26~#31 머지). dart analyze 0 issues | **MVP 완료** |
+| Web (`apps/web`) | 5~6월: 랜딩 + 블로그 | 🟡 MVP 구현 완료, **PR #33 OPEN 미머지** (브랜치 `feature/web-frontend-mvp`). build 25페이지 SSG green, 라이브 서빙 정상 | **머지 대기** |
+| Admin (`apps/admin`) | 5월 W3~6월 | ❌ **미착수** — `src/` 전체가 `.gitkeep` 스캐폴드만 존재 | **미착수** |
+| Infra (CI/CD, Terraform) | 5월 W2~: ci.yml, staging | ❌ **미착수** — `.github/workflows/` 없음, `infra/terraform/envs/*` 빈 폴더 | **미착수** |
+
+### B. 실제 구동 테스트 결과 (2026-07-04)
+
+**정상 동작 확인 (라이브 E2E):**
+1. API 서버 기동(:3001) + AI 서버 기동(:8000) — health OK
+2. `POST /v1/auth/login` (시드 `beekeeper1@helpbee.local` / `helpbee-dev-2026`) → 토큰 발급 ✅
+3. `GET /v1/hives`, `GET /v1/subscriptions/me`, `GET /v1/subscriptions/plans` ✅
+4. **진단 E2E 전체 성공**: presign → S3 직접 PUT(200) → confirm(width/height 추출) → `POST /v1/analyses` → **YOLO 추론 성공** (응애 샘플 이미지 → `risk 70 / warning / infestation_rate 100%`, latency 197ms) ✅
+5. `GET /v1/analyses?hiveId=`, `GET /v1/analyses/trend` (일별 avgRisk 버킷) ✅
+6. Web: `pnpm --filter @helpbee/web build` 25/25 SSG + dev 서버에서 `/ko`, `/ko/pricing`, `/ko/contact` 200 + SEO 메타 정상 ✅
+7. `@helpbee/ui` vitest 12/12, `apps/ai` pytest 65/65, `apps/api` vitest 166/166 ✅
+
+**실패/미동작 발견 (아래 C의 개선 계획과 번호 연동):**
+| # | 증상 | 근본 원인 |
+|---|---|---|
+| 1 | `pnpm --filter @helpbee/api dev`가 즉시 크래시 (`[config] invalid environment`) | dev 스크립트(`tsx watch`)가 `.env`를 자동 로드하지 않음. AI 서버(uvicorn)도 동일 — env 없이 띄우면 HMAC 401로 분석 전부 실패 |
+| 2 | 실패한 분석 재시도 불가 | `UNIQUE(image_id, model_id)` + 라우트가 기존 row를 그대로 반환 → `ai_unavailable`로 한 번 실패한 이미지는 **영구 실패** (재분석 경로 없음) |
+| 3 | `POST /v1/inquiries` → 404 | 백엔드에 라우트 자체가 없음 → 웹 문의 폼이 붙을 곳이 없음 |
+| 4 | `pnpm --filter @helpbee/web lint` FAIL | `apps/web`에 ESLint config 부재 → `next lint`가 인터랙티브 프롬프트에서 죽고, `next build`는 lint를 조용히 skip (품질 게이트 구멍) |
+| 5 | 신규 가입자는 분석 불가 | 이메일 인증 발송 미구현 → `emailVerified:false` → 분석 차단. 시드 계정만 동작 |
+| 6 | 분석 응답에 `recommendations` 없음 | AI/백엔드 모두 처방 문구 미생성 → 모바일 결과 화면의 "권장 조치" 영역 비어 있음 (핵심 가치 미완) |
+| 7 | `flutter test` 실행 불가 (이 Mac) | **환경 문제**: Xcode 라이선스 미동의. `sudo xcodebuild -license accept` 실행 필요 (사용자 액션). 코드 자체는 analyze 0 issues |
+| 8 | AI 회귀 게이트 없음 | `pytest -m regression` → 0 selected. `app/tests/fixtures/` 비어 있음 (CLAUDE.md에 명시된 20~30장 fixture + 기대 risk JSON 미구축) |
+| 9 | `estimated_varroa_count`가 항상 null | 데이터셋 라벨 특성(응애 자체 bbox 없음, AIHUB_71667.md §6) — **알려진 제약**, 버그 아님 |
+
+### C. 개선 계획 (우선순위·상세 절차 포함)
+
+> 각 항목은 독립 PR로 진행. 브랜치/PR 규칙은 위 "GitHub 커밋/PR 규칙" 준수. PR 머지 시 `docs/05-implementation/`에 기록 추가 의무.
+
+#### P0-1. 실패 분석 재시도 경로 (B-2) — 사용자 가치 직결
+- **문제**: AI 서버 순단 시 그 이미지는 영원히 `failed`. 모바일에서 "다시 시도" 불가.
+- **수정 위치**: `apps/api/src/routes/analyses.ts` (+ `packages/database/src/queries/analyses.ts`)
+- **방안**: `POST /v1/analyses`에서 기존 row가 `status='failed'`면 반환하지 말고 **재추론 후 해당 row를 UPDATE** (upsert-on-failed). `status='success'`/`pending`일 때만 기존 row 반환. 동시성은 `pending` 마킹 후 추론으로 방어.
+- **검증**: vitest에 "failed row 재요청 → 재추론 → success 전환" 테스트 추가. Bruno 요청 갱신.
+
+#### P0-2. dev 서버 .env 자동 로드 (B-1) — 모든 후속 작업의 발목
+- **수정 위치**: `apps/api/package.json` dev 스크립트 → `tsx watch --env-file=.env src/index.ts` (Node 20.6+ 지원). AI는 `apps/ai/app/core/config.py`에 `python-dotenv` 도입(`load_dotenv()` — 이미 설정된 env 우선) 또는 `Makefile`에 `make serve` 타깃 추가(`set -a; source .env`).
+- **검증**: 루트에서 `pnpm --filter @helpbee/api dev` 단독 실행이 성공해야 함. 각 앱 CLAUDE.md의 로컬 기동 명령 갱신.
+
+#### P0-3. recommendations(권장 조치) 파이프라인 (B-6) — 핵심 가치 완성
+- **방안(순서대로)**:
+  1. `apps/ai/app/services/risk.py`에 tier별 한국어 권장 조치 **정적 매핑** 추가 (LLM 자유 생성 아님 — apps/ai CLAUDE.md "recommendations enum화" 방침 준수). 예: danger → ["즉시 개미산/옥살산 처리 검토", "격리 및 수의사 상담", ...]
+  2. AI 응답 `recommendations` 채우기 → `apps/api/src/services/ai-client.ts`는 이미 필드 수용함 → 라우트에서 `recommendations` 테이블에 insert (`packages/database/src/schema/recommendations.ts` 이미 존재).
+  3. `GET /v1/analyses/:id` 응답에 recommendations join 포함 → `apps/mobile/lib/features/analyses/` DTO에 반영.
+- **검증**: E2E — 응애 이미지 분석 → 응답에 한국어 권장 조치 1~3개 포함. pytest에 tier→문구 매핑 단위 테스트.
+
+#### P1-1. `/v1/inquiries` 라우트 신설 (B-3) — 웹 PR #33 후속
+- **수정 위치**: `apps/api/src/routes/inquiries.ts`(신규) + `apps/api/src/schemas/inquiries.ts` + `packages/database/src/schema/inquiries.ts`(신규 테이블: id, name, email, message, createdAt) + 마이그레이션 generate
+- **정책**: 🔓 익명 허용 + 레이트리밋 강화(IP당 5/hour) + zod 검증(이메일 형식, message ≤2000자). 응답 `{data:{id}}`.
+- **후속**: `apps/web/src/app/[locale]/contact/` 폼을 이 엔드포인트에 연결 (react-hook-form + zod, 이미 폼 UI 존재).
+- **검증**: vitest + Bruno + 웹에서 실제 제출 1회.
+
+#### P1-2. 웹 PR #33 머지 + ESLint config (B-4)
+- PR #33 리뷰/머지 먼저 (25 SSG green, type-check PASS 확인됨).
+- `apps/web/.eslintrc.json` 추가: `{"extends": "next/core-web-vitals"}` → `pnpm --filter @helpbee/web lint` 통과 확인. admin도 같은 시점에 동일 config 준비.
+
+#### P1-3. AI 회귀 테스트 fixture 구축 (B-8)
+- **수정 위치**: `apps/ai/app/tests/fixtures/` + `pytest.ini`(marker 등록)
+- **방안**: AIHUB Sample 330장에서 20~30장 선별(응애/정상/질병 골고루, golden 셋과 중복 금지) → 각각 현재 v0.1.0 모델의 risk_score를 기록한 `expected.json` 생성 → `@pytest.mark.regression` 테스트가 `abs(expected-actual) <= 10`, tier 변동 0 검증.
+- **주의**: fixture 이미지 git 커밋 여부는 라이선스 확인 후 결정(AI Hub 내국인 제약). 커밋 불가 시 로컬 경로 참조 + CI에서는 skip 마킹.
+
+#### P1-4. 이메일 인증 발송 (B-5) — 베타 온보딩 전 필수
+- **방안**: AWS SES(ap-northeast-2) sandbox로 시작. `apps/api/src/services/email-service.ts` 신규 → signup 시 서명 토큰(만료 24h) 포함 인증 링크 발송 → `GET /v1/auth/verify-email?token=` 라우트 → `email_verified_at` UPDATE + audit_log.
+- **임시 우회(개발)**: `docs/01-development/frontend-api-integration.md` §10의 DB 직접 UPDATE 방법 유지.
+
+#### P2-1. Admin 대시보드 착수 (A표 참조) — 백엔드 `/v1/admin/*`은 이미 완성
+- 시작 순서(apps/admin/CLAUDE.md 마일스톤 준수): ① 로그인+middleware(role=admin) ② `/users` 목록(TanStack Table) ③ KPI 대시보드 ④ `analyses/:imageId/dual` 비교 뷰(BboxOverlay).
+- admin 토큰은 일반 signup으로 못 만듦 — 시드 `admin@helpbee.local` / `helpbee-dev-2026` 사용.
+
+#### P2-2. CI 파이프라인 (A표 참조)
+- `.github/workflows/ci.yml`: pnpm install → `turbo run lint type-check test` + `apps/ai` pytest. **주의**: API vitest는 Docker 불필요(in-process 확인됨)이므로 GitHub Actions에서 바로 동작. Flutter는 별도 job(`flutter analyze` + `flutter test`).
+- 이후 gitworkflow.md의 deploy-staging/production은 인프라(Terraform) 진행과 함께.
+
+#### P2-3. 환경 문제 (이 Mac, 사용자 액션 필요)
+- `sudo xcodebuild -license accept` 실행해야 `flutter test` 가능 (objective_c 패키지 build hook이 빈 sdk-path에 크래시).
+- pydantic 경고(`model_version` protected namespace)는 `app/schemas/`의 해당 모델에 `model_config = ConfigDict(protected_namespaces=())` 한 줄로 제거 가능 (사소).
+
+### D. 테스트 재현 방법 (다음 세션용 요약)
+
+```bash
+# 서버 기동 (env 수동 로드 필요 — P0-2 해결 전까지)
+cd apps/api && set -a && source .env && set +a && pnpm dev          # :3001
+cd apps/ai  && set -a && source .env && set +a && ./.venv/bin/python -m uvicorn app.main:app --port 8000
+
+# 시드 계정: beekeeper1@helpbee.local / admin@helpbee.local, 비밀번호 helpbee-dev-2026
+# E2E: login → /v1/images/presign → S3 PUT → /v1/images/confirm → POST /v1/analyses
+# 테스트 이미지: apps/ai/training/datasets/Sample/01.원천데이터/유충/유충_응애/**/*.jpg
+# YOLO 모델 캐시: ~/.cache/helpbee/yolo/v0.1.0/best.onnx (없으면 S3 helpbee-models에서 다운로드)
+```
+
+---
+
 ## 🎯 프로젝트 개요
 
 **HelpBee**: AI 기반 스마트 양봉 진단 SaaS 플랫폼

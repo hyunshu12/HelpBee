@@ -26,10 +26,10 @@ HelpBee의 메인 사용자 클라이언트(iOS / Android). 양봉가가 벌통�
 
 이 앱이 쓰는 핵심: `/v1/auth/*`(로그인·토큰 회전), `/v1/hives`(벌통 CRUD), `/v1/images/presign|confirm`(S3 직업로드), `/v1/analyses`(진단), `/v1/subscriptions/me`.
 
-⚠️ **현재 주의 (상세 = 위 문서 §10 Readiness)**:
-- **AI 추론 아직 미동작** → `POST /v1/analyses`는 현재 `status:'failed'`(200)로만 응답. **결과 화면은 실패 상태 UI부터** 만들 것.
-- **이메일 인증 발송 미구현** → 무료 사용자(현재 전원)는 `AUTH_EMAIL_NOT_VERIFIED`(403)로 분석 차단. 개발 중 우회는 위 문서 참조.
-- **권장조치(recommendations)는 어떤 분석 응답에도 미포함** → 결과 화면 처방 문구는 백엔드 보강 후.
+⚠️ **현재 주의 (상세 = 위 문서 §10 Readiness, 2026-07-04 현행화)**:
+- **AI 추론 로컬 동작 확인됨(2026-07-04)** → 로컬에서 AI 서버(:8000) 기동 시 `POST /v1/analyses`가 실제 YOLO 결과(`status:'success'`, risk/tier) 반환. 단 AI 서버가 죽어 있으면 `status:'failed'`(200) 저장되고 **그 이미지는 재분석 불가**(재시도 경로 없음 — 루트 CLAUDE.md P0-1) → **결과 화면의 실패 상태 UI는 여전히 필수**.
+- **이메일 인증 발송 미구현** → 무료 사용자(현재 전원)는 `AUTH_EMAIL_NOT_VERIFIED`(403)로 분석 차단. 개발 중엔 시드 계정(verified) 사용 또는 위 문서 우회 참조.
+- **권장조치(recommendations)는 어떤 분석 응답에도 미포함** → 결과 화면 처방 문구는 백엔드 보강 후 (루트 CLAUDE.md P0-3).
 - 토큰: access 15분(메모리)·refresh 7일(secure storage, **헤더 아닌 body로 전달**), 회전+grace 처리(위 문서 §1.1).
 - 응답은 `{data, meta}` 봉투, 에러는 `problem+json`의 `code`로 분기. lat/lng는 문자열로 옴(parseFloat).
 
