@@ -4,7 +4,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "allowJs": true,
+    "noEmit": true,
+    "moduleResolution": "node",
+    "isolatedModules": true
   },
   "include": [
     "next-env.d.ts",

@@ -77,5 +77,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | #31 (머지) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
 | 2026-06-17 | 웹 프론트엔드 MVP(apps/web) + 디자인 시스템(@helpbee/ui): Figma 4페이지 + 법적/SEO/블로그, next-intl ko+en골격, S-Core Dream self-host, 25 SSG green | #33 (머지) | [2026-06-17-web-frontend-mvp.md](./2026-06-17-web-frontend-mvp.md) |
 | 2026-07-04 | **전체 시스템 라이브 점검**: 4앱 테스트 스위트 + 진단 E2E(presign→S3→confirm→YOLO 추론 성공, 197ms) 실측 · 문제 9건 발견 · 개선 계획(P0~P2)은 루트 CLAUDE.md §C | 없음 (점검) | [2026-07-04-system-check.md](./2026-07-04-system-check.md) |
+| 2026-07-04 | **Admin 대시보드 MVP**(apps/admin 최초 구현): 쿠키+프록시 인증, KPI/사용자관리/감사로그/dual 뷰, @helpbee/ui Table 추가, 라이브 E2E 검증 | #35→재발행 | [2026-07-04-admin-dashboard-mvp.md](./2026-07-04-admin-dashboard-mvp.md) |
 
 (새 기록 추가 시 위 표 갱신)
