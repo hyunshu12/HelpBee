@@ -184,25 +184,28 @@ import { Button, Card } from '@helpbee/ui';
 ```bash
 # 루트에서
 pnpm install
-pnpm --filter admin dev          # http://localhost:3001
+pnpm --filter admin dev          # http://localhost:3002
 ```
 
-### 포트
+### 포트 (루트 CLAUDE.md 기준 — 이 값이 정답)
 
 - `apps/web` → 3000
-- **`apps/admin` → 3001 (권장)**
-- `apps/api` → 4000
+- `apps/api` → **3001**
+- **`apps/admin` → 3002**
 
-`next.config.js` 또는 `package.json`의 `dev` 스크립트에서 `next dev -p 3001`로 고정한다.
+`package.json`의 `dev`/`start` 스크립트에서 `-p 3002`로 고정돼 있다.
 
 ### `.env.local` 필수
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:4000
+# 서버 런타임 전용 — 모든 백엔드 호출은 서버 프록시(/api/backend)를 거치므로 NEXT_PUBLIC_ 아님
+API_URL=http://localhost:3001
 JWT_SECRET=<apps/api와 동일>
 ```
 
-> `JWT_SECRET`이 apps/api와 다르면 모든 인증이 깨진다. 루트 `.env`에서 공유하는 패턴 권장.
+> `JWT_SECRET`이 apps/api와 다르면 middleware의 토큰 서명 검증이 깨진다. 루트 `.env`에서 공유하는 패턴 권장.
+> `API_URL`/`JWT_SECRET` 모두 **서버 전용**(`NEXT_PUBLIC_` 접두사 금지) — 토큰이 브라우저 JS로 새지 않게 한다.
+> 로컬에서 백엔드는 `CORS_ALLOWLIST`에 admin origin이 없어도 된다(브라우저가 백엔드를 직접 호출하지 않음).
 
 ---
 
@@ -255,6 +258,22 @@ pnpm --filter admin test:e2e
 ### Decision Log
 
 큰 결정(예: TanStack Query → SWR 전환)은 본 문서에 ADR 섹션을 만들고 기록한다.
+
+#### 2026-07-04 — Admin MVP 초기 구현 (feature/admin-dashboard-mvp)
+
+- **인증 = httpOnly 쿠키 + 서버 프록시**: 브라우저에 토큰을 전혀 노출하지 않기 위해
+  `/api/session`(로그인/로그아웃)과 `/api/backend/[...path]`(전 백엔드 프록시)를 route handler로 둔다.
+  이유: (1) httpOnly로 XSS 토큰 탈취 차단, (2) 브라우저→백엔드 직접 호출이 없어 **CORS 불필요**.
+  프록시가 access 만료(`AUTH_TOKEN_EXPIRED`) 시 refresh 1회 회전 후 원요청 재시도. 경로 allowlist(`admin/`, `auth/me`)로 방어.
+  쿠키: `hb_admin_access`(15m, path=/) + `hb_admin_refresh`(7d, path=/api). `middleware.ts`는 jose로 access 서명+`role==='admin'` 검증(만료+refresh 존재 시 통과, 프록시가 갱신).
+  → 환경변수는 서버 전용 `API_URL`/`JWT_SECRET` (docs의 `NEXT_PUBLIC_API_URL` 아님).
+- **페이지가 client component(useQuery+Skeleton)**: RSC 첫 페인트 대신 MVP는 클라 컴포넌트로 단순화(§5 원칙에서 의도적 이탈). 데이터는 same-origin `/api/backend`로 `lib/api.ts` 경유.
+- **`GET /v1/admin/users/:id` 부재**: 백엔드에 상세 라우트가 없음. 상세 페이지는 목록(pageSize=100)에서 id로 찾고,
+  PATCH 응답의 전체 `AdminUserDetail`로 갱신. → **follow-up: 백엔드에 상세 라우트 추가**.
+- **Recharts 미도입**: metrics는 집계 카운트뿐 → KPI 카드/목록으로 표시. 시계열 필요 시 도입.
+- **파괴적 액션 = 2단계 인라인 확인**(`ConfirmAction`): `@helpbee/ui`에 Dialog 없음. → **follow-up: Dialog를 ui 패키지에 추가**.
+- **@helpbee/ui에 `Table` 프리미티브 추가**(Table/THead/TBody/Tr/Th/Td) — admin DataTable이 래핑.
+- **Follow-ups**: Dialog 컴포넌트, `analyses/[imageId]` bbox Canvas 오버레이(`viewer/`), Playwright e2e, `/system` 헬스 페이지, 백엔드 users/:id 상세 라우트.
 
 ---
 

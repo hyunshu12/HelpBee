@@ -6,9 +6,45 @@
 ///
 /// `status:'failed'` is a graceful 200 (AI 실패) — UI must handle it. tier
 /// (safe/watch/danger) is derived here (no tier column on the wire).
+///
+/// `recommendations` (권장 조치) are returned by POST /v1/analyses and
+/// GET /v1/analyses/:id (frontend-api-integration §4); the list endpoint omits
+/// them (payload size), so this field defaults to empty for list-sourced rows.
 library;
 
 import '../../../core/risk/risk_tier.dart';
+
+/// A single prescription/precaution item (backend `recommendations[]`).
+/// `severity`: 'info' | 'warn' | 'danger' (maps to tier color tokens on screen).
+class RecommendationDto {
+  const RecommendationDto({
+    required this.order,
+    required this.content,
+    required this.severity,
+  });
+
+  final int order;
+  final String content;
+  final String severity;
+
+  factory RecommendationDto.fromJson(Map<String, dynamic> json) =>
+      RecommendationDto(
+        order: _int(json['order']) ?? 0,
+        content: (json['content'] as String?) ?? '',
+        severity: (json['severity'] as String?) ?? 'info',
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RecommendationDto &&
+          other.order == order &&
+          other.content == content &&
+          other.severity == severity;
+
+  @override
+  int get hashCode => Object.hash(order, content, severity);
+}
 
 class Analysis {
   const Analysis({
@@ -25,6 +61,7 @@ class Analysis {
     this.analyzedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.recommendations = const [],
   });
 
   final String id;
@@ -40,6 +77,7 @@ class Analysis {
   final DateTime? analyzedAt;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final List<RecommendationDto> recommendations;
 
   bool get isSuccess => status == 'success';
   bool get isFailed => status == 'failed';
@@ -77,6 +115,7 @@ class Analysis {
         analyzedAt: _dateOrNull(json['analyzedAt']),
         createdAt: _date(json['createdAt']),
         updatedAt: _date(json['updatedAt']),
+        recommendations: _recs(json['recommendations']),
       );
 
   @override
@@ -92,6 +131,19 @@ class Analysis {
   @override
   int get hashCode =>
       Object.hash(id, status, varroaInfectionRisk, overallHealth, analyzedAt);
+}
+
+List<RecommendationDto> _recs(Object? v) {
+  if (v is List) {
+    return v
+        .whereType<Map>()
+        .map((e) => RecommendationDto.fromJson(
+              e.map((k, val) => MapEntry(k.toString(), val)),
+            ))
+        .where((r) => r.content.isNotEmpty)
+        .toList(growable: false);
+  }
+  return const [];
 }
 
 int? _int(Object? v) {

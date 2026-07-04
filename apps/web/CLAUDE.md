@@ -26,7 +26,7 @@
 이 앱은 **대부분 정적**이라 백엔드 의존이 적다. 연동 시 계약 단일 소스:
 **→ [`docs/01-development/frontend-api-integration.md`](../../docs/01-development/frontend-api-integration.md)** (실제 구현 기준).
 
-- **유일한 동적 연동 = 문의 폼 → `apps/api`의 `/inquiries`**. ⚠️ **이 엔드포인트는 백엔드에 아직 미구현** — 폼 붙이기 전 백엔드에 `/inquiries` 라우트 추가 필요(현재 라우트: auth/hives/images/analyses/subscriptions/admin만).
+- **유일한 동적 연동 = 문의 폼 → `apps/api`의 `POST /v1/inquiries`**. ✅ **구현·라이브 검증 완료(2026-07-04)** — 익명 접수, 5/시간/IP 레이트리밋, 허니팟. 문의 폼(`ContactForm`)이 `src/lib/inquiries.ts`의 `submitInquiry()`로 실제 접수. 계약은 [frontend-api-integration.md §5.5](../../docs/01-development/frontend-api-integration.md).
 - 가격 페이지는 `GET /v1/subscriptions/plans`(🔓 공개, 정적 카탈로그) 사용 가능.
 - 로그인/결제 흐름은 이 앱에 두지 않는다(모바일 책임). 응답 봉투 `{data, meta}` / 에러 `problem+json`.
 

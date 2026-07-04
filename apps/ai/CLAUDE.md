@@ -72,7 +72,7 @@ apps/ai/
 │   ├── main.py                # FastAPI 엔트리 (health 등록 완료)
 │   ├── core/                  # config, logging, cost-meter, S3 loader
 │   ├── routers/               # /analyze, /analyze/yolo, /analyze/dual, /analyze/batch
-│   ├── services/              # openai_client.py, yolo_engine.py, preprocess.py, risk.py
+│   ├── services/              # openai_client.py, yolo_engine.py, preprocess.py, risk.py (risk.py=recommendations enum 소스: risk.yaml→recommendations_for)
 │   ├── schemas/               # AnalysisResponse, ImageInput, ErrorEnvelope (Pydantic v2)
 │   ├── prompts/               # varroa_prompt.py (프롬프트 단일 소스 + version)
 │   └── tests/

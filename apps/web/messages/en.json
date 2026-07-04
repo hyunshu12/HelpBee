@@ -1,0 +1,444 @@
+{
+  "nav": {
+    "service": "Overview",
+    "howItWorks": "How it works",
+    "pricing": "Pricing",
+    "contact": "Contact",
+    "download": "Download"
+  },
+  "footer": {
+    "columns": {
+      "service": "Service",
+      "support": "Support",
+      "company": "Company",
+      "contact": "Contact"
+    },
+    "links": {
+      "serviceIntro": "Overview",
+      "howItWorks": "How it works",
+      "pricing": "Pricing",
+      "help": "Help",
+      "contactUs": "Contact",
+      "faq": "FAQ",
+      "about": "About",
+      "careers": "Careers",
+      "blog": "Blog",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service"
+    },
+    "contactInfo": {
+      "email": "Email: support@helpbee.com",
+      "phone": "Phone: 02-1234-5678",
+      "address": "Address: Korea Digital Media High School"
+    },
+    "copyright": "© 2026 HelpBee. All rights reserved."
+  },
+  "cookie": {
+    "message": "We use cookies to improve your experience. Accepting enables analytics tools.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "detail": "Learn more"
+  },
+  "cta": {
+    "downloadBand": {
+      "title": "Get started now",
+      "subtitle": "Experience HelpBee's powerful features with a free trial",
+      "button": "Download app"
+    }
+  },
+  "common": {
+    "skipToContent": "Skip to content",
+    "languageName": "English"
+  },
+  "shell": {
+    "ready": "Web shell ready — pages are implemented in the next step."
+  },
+  "home": {
+    "hero": {
+      "title": "Beehive Health, Protected by AI",
+      "subtitle": "Precisely diagnose your beehive's condition with just a smartphone and get guidance on the best way to manage it.",
+      "cta": "Start Free Now",
+      "imageLabel": "Beehive image"
+    },
+    "intro": {
+      "heading": "What is HelpBee",
+      "items": {
+        "0": {
+          "title": "AI-Powered Diagnosis",
+          "description": "Cutting-edge AI technology precisely analyzes your beehive's condition and detects diseases and pests early."
+        },
+        "1": {
+          "title": "Data Security",
+          "description": "All diagnostic data is encrypted and stored safely, and is never shared without your consent."
+        },
+        "2": {
+          "title": "Instant Response",
+          "description": "When a problem is found, we immediately provide tailored management advice to help you respond quickly."
+        }
+      }
+    },
+    "features": {
+      "heading": "Key Features",
+      "items": {
+        "0": {
+          "title": "Precise Disease Detection",
+          "description": "AI accurately identifies signs of disease inside the hive, making early treatment possible."
+        },
+        "1": {
+          "title": "Early Pest Detection",
+          "description": "Quickly detects major pests such as varroa mites and moths to minimize damage."
+        },
+        "2": {
+          "title": "Queen Bee Health Check",
+          "description": "Checks the queen bee's activity and health to assess the overall health of the hive."
+        },
+        "3": {
+          "title": "Tailored Management Advice",
+          "description": "AI recommends specific management methods suited to each hive's condition."
+        }
+      }
+    },
+    "quote": "HelpBee is a smart diagnostic service that uses AI technology to help beekeepers manage hive health easily and accurately.",
+    "recommend": {
+      "heading": "Recommended For",
+      "items": {
+        "0": {
+          "imageLabel": "Beginner beekeeper image",
+          "name": "Beginner Beekeepers",
+          "benefit": "Easy management even with little experience & step-by-step guidance"
+        },
+        "1": {
+          "imageLabel": "Professional beekeeper image",
+          "name": "Professional Beekeepers",
+          "benefit": "Efficient multi-hive management & maximized yield"
+        },
+        "2": {
+          "imageLabel": "Beekeeping cooperative image",
+          "name": "Beekeeping Cooperatives",
+          "benefit": "Systematic hive management for members & data sharing"
+        }
+      }
+    },
+    "stats": {
+      "accuracy": {
+        "value": "95%",
+        "label": "Diagnostic Accuracy"
+      },
+      "trust": {
+        "value": "10,000+",
+        "label": "Beekeepers Trust Us"
+      },
+      "support": {
+        "value": "24/7",
+        "label": "Support"
+      }
+    }
+  },
+  "howItWorks": {
+    "hero": {
+      "title": "How It Works",
+      "subtitle": "Simple hive diagnosis in just 3 steps",
+      "intro": "Anyone can easily check their hive's health with nothing but a smartphone.",
+      "imageLabel": "How It Works hero image"
+    },
+    "steps": {
+      "capture": {
+        "title": "Capture",
+        "description": "Photograph the inside of your hive with your smartphone camera. Following the on-screen guide gives you the best analysis results.",
+        "screenLabel": "Capture screen",
+        "tip": {
+          "title": "TIP BOX",
+          "items": {
+            "bright": "Shoot in a well-lit spot",
+            "whole": "Frame the entire hive",
+            "sharp": "Hold steady for a sharp, clear shot",
+            "guide": "Align with the guide lines"
+          }
+        }
+      },
+      "analyze": {
+        "title": "Analyze",
+        "description": "AI automatically analyzes your hive's health within 30 seconds, checking for disease, pests, and the queen bee's condition.",
+        "screenLabel": "Analysis screen"
+      },
+      "result": {
+        "title": "Results",
+        "description": "Receive your diagnosis along with the actions you need to take. Save detailed reports and manage your history over time.",
+        "screenLabel": "Results screen"
+      }
+    },
+    "cta": {
+      "title": "Now try it for yourself",
+      "subtitle": "Experience HelpBee's powerful features with a free trial",
+      "button": "Download the app"
+    }
+  },
+  "pricing": {
+    "header": {
+      "title": "Pricing",
+      "subtitle": "Choose the plan that fits you",
+      "note": "Core AI diagnosis features are available on every plan."
+    },
+    "plans": {
+      "price": "Free in beta",
+      "priceNote": "Official pricing to be announced",
+      "featuresLabel": "What's included",
+      "recommendedBadge": "Recommended",
+      "basic": {
+        "name": "Basic",
+        "description": "A starter plan for individual beekeepers",
+        "features": {
+          "0": "Feature 1",
+          "1": "Feature 2",
+          "2": "Feature 3"
+        },
+        "cta": "Get started"
+      },
+      "pro": {
+        "name": "Pro",
+        "description": "A premium plan for professional beekeepers",
+        "features": {
+          "0": "Feature 1",
+          "1": "Feature 2",
+          "2": "Feature 3",
+          "3": "Feature 4",
+          "4": "Feature 5"
+        },
+        "cta": "Get started"
+      },
+      "enterprise": {
+        "name": "Enterprise",
+        "description": "A custom plan for beekeeping co-ops and businesses",
+        "features": {
+          "0": "Feature 1",
+          "1": "Feature 2",
+          "2": "Feature 3",
+          "3": "Feature 4",
+          "4": "Feature 5",
+          "5": "Feature 6"
+        },
+        "cta": "Contact sales"
+      }
+    },
+    "compare": {
+      "title": "Detailed feature comparison",
+      "columns": {
+        "feature": "Item",
+        "basic": "Basic",
+        "pro": "Pro",
+        "enterprise": "Enterprise"
+      },
+      "rows": {
+        "feature1": {
+          "label": "Feature 1 (e.g. diagnoses)",
+          "basic": "10 / month",
+          "pro": "Unlimited",
+          "enterprise": "Unlimited"
+        },
+        "feature2": {
+          "label": "Feature 2 (e.g. analysis precision)",
+          "basic": "Standard",
+          "pro": "Precise",
+          "enterprise": "In-depth"
+        },
+        "feature3": {
+          "label": "Feature 3 (e.g. expert consultation)",
+          "basic": "-",
+          "pro": "Once / month",
+          "enterprise": "Unlimited"
+        },
+        "feature4": {
+          "label": "Feature 4 (e.g. data retention)",
+          "basic": "3 months",
+          "pro": "1 year",
+          "enterprise": "Unlimited"
+        }
+      }
+    },
+    "benefits": {
+      "title": "Included with every plan",
+      "benefit1": "Benefit 1",
+      "benefit2": "Benefit 2",
+      "benefit3": "Benefit 3"
+    },
+    "cta": {
+      "title": "Have you chosen a plan?",
+      "subtitle": "Try it free and experience the power of HelpBee",
+      "button": "Download the app"
+    }
+  },
+  "contact": {
+    "header": {
+      "title": "Contact Us",
+      "subtitle": "Have a question?"
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "searchPlaceholder": "Search questions...",
+      "empty": "No results found.",
+      "viewAll": "View all FAQs",
+      "items": {
+        "analyze": {
+          "q": "What does the AI diagnosis analyze?",
+          "a": "It analyzes the core indicators of hive health, including disease signs, pests (mites, moths, etc.), and queen bee condition."
+        },
+        "accuracy": {
+          "q": "How accurate are the diagnosis results?",
+          "a": "It delivers high accuracy through continuous learning from field data, and we recommend using the results as a reference guide."
+        },
+        "offline": {
+          "q": "Can I use it offline?",
+          "a": "You can take photos offline, and the analysis results sync once you have a network connection."
+        },
+        "free": {
+          "q": "Can I use it for free?",
+          "a": "It is free during the beta period. The official pricing plans will be announced later."
+        },
+        "privacy": {
+          "q": "Is my personal information and photo data safe?",
+          "a": "All data is encrypted and stored securely, and is never shared with third parties without your consent."
+        }
+      }
+    },
+    "direct": {
+      "title": "Contact Us Directly",
+      "subtitle": "HelpBee responds within 24 hours."
+    },
+    "channels": {
+      "chat": {
+        "title": "Live Chat",
+        "desc": "Instant response on weekdays 09:00 - 18:00",
+        "action": "Start chat"
+      },
+      "email": {
+        "title": "Email Inquiry",
+        "desc": "support@helpbee.com · Reply within 24 hours"
+      },
+      "phone": {
+        "title": "Phone Support",
+        "desc": "02-1234-5678 · Weekdays 08:00 - 18:00"
+      }
+    },
+    "form": {
+      "title": "Contact Us Directly",
+      "subtitle": "HelpBee responds within 24 hours.",
+      "name": {
+        "label": "Name"
+      },
+      "email": {
+        "label": "Email"
+      },
+      "type": {
+        "label": "Inquiry Type",
+        "options": {
+          "service": "Service inquiry",
+          "tech": "Technical support",
+          "plan": "Plan management",
+          "etc": "Other"
+        }
+      },
+      "message": {
+        "label": "Message",
+        "placeholder": "Feel free to write anything you'd like to ask."
+      },
+      "agree": {
+        "label": "I agree to the collection and use of my personal information.",
+        "link": "View details"
+      },
+      "submit": "Submit",
+      "success": "Your inquiry has been received. We'll reply within 24 hours.",
+      "error": "Failed to submit your inquiry. Please try again in a moment.",
+      "rateLimited": "Too many requests. Please try again in a moment."
+    },
+    "ctaBand": {
+      "title": "Get started with HelpBee today",
+      "subtitle": "Precisely diagnose your hive's health with just your smartphone.",
+      "button": "Download the app"
+    }
+  },
+  "download": {
+    "title": "Download the App",
+    "subtitle": "Install HelpBee now and diagnose your hive's health with your smartphone.",
+    "qrLabel": "QR code",
+    "note": "Available on iOS and Android. (Store links coming soon)"
+  },
+  "about": {
+    "title": "About Us",
+    "subtitle": "Making beekeeping easier and healthier through technology.",
+    "teamLabel": "Team image",
+    "blocks": [
+      {
+        "heading": "Mission",
+        "body": "(dummy) We help every beekeeper manage healthy hives based on data."
+      },
+      {
+        "heading": "Story",
+        "body": "(dummy) HelpBee is an AI diagnosis service born from real challenges in the field."
+      },
+      {
+        "heading": "Team",
+        "body": "(dummy) Experts in beekeeping, AI, and product work together."
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "updated": "Last updated: June 17, 2026",
+    "intro": "This is a dummy document for skeleton verification. Legal review is required before launch.",
+    "sections": [
+      {
+        "heading": "1. Personal data we collect",
+        "body": "(dummy) Email, name, service usage records, etc."
+      },
+      {
+        "heading": "2. Purpose of use",
+        "body": "(dummy) Service delivery, inquiry response, quality improvement."
+      },
+      {
+        "heading": "3. Retention period",
+        "body": "(dummy) Until the purpose is fulfilled or as required by law."
+      },
+      {
+        "heading": "4. Cookies and analytics",
+        "body": "(dummy) GA4/Hotjar are used only after consent and can be declined in browser settings."
+      },
+      {
+        "heading": "5. Data protection officer",
+        "body": "(dummy) support@helpbee.com"
+      }
+    ]
+  },
+  "terms": {
+    "title": "Terms of Service",
+    "updated": "Last updated: June 17, 2026",
+    "intro": "This is a dummy document for skeleton verification. Legal review is required before launch.",
+    "sections": [
+      {
+        "heading": "Article 1 (Purpose)",
+        "body": "(dummy) These terms govern the use of the HelpBee service."
+      },
+      {
+        "heading": "Article 2 (Definitions)",
+        "body": "(dummy) Definitions of terms such as service and user."
+      },
+      {
+        "heading": "Article 3 (Provision of service)",
+        "body": "(dummy) Provided free of charge during the beta period."
+      },
+      {
+        "heading": "Article 4 (Limitation of liability)",
+        "body": "(dummy) AI diagnosis results are for reference only and carry no legal liability."
+      },
+      {
+        "heading": "Article 5 (Governing law)",
+        "body": "(dummy) Governed by the laws of the Republic of Korea."
+      }
+    ]
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Guides and news about beekeeping, varroa mites, and AI diagnosis.",
+    "readMore": "Read more",
+    "backToList": "Back to list"
+  }
+}

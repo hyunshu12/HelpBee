@@ -95,3 +95,18 @@ def test_estimated_count_is_none_for_yolo():
     # AIHUB Q3=B — YOLO는 응애 개체 카운트 불가 → estimated_count None
     r = compute_risk(counts(normal=50, varroa=2, other=0))
     assert r.estimated_count is None
+
+
+def test_no_count_caveat_appended_when_room():
+    # estimated_count None(YOLO) + safe(2문구) → 자리 남음 → 데이터 정직성 안내 append
+    r = compute_risk(counts(normal=99, varroa=1, other=0))  # 1% safe
+    assert r.estimated_count is None
+    assert any("실측" in x for x in r.recommendations)
+    assert len(r.recommendations) <= 5
+
+
+def test_no_count_caveat_never_truncates_tier_copy():
+    # danger(4) + other_disease(자리 없음) → caveat 생략, 그래도 ≤5 유지
+    r = compute_risk(counts(normal=70, varroa=20, other=10))  # 20% danger + 질병
+    assert len(r.recommendations) <= 5
+    assert any("위험" in x for x in r.recommendations)

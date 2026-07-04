@@ -14,3 +14,4 @@ export * as accounts from './accounts';
 export * as auth from './auth';
 export * as auditLog from './auditLog';
 export * as admin from './admin';
+export * as inquiries from './inquiries';
