@@ -1,11 +1,16 @@
 {
   "extends": "@helpbee/config/typescript/nextjs.json",
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
-    }
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "allowJs": true,
+    "noEmit": true,
+    "moduleResolution": "node",
+    "isolatedModules": true
   },
   "include": [
     "next-env.d.ts",

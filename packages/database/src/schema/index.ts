@@ -14,3 +14,4 @@ export * from './analyses';
 export * from './recommendations';
 export * from './subscriptions';
 export * from './auditLog';
+export * from './inquiries';
