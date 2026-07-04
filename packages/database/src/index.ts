@@ -43,6 +43,9 @@ export type {
   SubscriptionStatus,
   AuditLog,
   NewAuditLog,
+  Inquiry,
+  NewInquiry,
+  InquiryStatus,
 } from './schema';
 
 // enum-like value arrays (런타임 사용)
@@ -52,4 +55,5 @@ export {
   RECOMMENDATION_SEVERITY_VALUES,
   SUBSCRIPTION_PLAN_VALUES,
   SUBSCRIPTION_STATUS_VALUES,
+  INQUIRY_STATUS_VALUES,
 } from './schema';

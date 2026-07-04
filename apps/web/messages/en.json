@@ -346,7 +346,9 @@
         "link": "View details"
       },
       "submit": "Submit",
-      "notImplemented": "Inquiry submission is currently being prepared. It will open soon."
+      "success": "Your inquiry has been received. We'll reply within 24 hours.",
+      "error": "Failed to submit your inquiry. Please try again in a moment.",
+      "rateLimited": "Too many requests. Please try again in a moment."
     },
     "ctaBand": {
       "title": "Get started with HelpBee today",

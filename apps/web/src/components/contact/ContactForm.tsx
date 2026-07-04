@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button, Input, Textarea, cn } from '@helpbee/ui';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
@@ -35,12 +35,14 @@ type FormValues = z.infer<typeof schema>;
 
 export function ContactForm() {
   const t = useTranslations('contact');
+  const locale = useLocale();
   const baseId = useId();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     // 모노레포에 zod3(web)·zod4(api)가 공존 → TS가 resolvers의 zod peer를 zod4로 해석해
@@ -57,11 +59,15 @@ export function ContactForm() {
       type: values.type,
       message: values.message,
       agree: values.agree,
+      locale,
     });
-    // submitInquiry는 현재 { ok:false, reason:'NOT_IMPLEMENTED' } — throw하지 않고 안내만.
-    if (!result.ok) {
-      setNotice(t('form.notImplemented'));
+    if (result.ok) {
+      setNotice({ tone: 'success', text: t('form.success') });
+      reset();
+      return;
     }
+    const text = result.reason === 'RATE_LIMITED' ? t('form.rateLimited') : t('form.error');
+    setNotice({ tone: 'error', text });
   });
 
   const labelClass = 'mb-2 block text-lg font-semibold text-bee-black';
@@ -178,9 +184,14 @@ export function ContactForm() {
       {notice ? (
         <p
           role="status"
-          className="rounded-2xl bg-surface-tip px-5 py-4 text-center text-lg text-bee-black"
+          className={cn(
+            'rounded-2xl px-5 py-4 text-center text-lg',
+            notice.tone === 'success'
+              ? 'bg-honey-100 text-bee-black'
+              : 'bg-red-50 text-red-700',
+          )}
         >
-          {notice}
+          {notice.text}
         </p>
       ) : null}
 
