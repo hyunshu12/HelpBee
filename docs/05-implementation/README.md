@@ -83,5 +83,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-04 | 실패 분석 재시도: `POST /analyses`가 같은 imageId의 failed 행을 제자리 재추론·UPDATE(id 보존, CAS) → 200, success는 멱등 유지 + 모바일 "다시 시도" 버튼 | #37 (예정, #36 스택) | [2026-07-04-analysis-retry.md](./2026-07-04-analysis-retry.md) |
 | 2026-07-04 | 첫 GitHub Actions CI 파이프라인(`.github/workflows/ci.yml`): node(type-check+api vitest)·ai(pytest)·mobile(analyze+test). 모든 스텝 develop 로컬 선검증 | #38 (예정) | [2026-07-04-ci-pipeline.md](./2026-07-04-ci-pipeline.md) |
 | 2026-07-04 | AI 회귀 fixture 게이트(P1-3): 서빙 경로 스냅샷 매니페스트(이미지 미커밋·라이선스) + `-m regression` 24케이스 + skip 규칙 | #39 (예정) | [2026-07-04-ai-regression-fixtures.md](./2026-07-04-ai-regression-fixtures.md) |
+| 2026-07-04 | dev 서버 .env 자동 로드 (api --env-file-if-exists / ai load_dotenv, 기존 env 우선) | #40 | [2026-07-04-dev-env-autoload.md](./2026-07-04-dev-env-autoload.md) |
 
 (새 기록 추가 시 위 표 갱신)

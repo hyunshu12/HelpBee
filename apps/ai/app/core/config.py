@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# apps/ai/.env 자동 로드 (이미 설정된 환경변수가 우선 — override=False 기본).
+# uvicorn을 어느 cwd에서 띄우든 config.py 기준으로 .env를 찾는다.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 @dataclass
