@@ -164,6 +164,22 @@
 
 ---
 
+## 5.5 문의 Inquiries (`/v1/inquiries`) — `apps/web` 문의 폼 전용
+
+| Method | Path | 인증 | 요청 | 성공 |
+|---|---|---|---|---|
+| POST | `/v1/inquiries` | 🔓 | `{ name(1~60), email, message(10~2000), locale?('ko'\|'en') }` (`.strict`) | **201** `{ id }` |
+
+- **익명 접수** — 로그인 불필요. 방문자 문의를 `inquiries` 테이블에 저장(운영자가 어드민에서 `status: new→answered→closed` 관리).
+- 응답은 `id`만 — 보낸 `message`를 echo하지 않음.
+- **레이트리밋 5/시간/IP**(스팸 방어) → 초과 시 `RATE_LIMITED`(429)+`Retry-After`.
+- **허니팟**: 요청 바디에 `website` 필드가 채워지면 봇으로 간주하고 **저장 없이 201 위장** 응답(탐지 은폐). 정상 폼은 이 필드를 보내지 않음.
+- 검증 실패는 zValidator 기본 400(`{ success:false, error }`) — 웹은 status로 분기(400=입력오류, 429=레이트리밋, ok=성공).
+- CORS: 웹 origin(`http://localhost:3000`, prod는 `https://helpbee.kr`)이 백엔드 `CORS_ALLOWLIST`에 있어야 브라우저에서 호출 가능(§7.2).
+- 이메일 알림/자동회신은 미구현(후속). audit_log 미기록(익명·비민감).
+
+---
+
 ## 6. 어드민 Admin (`/v1/admin`) — `apps/admin` 전용, 👑
 
 **admin 토큰 필요**: `role==='admin'` + 토큰 audience=admin. 일반 사용자 토큰으론 전부 **403 `FORBIDDEN_ROLE`**, 무인증은 401.
@@ -192,6 +208,7 @@
 | signup | 5/분/IP | `RATE_LIMITED`(429)+`Retry-After` |
 | login·refresh | 10/분/IP | 〃 |
 | presign | 30/분/user | 〃 |
+| inquiries(문의) | 5/시간/IP | 〃 |
 | 인증 사용자(전역) | 300/분/user | 〃 |
 - Redis 장애 시 **fail-closed**(429). 프론트는 429+Retry-After를 백오프 처리.
 
@@ -242,6 +259,7 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 | 영역 | 상태 | 프론트 영향 |
 |---|---|---|
 | Auth / Hives / Images(presign·confirm) / Subscriptions / Admin **계약** | ✅ 코드 완성·로컬 검증 | 그대로 붙이면 됨 |
+| **문의 폼(`POST /v1/inquiries`)** | ✅ **구현·라이브 검증**(2026-07-04) | `apps/web` 문의 폼이 실제로 접수됨(§5.5). 5/시간/IP 제한, 익명. 이전 "라우트 없음(404)" 해소 |
 | **AI 추론 실제 동작** | ❌ **아직 안 됨** | AI 서버 미기동 + YOLO 모델(`best.onnx`) 미배포. 현재 `POST /analyses`는 **graceful `status:'failed'`(200)** 로만 응답. 결과 화면은 `failed` 상태 처리 UI를 먼저 만들 것 |
 | **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, 백엔드에 발송 추가 후 테스트 |
 | **권장조치(recommendations) 응답** | ⚠️ 미반환 | 결과 화면 처방 문구 불가 — 백엔드 보강 선행 필요(§4) |
@@ -253,7 +271,7 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 ---
 
 ## 11. 참고
-- 라우트 구현: `apps/api/src/routes/{auth,hives,images,analyses,subscriptions,admin}.ts`
+- 라우트 구현: `apps/api/src/routes/{auth,hives,images,analyses,subscriptions,admin,inquiries}.ts`
 - 입력 스키마: `apps/api/src/schemas/*`
 - 에러 코드: `apps/api/src/lib/error-codes.ts`
 - 응답 봉투: `apps/api/src/lib/envelope.ts`, 에러: `apps/api/src/lib/problem.ts`

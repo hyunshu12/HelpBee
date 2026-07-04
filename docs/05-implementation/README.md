@@ -76,5 +76,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | #30 (머지) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
 | 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | #31 (머지) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
 | 2026-06-17 | 웹 프론트엔드 MVP(apps/web) + 디자인 시스템(@helpbee/ui): Figma 4페이지 + 법적/SEO/블로그, next-intl ko+en골격, S-Core Dream self-host, 25 SSG green | (예정) | [2026-06-17-web-frontend-mvp.md](./2026-06-17-web-frontend-mvp.md) |
+| 2026-07-04 | 문의 접수(Inquiries) E2E: DB 테이블+쿼리(0002 migration)·API 라우트(5/시간 IP·허니팟)·웹 폼 실제 연결. 라우트 404 해소, 라이브 검증(201/psql/429) | #41 (예정, #33 스택) | [2026-07-04-inquiries.md](./2026-07-04-inquiries.md) |
 
 (새 기록 추가 시 위 표 갱신)
