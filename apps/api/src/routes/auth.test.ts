@@ -42,6 +42,12 @@ function makeDeps(over: Partial<AuthDeps> = {}): AuthDeps {
     recordLoginFailure: vi.fn(async () => undefined),
     clearLoginFailures: vi.fn(async () => undefined),
     bumpSessions: vi.fn(async () => undefined),
+    sendVerificationEmail: vi.fn(async () => undefined),
+    verifyEmailToken: vi.fn(() => ({
+      ok: true as const,
+      payload: { sub: 'u1', em: 'a@b.com', exp: Math.floor(NOW / 1000) + 3600 },
+    })),
+    markEmailVerified: vi.fn(async () => undefined),
     audit: vi.fn(async () => undefined),
     now: vi.fn(() => NOW),
     ...over,
@@ -58,6 +64,10 @@ function makeApp(deps: AuthDeps, authedUserId = 'u1') {
     await next();
   });
   app.use('/me', async (c, next) => {
+    c.set('userId', authedUserId);
+    await next();
+  });
+  app.use('/resend-verification', async (c, next) => {
     c.set('userId', authedUserId);
     await next();
   });
@@ -274,5 +284,118 @@ describe('GET /me', () => {
     const res = await makeApp(deps, 'ghost').request('/me');
     expect(res.status).toBe(404);
     expect((await res.json()).code).toBe('AUTH_USER_NOT_FOUND');
+  });
+});
+
+describe('POST /signup — verification email', () => {
+  it('sends verification email on success', async () => {
+    const deps = makeDeps();
+    const res = await post(makeApp(deps), '/signup', {
+      email: 'new@ex.com',
+      password: '0123456789',
+      name: 'n',
+    });
+    expect(res.status).toBe(201);
+    expect(deps.sendVerificationEmail).toHaveBeenCalledOnce();
+  });
+
+  it('201 even if sender throws (email send never fails signup)', async () => {
+    const deps = makeDeps({
+      sendVerificationEmail: vi.fn(async () => {
+        throw new Error('resend down');
+      }),
+    });
+    const res = await post(makeApp(deps), '/signup', {
+      email: 'new@ex.com',
+      password: '0123456789',
+      name: 'n',
+    });
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('GET /verify-email', () => {
+  function verifiedUser(over = {}) {
+    return { ...userFixture({ email: 'a@b.com' }), ...over };
+  }
+
+  it('200 sets verified + audits on valid token (unverified user)', async () => {
+    const deps = makeDeps({
+      getActiveUserById: vi.fn(async () => verifiedUser({ emailVerifiedAt: null })),
+    });
+    const res = await makeApp(deps).request('/verify-email?token=good');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/text\/html/);
+    expect(await res.text()).toContain('인증이 완료');
+    expect(deps.markEmailVerified).toHaveBeenCalledWith('u1');
+    expect(deps.audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auth.email_verified' }),
+    );
+  });
+
+  it('idempotent: already-verified user → 200 success, no re-mark', async () => {
+    const deps = makeDeps({
+      getActiveUserById: vi.fn(async () => verifiedUser({ emailVerifiedAt: new Date() })),
+    });
+    const res = await makeApp(deps).request('/verify-email?token=good');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('인증이 완료');
+    expect(deps.markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it('410 expired token → expired page', async () => {
+    const deps = makeDeps({
+      verifyEmailToken: vi.fn(() => ({ ok: false as const, reason: 'expired' as const })),
+    });
+    const res = await makeApp(deps).request('/verify-email?token=old');
+    expect(res.status).toBe(410);
+    expect(await res.text()).toContain('만료');
+    expect(deps.markEmailVerified).not.toHaveBeenCalled();
+  });
+
+  it('400 invalid signature → invalid page', async () => {
+    const deps = makeDeps({
+      verifyEmailToken: vi.fn(() => ({ ok: false as const, reason: 'invalid' as const })),
+    });
+    const res = await makeApp(deps).request('/verify-email?token=bad');
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('올바르지 않');
+  });
+
+  it('400 email mismatch (token em != current email) → invalid', async () => {
+    const deps = makeDeps({
+      getActiveUserById: vi.fn(async () => verifiedUser({ email: 'changed@ex.com' })),
+    });
+    const res = await makeApp(deps).request('/verify-email?token=good');
+    expect(res.status).toBe(400);
+    expect(deps.markEmailVerified).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /resend-verification', () => {
+  it('200 {sent:true} sends when unverified', async () => {
+    const deps = makeDeps({
+      getActiveUserById: vi.fn(async () => userFixture({ emailVerifiedAt: null })),
+    });
+    const res = await post(makeApp(deps, 'u1'), '/resend-verification', {});
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ sent: true });
+    expect(deps.sendVerificationEmail).toHaveBeenCalledOnce();
+  });
+
+  it('409 AUTH_EMAIL_ALREADY_VERIFIED when already verified (no send)', async () => {
+    const deps = makeDeps({
+      getActiveUserById: vi.fn(async () => userFixture({ emailVerifiedAt: new Date() })),
+    });
+    const res = await post(makeApp(deps, 'u1'), '/resend-verification', {});
+    expect(res.status).toBe(409);
+    expect((await res.json()).code).toBe('AUTH_EMAIL_ALREADY_VERIFIED');
+    expect(deps.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it('404 when user missing', async () => {
+    const deps = makeDeps({ getActiveUserById: vi.fn(async () => undefined) });
+    const res = await post(makeApp(deps, 'ghost'), '/resend-verification', {});
+    expect(res.status).toBe(404);
   });
 });

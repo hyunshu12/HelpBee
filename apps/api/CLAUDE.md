@@ -180,6 +180,8 @@ app.use('/admin/*', requireAuth(), requireRole('admin'));
 | POST | `/v1/auth/refresh` | 🔓* | refresh token으로 access 재발급(회전) |
 | POST | `/v1/auth/logout` | 🔐 | 현재 refresh 폐기 |
 | GET  | `/v1/auth/me` | 🔐 | 현재 사용자 프로필 |
+| GET  | `/v1/auth/verify-email?token=` | 🔓 | 이메일 인증 링크(HTML 성공/만료/무효, IP 30/min). stateless HMAC 토큰 검증 → `email_verified_at` set |
+| POST | `/v1/auth/resend-verification` | 🔐 | 인증 메일 재발송(3회/시간/user). 이미 인증 시 409 `AUTH_EMAIL_ALREADY_VERIFIED` |
 
 *refresh는 헤더가 아닌 body로 전달.
 
@@ -325,6 +327,8 @@ pnpm --filter api dev      # tsx watch + .env.local 로드
 ```
 
 기본 포트: `3001` (`src/index.ts`의 `PORT ?? 3001`). health check: `GET http://localhost:3001/health`. Bruno 환경(`bruno/environments/local.bru`)도 동일 포트로 맞출 것.
+
+**이메일 인증 env (P1-4, `config/env.ts`)**: `EMAIL_PROVIDER`(`console`|`resend`, 기본 `console`) · `RESEND_API_KEY`(resend일 때만 필수 — zod refine, 빈 문자열=미설정) · `EMAIL_FROM`(기본 `HelpBee <onboarding@resend.dev>`) · `EMAIL_VERIFY_BASE_URL`(기본 `http://localhost:3001`). 로컬은 `console`로 두면 인증 URL이 pino 로그로 찍힌다(`EMAIL_PROVIDER=console pnpm dev`). production+console이면 부팅 시 경고 로그. 미검증 Resend 도메인은 **계정 소유자 주소로만** 발송 가능(그 외는 403). 토큰은 stateless HMAC(JWT_SECRET, purpose `email-verify:`) — DB 테이블/마이그레이션 없음.
 
 ### Bruno
 

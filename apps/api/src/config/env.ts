@@ -34,6 +34,15 @@ const envSchema = z
     WEBHOOK_HMAC_SECRET: z.string().min(32).optional(), // 결제 webhook 서명(§11.4). 미설정 시 WEBHOOK_DISABLED.
     SUBSCRIPTION_WEBHOOK_ENABLED: z.coerce.boolean().default(false), // MVP inert 기본
     SENTRY_DSN: z.string().optional(),
+    // 이메일 인증 발송(P1-4). console=로그만(로컬 기본) / resend=Resend REST API.
+    EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
+    // 빈 문자열은 미설정으로 취급(refine에서 resend일 때만 필수).
+    RESEND_API_KEY: z
+      .string()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    EMAIL_FROM: z.string().min(1).default('HelpBee <onboarding@resend.dev>'),
+    EMAIL_VERIFY_BASE_URL: z.string().min(1).default('http://localhost:3001'),
     AWS_REGION: z.string().min(1).default('ap-northeast-2'),
     S3_IMAGES_BUCKET: z.string().min(1),
     PORT: z.coerce.number().int().positive().default(3001),
@@ -55,6 +64,13 @@ const envSchema = z
         code: 'custom',
         message: 'AI_INTERNAL_HMAC_SECRET must differ from JWT_SECRET',
         path: ['AI_INTERNAL_HMAC_SECRET'],
+      });
+    }
+    if (v.EMAIL_PROVIDER === 'resend' && !v.RESEND_API_KEY) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'RESEND_API_KEY is required when EMAIL_PROVIDER=resend',
+        path: ['RESEND_API_KEY'],
       });
     }
   });

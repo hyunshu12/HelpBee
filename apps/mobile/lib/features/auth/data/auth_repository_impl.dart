@@ -82,6 +82,9 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<MeResult> me() => _api.me();
 
   @override
+  Future<void> resendVerification() => _api.resendVerification();
+
+  @override
   Future<bool> tryRestoreSession() async {
     final refresh = await _tokens.readRefresh();
     if (refresh == null || refresh.isEmpty) return false;

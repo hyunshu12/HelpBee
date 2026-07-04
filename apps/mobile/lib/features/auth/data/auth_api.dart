@@ -76,6 +76,18 @@ class AuthApi {
     });
   }
 
+  /// POST /v1/auth/resend-verification (auth) -> { sent: true }.
+  ///
+  /// Re-sends the email-verification link to the current user. Backend returns
+  /// 409 `AUTH_EMAIL_ALREADY_VERIFIED` if already verified, and enforces
+  /// 3/hour/user rate limiting (429 `RATE_LIMITED`). Both surface as a typed
+  /// [AppException] via [_guard].
+  Future<void> resendVerification() async {
+    return _guard(() async {
+      await _dio.post<dynamic>(_path('/resend-verification'), data: const {});
+    });
+  }
+
   /// GET /v1/auth/me (auth) -> { user, subscription }.
   Future<MeResult> me() async {
     return _guard(() async {

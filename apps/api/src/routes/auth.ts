@@ -14,6 +14,7 @@ import { created, ok } from '../lib/envelope';
 import { AppError } from '../lib/error-codes';
 import { problem } from '../lib/problem';
 import { loginSchema, logoutSchema, refreshSchema, signupSchema, toPublicUser } from '../schemas/auth';
+import { renderVerifyEmailResultPage } from '../services/email-service';
 
 const ACCESS_EXPIRES_IN = 900; // 15m (응답 expiresIn 고지용)
 const REFRESH_GRACE_SEC = 10; // 동시 refresh 오탐 방지(§8.4 grace window)
@@ -65,6 +66,12 @@ export type AuthDeps = {
   clearLoginFailures(input: { email: string; ip: string }): Promise<void>;
   // sessions marker (Redis)
   bumpSessions(userId: string): Promise<void>;
+  // email verification (P1-4) — 발송/검증/마킹. 발송은 절대 흐름을 깨지 않음(라우트가 try/catch).
+  sendVerificationEmail(user: { id: string; email: string }): Promise<void>;
+  verifyEmailToken(token: string):
+    | { ok: true; payload: { sub: string; em: string; exp: number } }
+    | { ok: false; reason: 'invalid' | 'expired' };
+  markEmailVerified(userId: string): Promise<void>;
   // audit (best-effort)
   audit(entry: {
     actorId: string | null;
@@ -127,6 +134,13 @@ export function authRoutes(deps: AuthDeps) {
       ip,
       userAgent: ua,
     });
+
+    // 인증 메일 발송 — 실패해도 201을 막지 않는다(발송은 부가효과, catch-all).
+    try {
+      await deps.sendVerificationEmail({ id: user.id, email: user.email });
+    } catch {
+      /* best-effort: 발송 실패는 signup을 실패시키지 않음 */
+    }
 
     return created(c, {
       user: toPublicUser(user),
@@ -289,6 +303,68 @@ export function authRoutes(deps: AuthDeps) {
       });
     }
     return ok(c, { revoked: true });
+  });
+
+  // GET /verify-email?token= (🔓) — 이메일 링크에서 브라우저로 진입. 항상 HTML(성공/만료/무효).
+  app.get('/verify-email', async (c) => {
+    const token = c.req.query('token') ?? '';
+    const ip = clientIp(c);
+    const ua = c.req.header('user-agent') ?? null;
+
+    const result = deps.verifyEmailToken(token);
+    if (!result.ok) {
+      const state = result.reason === 'expired' ? 'expired' : 'invalid';
+      return c.html(renderVerifyEmailResultPage(state), state === 'expired' ? 410 : 400);
+    }
+
+    const user = await deps.getActiveUserById(result.payload.sub);
+    // 사용자 없음(탈퇴/차단) 또는 이메일 불일치(가입 후 이메일 변경) → 무효 처리.
+    if (!user || user.email.toLowerCase() !== result.payload.em.toLowerCase()) {
+      return c.html(renderVerifyEmailResultPage('invalid'), 400);
+    }
+
+    // 멱등: 이미 인증된 계정은 재마킹/재감사 없이 동일 성공 페이지.
+    if (user.emailVerifiedAt == null) {
+      await deps.markEmailVerified(user.id);
+      await deps.audit({
+        actorId: user.id,
+        action: 'auth.email_verified',
+        entity: 'user',
+        entityId: user.id,
+        metadata: {},
+        ip,
+        userAgent: ua,
+      });
+    }
+    return c.html(renderVerifyEmailResultPage('success'), 200);
+  });
+
+  // POST /resend-verification (🔐) — requireAuth + 3회/시간/user 레이트리밋은 app.ts에서 마운트.
+  app.post('/resend-verification', async (c) => {
+    const userId = c.get('userId') as string;
+    const ip = clientIp(c);
+    const ua = c.req.header('user-agent') ?? null;
+
+    const user = await deps.getActiveUserById(userId);
+    if (!user) return problem(c, 'AUTH_USER_NOT_FOUND');
+    // 이미 인증됨 → 409(재발송 불필요를 명시). 모바일은 이 코드로 "이미 인증됨" 안내.
+    if (user.emailVerifiedAt != null) return problem(c, 'AUTH_EMAIL_ALREADY_VERIFIED');
+
+    try {
+      await deps.sendVerificationEmail({ id: user.id, email: user.email });
+    } catch {
+      /* best-effort: 발송 실패해도 200(사용자에게 재시도 여지) */
+    }
+    await deps.audit({
+      actorId: userId,
+      action: 'auth.verification_resent',
+      entity: 'user',
+      entityId: userId,
+      metadata: {},
+      ip,
+      userAgent: ua,
+    });
+    return ok(c, { sent: true });
   });
 
   // GET /me (200) — requireAuth는 app.ts에서 마운트.
