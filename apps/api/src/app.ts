@@ -61,6 +61,10 @@ export function createApp() {
     },
     findSuccessByImage: (imageId, userId) =>
       queries.analyses.findSuccessAnalysisByImage(db, imageId, userId),
+    findFailedByImage: async (imageId, userId) => {
+      const row = await queries.analyses.findFailedAnalysisByImage(db, imageId, userId);
+      return row ? { id: row.id } : undefined;
+    },
     getEmailVerifiedAt: async (userId) =>
       (await queries.accounts.getUserById(db, userId))?.emailVerifiedAt ?? null,
     getPlan: async (userId) =>
@@ -80,6 +84,14 @@ export function createApp() {
       queries.analyses.createSingleAnalysis(db, {
         hiveId: input.hiveId,
         imageId: input.imageId,
+        modelId: input.modelId,
+        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
+        analysis: input.analysis as never,
+        recommendations: input.recommendations,
+      }),
+    retryAnalysis: (input) =>
+      queries.analyses.retryFailedAnalysis(db, {
+        analysisId: input.analysisId,
         modelId: input.modelId,
         // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
         analysis: input.analysis as never,

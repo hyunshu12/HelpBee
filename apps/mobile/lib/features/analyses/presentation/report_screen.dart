@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
+import '../../../core/errors/app_exception.dart';
+import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/recommendations.dart';
 import '../../../core/risk/risk_tier.dart';
 import '../../../core/routing/route_paths.dart';
@@ -14,6 +16,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/risk_gauge.dart';
 import '../../../shared/widgets/secondary_button.dart';
+import '../data/analyses_api.dart';
 import '../data/analysis_dto.dart';
 import 'analysis_flow_args.dart';
 
@@ -130,7 +133,8 @@ class ReportScreen extends ConsumerWidget {
                     if (success && tier != RiskTier.unknown)
                       _RecommendationsCard(items: _recommendations(l10n, tier))
                     else
-                      _FailedNoticeCard(message: l10n.errAiUnavailable),
+                      // 실패 상태: 사유 안내 + "다시 시도"(같은 이미지 재분석).
+                      _RetrySection(args: args),
                   ],
                 ),
               ),
@@ -371,6 +375,74 @@ class _FailedNoticeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Failed-state block: the graceful "couldn't finish" notice + a 다시 시도
+/// button. Retry re-POSTs `/v1/analyses` with the SAME (hiveId, imageId); the
+/// backend re-runs inference and updates the failed row in place (same id),
+/// then we replace this screen with the refreshed report. A retry that fails
+/// again just lands on another failed report (this same UI). Errors before the
+/// result (network/quota) surface as a snackbar, keeping the report on screen.
+class _RetrySection extends ConsumerStatefulWidget {
+  const _RetrySection({required this.args});
+
+  final ReportArgs args;
+
+  @override
+  ConsumerState<_RetrySection> createState() => _RetrySectionState();
+}
+
+class _RetrySectionState extends ConsumerState<_RetrySection> {
+  bool _loading = false;
+
+  Analysis get _a => widget.args.analysis;
+
+  Future<void> _retry() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(analysesApiProvider)
+          .create(hiveId: _a.hiveId, imageId: _a.imageId);
+      // The retried row replaced the failed one in place; refresh per-hive
+      // caches so the home card + detail timeline reflect the new result.
+      ref.invalidate(latestAnalysisProvider(_a.hiveId));
+      ref.invalidate(hiveAnalysesProvider(_a.hiveId));
+      if (!mounted) return;
+      context.pushReplacement(
+        RoutePaths.report,
+        extra: ReportArgs(
+          analysis: result,
+          hiveName: widget.args.hiveName,
+          imagePath: widget.args.imagePath,
+        ),
+      );
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(appErrorMessage(l10n, e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      children: [
+        _FailedNoticeCard(message: l10n.errAiUnavailable),
+        AppSpacing.gapMd,
+        PrimaryButton(
+          label: l10n.commonRetry,
+          onPressed: _loading ? null : _retry,
+          loading: _loading,
+        ),
+      ],
     );
   }
 }
