@@ -37,6 +37,16 @@ abstract class AuthRepository {
   /// Fetches the current user + subscription. Requires a valid session.
   Future<MeResult> me();
 
+  /// Re-sends the email-verification link to the current user. Requires a valid
+  /// session. Throws [AppException] on failure — this resolves the
+  /// `authEmailNotVerified` gate on POST /v1/analyses.
+  /// `AUTH_EMAIL_ALREADY_VERIFIED` (409) and `RATE_LIMITED` (429, 3/hour)
+  /// surface as typed exceptions.
+  ///
+  /// Follow-up: wire a "인증 메일 다시 받기" action into the analyses error-state
+  /// UI where `authEmailNotVerified` is shown.
+  Future<void> resendVerification();
+
   /// Attempts to silently restore a session on app launch using the persisted
   /// refresh token (single-flight refresh -> /me).
   ///

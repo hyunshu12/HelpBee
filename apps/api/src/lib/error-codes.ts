@@ -17,6 +17,7 @@ export const ERROR_CATALOG = {
   AUTH_ACCOUNT_LOCKED: { status: 429, title: 'Account locked' },
   AUTH_USER_NOT_FOUND: { status: 404, title: 'User not found' },
   AUTH_EMAIL_NOT_VERIFIED: { status: 403, title: 'Email not verified' },
+  AUTH_EMAIL_ALREADY_VERIFIED: { status: 409, title: 'Email already verified' },
   FORBIDDEN: { status: 403, title: 'Forbidden' },
   FORBIDDEN_ROLE: { status: 403, title: 'Forbidden' },
   ADMIN_SELF_DEMOTE_FORBIDDEN: { status: 409, title: 'Cannot remove last admin' },

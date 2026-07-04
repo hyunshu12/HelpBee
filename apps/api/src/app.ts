@@ -19,7 +19,7 @@ import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
 import { requireAuth, requireAdmin } from './middleware/auth';
 import { corsMiddleware } from './middleware/cors';
-import { loggerMiddleware } from './middleware/logger';
+import { logger, loggerMiddleware } from './middleware/logger';
 import { rateLimit } from './middleware/rate-limit';
 import { requestId } from './middleware/request-id';
 import { webhookSignatureGuard } from './middleware/webhook-signature';
@@ -32,6 +32,12 @@ import { inquiriesRoutes, type InquiriesDeps } from './routes/inquiries';
 import { subscriptionsRoutes, type SubscriptionsDeps } from './routes/subscriptions';
 import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
+import {
+  buildVerifyUrl,
+  createEmailSender,
+  signEmailVerifyToken,
+  verifyEmailVerifyToken,
+} from './services/email-service';
 import {
   generateRefreshToken,
   hashRefreshToken,
@@ -53,6 +59,17 @@ export function createApp() {
     http,
   });
   const bucket = env.S3_IMAGES_BUCKET;
+
+  // 이메일 인증 발송(P1-4). provider=console(로그) / resend(REST). prod+console 경고.
+  const emailSender = createEmailSender({
+    provider: env.EMAIL_PROVIDER,
+    resendApiKey: env.RESEND_API_KEY,
+    from: env.EMAIL_FROM,
+    log: logger,
+  });
+  if (env.NODE_ENV === 'production' && env.EMAIL_PROVIDER === 'console') {
+    logger.warn({}, '[email] EMAIL_PROVIDER=console in production — verification emails are NOT delivered');
+  }
 
   const analysesDeps: AnalysesDeps = {
     getImageForUser: async (imageId, userId) => {
@@ -157,6 +174,13 @@ export function createApp() {
         .then(() => undefined),
     clearLoginFailures: ({ email, ip }) => accountProtection.clearFailures(redis, { email, ip }),
     bumpSessions: (userId) => bumpSessionsValidAfter(redis, userId),
+    sendVerificationEmail: async ({ id, email }) => {
+      const token = signEmailVerifyToken(env.JWT_SECRET, { userId: id, email });
+      const verifyUrl = buildVerifyUrl(env.EMAIL_VERIFY_BASE_URL, token);
+      await emailSender.sendVerification({ to: email, verifyUrl });
+    },
+    verifyEmailToken: (token) => verifyEmailVerifyToken(env.JWT_SECRET, token),
+    markEmailVerified: (userId) => queries.accounts.markEmailVerified(db, userId),
     audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
     now: () => Date.now(),
   };
@@ -249,13 +273,27 @@ export function createApp() {
   const ipLimit = (prefix: string, limit: number) =>
     rateLimit({ redis, limit, windowSec: 60, prefix, keyFn: (c) => getClientIp(c) });
 
-  // Auth: signup/login/refresh 공개(+IP 레이트리밋), logout/me만 보호.
+  // Auth: signup/login/refresh/verify-email 공개(+IP 레이트리밋), logout/me/resend 보호.
   const authApp = new Hono();
   authApp.use('/signup', ipLimit('signup', 5));
   authApp.use('/login', ipLimit('auth', 10));
   authApp.use('/refresh', ipLimit('auth', 10));
+  // verify-email: 공개 GET(이메일 링크). 토큰 brute-force 방어로 IP 레이트리밋만.
+  authApp.use('/verify-email', ipLimit('verify-email', 30));
   authApp.use('/logout', protectedAuth);
   authApp.use('/me', protectedAuth);
+  // resend-verification: 보호 + 3회/시간/user(발송 남용 방지). auth→limiter 순서(userId 키).
+  authApp.use('/resend-verification', protectedAuth);
+  authApp.use(
+    '/resend-verification',
+    rateLimit({
+      redis,
+      limit: 3,
+      windowSec: 3600,
+      prefix: 'resend-verify',
+      keyFn: (c) => (c.get('userId') as string | undefined) ?? 'anon',
+    }),
+  );
   authApp.route('/', authRoutes(authDeps));
 
   // Subscriptions: /plans 공개, /me 보호, /webhook 서명 가드(인증 대신).

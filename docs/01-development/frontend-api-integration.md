@@ -54,6 +54,8 @@
 | POST | `/v1/auth/refresh` | 🔓 | `{ refreshToken }` | **200** `{ accessToken, refreshToken, expiresIn:900 }` |
 | POST | `/v1/auth/logout` | 🔐 | `{ refreshToken }` | **200** `{ revoked:true }` |
 | GET | `/v1/auth/me` | 🔐 | — | **200** `{ user, subscription:{ plan, status } }` |
+| GET | `/v1/auth/verify-email?token=` | 🔓 | (쿼리 `token`) | **200/410/400 HTML** (성공/만료/무효). 이메일 링크 클릭 → 브라우저 표시. `email_verified_at` set(멱등). 앱이 직접 호출할 일 없음 |
+| POST | `/v1/auth/resend-verification` | 🔐 | — | **200** `{ sent:true }`. 이미 인증 시 **409** `AUTH_EMAIL_ALREADY_VERIFIED`, 3회/시간/user 초과 시 **429** `RATE_LIMITED` |
 
 - **입력 규칙**: `email`(정규화됨), `password` signup은 **10자 이상**·128 이하, `name` 1~60.
 - **`user` (PublicUser)** — 비밀번호 해시 절대 미포함:
@@ -267,13 +269,13 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 |---|---|---|
 | Auth / Hives / Images(presign·confirm) / Subscriptions / Admin **계약** | ✅ 코드 완성·로컬 검증 | 그대로 붙이면 됨 |
 | **AI 추론 실제 동작** | ✅ **로컬 동작 (2026-07-04 확인)** | AI 서버(:8000, `.env` 로드 필수) + YOLO v0.1.0 ONNX(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`)로 presign→S3→confirm→`POST /analyses` E2E 성공(응애 샘플 risk 70/warning, 197ms). ⚠️ 단, **AI 실패로 `status:'failed'` 저장된 이미지는 재분석 불가**(UNIQUE 제약 + 기존 row 반환) — `failed` 상태 UI는 여전히 필요, 재시도 경로는 루트 CLAUDE.md P0-1 |
-| **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, **시드 계정**(`beekeeper1@helpbee.local` / `helpbee-dev-2026`, verified 상태) 사용 |
+| **이메일 인증 발송** | ✅ **구현·라이브 검증**(2026-07-05, P1-4) | signup 시 인증 메일 발송 → 링크 클릭 → `GET /v1/auth/verify-email`로 `email_verified` set → 분석 게이트 통과(라이브 확인: verify→`me.emailVerified:true`→`POST /analyses` 403 아님). provider `console`(로그 URL, 로컬 기본) / `resend`(실발송, 라이브 messageId 확인). 미인증 사용자는 `POST /v1/auth/resend-verification`으로 재발송(409/429 처리). 개발 우회(DB 수동 set·시드 계정)는 여전히 가능 |
 | **권장조치(recommendations) 응답** | ✅ 반환 | `POST /analyses`·`GET /analyses/:id`가 `recommendations[{order,content,severity}]` 포함(목록은 미포함). 결과 화면 처방 문구 표시 가능(§4) |
 | **문의 폼(`POST /v1/inquiries`)** | ✅ **구현·라이브 검증**(2026-07-04) | `apps/web` 문의 폼이 실제로 접수됨(§5.5). 5/시간/IP 제한, 익명, 허니팟. 이전 "라우트 없음(404)" 해소 |
 | **인프라 배포(staging/prod)** | 🔴 미배포 | 원격 base URL 없음. 현재 **localhost:3001** 만. 배포 후 환경별 URL 주입 |
 | **결제** | 🟡 inert | 전원 무료. 유료 UI는 표시만(`/plans`) |
 
-> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드/AI 분석(로컬)/문의 접수/**권장조치 반환** 모두 동작. 남은 프론트 차단 요소는 이메일 인증 발송뿐. 서버 기동 시 `.env` 수동 로드 필요(자동 로드는 PR #40).
+> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드/AI 분석(로컬)/문의 접수/**권장조치 반환**/**이메일 인증 발송** 모두 동작. 백엔드 P0~P1 프론트 차단 요소는 모두 해소됨. 남은 것은 인프라 배포(원격 URL). 서버 기동 시 `.env`는 dev 스크립트가 자동 로드(PR #40).
 
 ---
 
