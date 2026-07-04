@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-honey-50 text-bee-black antialiased;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 1.125rem; /* 18px base — 장년층 가독성 */
+    line-height: 1.6;
+  }
+}

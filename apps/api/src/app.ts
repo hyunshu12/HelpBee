@@ -28,6 +28,7 @@ import { analysesRoutes, type AnalysesDeps } from './routes/analyses';
 import { authRoutes, type AuthDeps } from './routes/auth';
 import { hivesRoutes, type HivesDeps } from './routes/hives';
 import { imagesRoutes, type ImagesDeps } from './routes/images';
+import { inquiriesRoutes, type InquiriesDeps } from './routes/inquiries';
 import { subscriptionsRoutes, type SubscriptionsDeps } from './routes/subscriptions';
 import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
@@ -60,6 +61,10 @@ export function createApp() {
     },
     findSuccessByImage: (imageId, userId) =>
       queries.analyses.findSuccessAnalysisByImage(db, imageId, userId),
+    findFailedByImage: async (imageId, userId) => {
+      const row = await queries.analyses.findFailedAnalysisByImage(db, imageId, userId);
+      return row ? { id: row.id } : undefined;
+    },
     getEmailVerifiedAt: async (userId) =>
       (await queries.accounts.getUserById(db, userId))?.emailVerifiedAt ?? null,
     getPlan: async (userId) =>
@@ -84,9 +89,20 @@ export function createApp() {
         analysis: input.analysis as never,
         recommendations: input.recommendations,
       }),
+    retryAnalysis: (input) =>
+      queries.analyses.retryFailedAnalysis(db, {
+        analysisId: input.analysisId,
+        modelId: input.modelId,
+        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
+        analysis: input.analysis as never,
+        recommendations: input.recommendations,
+      }),
     listForUser: (hiveId, userId, opts) =>
       queries.analyses.listAnalysesByHiveForUser(db, hiveId, userId, opts),
     getByIdForUser: (id, userId) => queries.analyses.getAnalysisByIdForUser(db, id, userId),
+    getRecommendations: async (analysisId) =>
+      (await queries.analyses.listRecommendationsByAnalysisIds(db, [analysisId])).get(analysisId) ??
+      [],
     getTrend: (hiveId, userId, from, to) => queries.hives.getHiveTrend(db, hiveId, userId, from, to),
   };
 
@@ -183,6 +199,10 @@ export function createApp() {
     audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
   };
 
+  const inquiriesDeps: InquiriesDeps = {
+    create: (input) => queries.inquiries.createInquiry(db, input),
+  };
+
   const adminDeps: AdminDeps = {
     listUsers: (opts) => queries.admin.listUsers(db, opts),
     patchUser: async (input) => {
@@ -250,6 +270,14 @@ export function createApp() {
   );
   subsApp.route('/', subscriptionsRoutes(subscriptionsDeps));
 
+  // Inquiries: 익명 공개 라우트. 남용 방지로 5회/시간/IP(브루트포스/스팸 방어). fail-closed.
+  const inquiriesApp = new Hono();
+  inquiriesApp.use(
+    '*',
+    rateLimit({ redis, limit: 5, windowSec: 3600, prefix: 'inquiries', keyFn: (c) => getClientIp(c) }),
+  );
+  inquiriesApp.route('/', inquiriesRoutes(inquiriesDeps));
+
   // Admin: requireAuth + requireAdmin(role + audience) 단일 마운트(§12.1).
   const adminApp = new Hono();
   adminApp.use('*', protectedAuth);
@@ -267,6 +295,7 @@ export function createApp() {
 
   app.route('/v1/auth', authApp);
   app.route('/v1/subscriptions', subsApp);
+  app.route('/v1/inquiries', inquiriesApp);
   app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
   app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));

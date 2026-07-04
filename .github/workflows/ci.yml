@@ -1,0 +1,112 @@
+name: CI
+
+# HelpBee 첫 CI 파이프라인 (P2-2).
+# 각 스텝은 develop 기준으로 로컬에서 먼저 통과 확인한 명령만 넣는다.
+# 구현 기록: docs/05-implementation/2026-07-04-ci-pipeline.md
+on:
+  pull_request:
+    branches: [develop, main]
+    paths-ignore:
+      - '**.md'
+      - '.env.example'
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '**.md'
+      - '.env.example'
+
+# 같은 브랜치/PR에서 새 커밋이 오면 진행 중인 실행 취소
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── TypeScript 워크스페이스 (type-check + api 테스트) ───────────────
+  # lint 는 어떤 워크스페이스에도 eslint/eslintrc 가 설치돼 있지 않아 제외.
+  # ui/admin/web type-check 은 develop 기준 tsconfig 설정이 깨져 있어 제외
+  #   (상세: 구현 기록 "제외 항목").
+  node:
+    name: Node (type-check + api test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check @helpbee/types
+        run: pnpm --filter @helpbee/types type-check
+
+      - name: Type-check @helpbee/database
+        run: pnpm --filter @helpbee/database type-check
+
+      - name: Type-check @helpbee/api
+        run: pnpm --filter @helpbee/api type-check
+
+      - name: Test @helpbee/api
+        run: pnpm --filter @helpbee/api test
+
+  # ── AI 서비스 (FastAPI, pytest) ────────────────────────────────────
+  # requirements.txt 는 CPU 전용(torch 없음) — onnxruntime/numpy/pillow/boto3.
+  # requirements-dev.txt 가 requirements.txt + pytest(-asyncio) 를 포함.
+  ai:
+    name: AI (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: apps/ai/requirements-dev.txt
+
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+  # ── Flutter 모바일 ─────────────────────────────────────────────────
+  # dart format 은 develop 기준 47/84 파일이 미포맷이라 --set-exit-if-changed 제외.
+  # flutter test 는 로컬(macOS)에서 objective_c 네이티브 훅(xcrun) 때문에만 실패 —
+  #   ubuntu 러너에선 해당 darwin 훅이 빌드되지 않으므로 포함하되 "CI 미검증" 표시.
+  mobile:
+    name: Mobile (analyze + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.38.6
+          channel: stable
+          cache: true
+
+      - name: Install deps
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
