@@ -18,15 +18,30 @@ import '../data/analysis_dto.dart';
 import 'analysis_flow_args.dart';
 
 /// 레포트 (Figma 24:12): the diagnosis result. Risk gauge + tier title +
-/// analyzed-photo card + recommended actions (client-side, tier-based — the
-/// backend does not return them yet). A `failed` analysis shows a graceful
-/// "couldn't finish" state instead of a score.
+/// analyzed-photo card + recommended actions. Recommendations come from the
+/// backend (`analysis.recommendations`, with per-item severity); when absent
+/// (e.g. a list-sourced row that omits them) we fall back to client-side,
+/// tier-based copy. A `failed` analysis shows a graceful "couldn't finish"
+/// state instead of a score.
 class ReportScreen extends ConsumerWidget {
   const ReportScreen({super.key, required this.args});
 
   final ReportArgs args;
 
   Analysis get _a => args.analysis;
+
+  /// Backend recommendations (with severity) when present; otherwise fall back
+  /// to client-side tier copy so list-sourced rows (which omit them) still show
+  /// guidance. Severity for the fallback is derived from the tier.
+  List<RecommendationDto> _recommendations(AppLocalizations l10n, RiskTier tier) {
+    if (_a.recommendations.isNotEmpty) return _a.recommendations;
+    final severity = _severityForTier(tier);
+    final copy = recommendationsFor(l10n, tier);
+    return [
+      for (var i = 0; i < copy.length; i++)
+        RecommendationDto(order: i, content: copy[i], severity: severity),
+    ];
+  }
 
   void _toHome(BuildContext context) => context.go(RoutePaths.home);
 
@@ -113,9 +128,7 @@ class ReportScreen extends ConsumerWidget {
                     ),
                     AppSpacing.gapMd,
                     if (success && tier != RiskTier.unknown)
-                      _RecommendationsCard(
-                        items: recommendationsFor(l10n, tier),
-                      )
+                      _RecommendationsCard(items: _recommendations(l10n, tier))
                     else
                       _FailedNoticeCard(message: l10n.errAiUnavailable),
                   ],
@@ -239,10 +252,24 @@ class _PhotoCard extends StatelessWidget {
   }
 }
 
+/// Severity ('info'|'warn'|'danger') → tier color token. Unknown → safe.
+Color _severityColor(String severity) => switch (severity) {
+  'danger' => AppColors.tierDanger,
+  'warn' => AppColors.tierWatch,
+  _ => AppColors.tierSafe,
+};
+
+/// Fallback severity when copy is client-side tier-based (no backend severity).
+String _severityForTier(RiskTier tier) => switch (tier) {
+  RiskTier.danger => 'danger',
+  RiskTier.watch => 'warn',
+  _ => 'info',
+};
+
 class _RecommendationsCard extends StatelessWidget {
   const _RecommendationsCard({required this.items});
 
-  final List<String> items;
+  final List<RecommendationDto> items;
 
   @override
   Widget build(BuildContext context) {
@@ -270,27 +297,34 @@ class _RecommendationsCard extends StatelessWidget {
             ],
           ),
           AppSpacing.gapMd,
-          for (final item in items)
+          for (var i = 0; i < items.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 7),
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppColors.textSecondary,
-                        shape: BoxShape.circle,
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _severityColor(
+                        items[i].severity,
+                      ).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: _severityColor(items[i].severity),
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   AppSpacing.wGapSm,
                   Expanded(
                     child: Text(
-                      item,
+                      items[i].content,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: AppColors.textPrimary,
                         height: 1.35,

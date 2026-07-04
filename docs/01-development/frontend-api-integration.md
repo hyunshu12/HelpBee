@@ -142,12 +142,16 @@
     estimatedVarroaCount: number|null,
     overallHealth: 'healthy'|'warning'|'critical'|null,
     rawResponse, latencyMs, error,
-    analyzedAt, createdAt, updatedAt }
+    analyzedAt, createdAt, updatedAt,
+    recommendations?: { order, content, severity }[] }  // POST · GET /:id 만 (아래)
   ```
   - tier(safe/watch/danger)는 별도 컬럼이 없고 `overallHealth`(healthy/warning/critical)로 매핑됨.
 - **실패 처리**: AI 실패 시 throw가 아니라 **200 + `status:'failed'`** (UX 비차단). 프론트는 `status==='failed'`일 때 "분석 실패, 재시도" UI 필요.
 - **무료 사용자 quota**: `POST`는 무료 월 4회 + 10/분/user. 초과 시 `QUOTA_EXCEEDED`(402). 이메일 미인증이면 `AUTH_EMAIL_NOT_VERIFIED`(403).
-- ⚠️ **GAP — 권장조치(recommendations) 미반환**: 권장조치 문구는 DB에 저장만 되고 **어떤 분석 응답에도 포함되지 않는다.** 결과 화면에 처방/주의 문구를 표시하려면 **백엔드에 recommendations join/반환 추가가 선행되어야 함**(§10). 현재는 risk/health만 표시 가능.
+- **권장조치(recommendations)**: tier에서 파생된 한국어 처방/주의 문구 배열.
+  - **포함**: `POST /v1/analyses`(신규·멱등·실패 모두)와 `GET /v1/analyses/:id`. **목록** `GET /v1/analyses`는 페이로드 크기상 **미포함**(빈 배열로 취급).
+  - 각 항목: `{ order:number, content:string, severity:'info'|'warn'|'danger' }`. `order` 오름차순 표시. `severity`는 tier 매핑(safe→info / watch→warn / danger→danger).
+  - `status:'failed'`이면 빈 배열 `[]`. YOLO 결과에는 "AI 추정치는 참고용…실측 병행" 정직성 안내가 마지막에 붙을 수 있음(≤5개).
 
 ---
 
@@ -244,11 +248,11 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 | Auth / Hives / Images(presign·confirm) / Subscriptions / Admin **계약** | ✅ 코드 완성·로컬 검증 | 그대로 붙이면 됨 |
 | **AI 추론 실제 동작** | ❌ **아직 안 됨** | AI 서버 미기동 + YOLO 모델(`best.onnx`) 미배포. 현재 `POST /analyses`는 **graceful `status:'failed'`(200)** 로만 응답. 결과 화면은 `failed` 상태 처리 UI를 먼저 만들 것 |
 | **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, 백엔드에 발송 추가 후 테스트 |
-| **권장조치(recommendations) 응답** | ⚠️ 미반환 | 결과 화면 처방 문구 불가 — 백엔드 보강 선행 필요(§4) |
+| **권장조치(recommendations) 응답** | ✅ 반환 | `POST /analyses`·`GET /analyses/:id`가 `recommendations[{order,content,severity}]` 포함(목록은 미포함). 결과 화면 처방 문구 표시 가능(§4) |
 | **인프라 배포(staging/prod)** | 🔴 미배포 | 원격 base URL 없음. 현재 **localhost:3001** 만. 배포 후 환경별 URL 주입 |
 | **결제** | 🟡 inert | 전원 무료. 유료 UI는 표시만(`/plans`) |
 
-> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드 흐름은 **지금 바로 붙여 개발 가능**. **AI 분석 결과 화면**은 (a) 실패 상태 UI 먼저 + (b) 추론 환경(모델·AI서버)·이메일 인증·recommendations 반환이 갖춰지면 실데이터로 완성. admin 화면은 admin 토큰 발급(DB 승격)만 되면 전부 동작.
+> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드 흐름은 **지금 바로 붙여 개발 가능**. **AI 분석 결과 화면**은 (a) 실패 상태 UI 먼저 + (b) 추론 환경(모델·AI서버)·이메일 인증이 갖춰지면 실데이터로 완성. 권장조치(recommendations) 반환은 이제 계약에 포함됨. admin 화면은 admin 토큰 발급(DB 승격)만 되면 전부 동작.
 
 ---
 
