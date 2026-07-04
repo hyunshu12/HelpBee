@@ -12,6 +12,13 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
   return {
     getImageForUser: async () => ({ id: IMAGE, hiveId: HIVE, storageUrl: 'images/u1/2026/06/x.jpg' }),
     findSuccessByImage: async () => undefined,
+    findFailedByImage: async () => undefined,
+    retryAnalysis: async (input) => ({
+      id: 'an-failed',
+      modelId: input.modelId,
+      recommendations: input.recommendations,
+      ...input.analysis,
+    }),
     getEmailVerifiedAt: async () => new Date(),
     getPlan: async () => 'free',
     reserveQuota: async () => {},
@@ -33,6 +40,7 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
     }),
     listForUser: async () => [{ id: 'an1' }, { id: 'an2' }],
     getByIdForUser: async () => ({ id: 'an1' }),
+    getRecommendations: async () => [{ order: 0, content: '처치 검토', severity: 'warn' }],
     getTrend: async () => [{ bucket: '2026-06-10', avgRisk: 35, analysisCount: 2 }],
     ...over,
   };
@@ -68,6 +76,11 @@ describe('POST /v1/analyses', () => {
     expect(body.data.varroaInfectionRisk).toBe(35);
     expect(body.data.overallHealth).toBe('warning'); // watch → warning
     expect(body.meta.requestId).toBe('req-1');
+    // recommendations (§4): tier에서 파생, watch → severity 'warn'
+    expect(body.data.recommendations).toEqual([
+      { order: 0, content: '처치 검토', severity: 'warn' },
+      { order: 1, content: '재촬영', severity: 'warn' },
+    ]);
   });
 
   it('free engine is yolo (no fallback)', async () => {
@@ -155,7 +168,9 @@ describe('POST /v1/analyses', () => {
       { hiveId: HIVE, imageId: IMAGE },
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).data.status).toBe('failed');
+    const failedBody = await res.json();
+    expect(failedBody.data.status).toBe('failed');
+    expect(failedBody.data.recommendations).toEqual([]); // 실패는 빈 배열
     expect(refundQuota).toHaveBeenCalledOnce();
   });
 
@@ -178,6 +193,93 @@ describe('POST /v1/analyses', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).data.status).toBe('failed');
     expect(refundQuota).toHaveBeenCalledOnce();
+  });
+
+  it('retry: existing failed row → re-run → success UPDATES same id (200, not 201)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const retryAnalysis = vi.fn(async (input: { analysisId: string; recommendations: unknown }) => ({
+      id: input.analysisId,
+      status: 'success',
+      varroaInfectionRisk: 35,
+      overallHealth: 'warning',
+    }));
+    const res = await post(
+      makeApp(
+        baseDeps({
+          findFailedByImage: async () => ({ id: 'an-failed' }),
+          storeAnalysis,
+          retryAnalysis,
+          getRecommendations: async () => [
+            { order: 0, content: '처치 검토', severity: 'warn' },
+            { order: 1, content: '재촬영', severity: 'warn' },
+          ],
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200); // 재시도는 갱신이므로 201 아님
+    const body = await res.json();
+    expect(body.data.id).toBe('an-failed'); // 같은 row id 보존
+    expect(body.data.status).toBe('success');
+    expect(retryAnalysis).toHaveBeenCalledOnce();
+    expect(storeAnalysis).not.toHaveBeenCalled(); // insert 경로 안 탐
+    // 재시도가 실어 보낸 recommendations는 tier(watch)에서 파생 → 2개
+    expect(retryAnalysis.mock.calls[0][0].recommendations).toEqual([
+      { order: 0, content: '처치 검토', severity: 'warn' },
+      { order: 1, content: '재촬영', severity: 'warn' },
+    ]);
+    expect(body.data.recommendations.length).toBe(2);
+  });
+
+  it('retry: fail again → same id stays failed with fresh error (200, recs [])', async () => {
+    const retryAnalysis = vi.fn(async (input: { analysisId: string; recommendations: unknown }) => ({
+      id: input.analysisId,
+      status: 'failed',
+      varroaInfectionRisk: null,
+      error: 'ai_unavailable',
+    }));
+    const refundQuota = vi.fn(async () => {});
+    const res = await post(
+      makeApp(
+        baseDeps({
+          findFailedByImage: async () => ({ id: 'an-failed' }),
+          retryAnalysis,
+          refundQuota,
+          getRecommendations: async () => [], // failed 행은 recommendations 없음
+          analyze: async () => {
+            throw new AppError('AI_UNAVAILABLE');
+          },
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.id).toBe('an-failed'); // 여전히 같은 row
+    expect(body.data.status).toBe('failed');
+    expect(body.data.recommendations).toEqual([]);
+    expect(refundQuota).toHaveBeenCalledOnce(); // 실패 재시도도 quota 환불
+    expect(retryAnalysis).toHaveBeenCalledOnce();
+    expect(retryAnalysis.mock.calls[0][0].recommendations).toEqual([]);
+  });
+
+  it('retry: existing success short-circuits BEFORE checking failed row', async () => {
+    const findFailedByImage = vi.fn(async () => undefined);
+    const retryAnalysis = vi.fn(baseDeps().retryAnalysis);
+    const res = await post(
+      makeApp(
+        baseDeps({
+          findSuccessByImage: async () => ({ id: 'prev-success' }),
+          findFailedByImage,
+          retryAnalysis,
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.id).toBe('prev-success');
+    expect(findFailedByImage).not.toHaveBeenCalled(); // success면 재시도 판정 자체를 안 함
+    expect(retryAnalysis).not.toHaveBeenCalled();
   });
 
   it('rejects unknown body keys (.strict, mass assignment)', async () => {
@@ -204,6 +306,16 @@ describe('GET /v1/analyses', () => {
       '/v1/analyses/an-x',
     );
     expect(res.status).toBe(404);
+  });
+
+  it('GET /:id joins recommendations into the payload', async () => {
+    const res = await makeApp(baseDeps()).request('/v1/analyses/an1');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.id).toBe('an1');
+    expect(body.data.recommendations).toEqual([
+      { order: 0, content: '처치 검토', severity: 'warn' },
+    ]);
   });
 
   it('GET /trend returns trend buckets (not caught by /:id)', async () => {

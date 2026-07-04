@@ -189,7 +189,7 @@ helpbee/
 
 | 워크플로 | 트리거 | 동작 |
 | --- | --- | --- |
-| `ci.yml` | PR | `pnpm install` → `turbo run lint type-check test` |
+| `ci.yml` ✅구현(2026-07-04, #38) | PR→develop/main, push→develop | node(type-check: types/database/api + api vitest) · ai(pytest) · mobile(flutter analyze+test). lint/ui·admin·web type-check/dart format은 develop 기준 미설정·미포맷이라 제외. 상세: `docs/05-implementation/2026-07-04-ci-pipeline.md` |
 | `deploy-staging.yml` | `main` 머지 | docker build → ECR push → `aws ecs update-service` (force new deployment) |
 | `deploy-production.yml` | tag `v0.x.0` push | **manual approval gate** (environment: production) → ECR push → ECS rolling update |
 | `mobile-beta.yml` | mobile 디렉터리 변경 + tag | Flutter build → fastlane → TestFlight + Play Internal |

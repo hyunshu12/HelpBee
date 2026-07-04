@@ -75,6 +75,14 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-17 | 모바일 진단 흐름 5화면(카메라→검토→분석중→레포트) + 이미지 업로드 파이프라인(presign/S3/confirm) + RiskGauge + 적대적 리뷰 수정 | #29 (머지) | [2026-06-17-mobile-analysis-flow.md](./2026-06-17-mobile-analysis-flow.md) |
 | 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | #30 (머지) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
 | 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | #31 (머지) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
+| 2026-06-17 | 웹 프론트엔드 MVP(apps/web) + 디자인 시스템(@helpbee/ui): Figma 4페이지 + 법적/SEO/블로그, next-intl ko+en골격, S-Core Dream self-host, 25 SSG green | #33 (머지) | [2026-06-17-web-frontend-mvp.md](./2026-06-17-web-frontend-mvp.md) |
+| 2026-07-04 | **전체 시스템 라이브 점검**: 4앱 테스트 스위트 + 진단 E2E(presign→S3→confirm→YOLO 추론 성공, 197ms) 실측 · 문제 9건 발견 · 개선 계획(P0~P2)은 루트 CLAUDE.md §C | 없음 (점검) | [2026-07-04-system-check.md](./2026-07-04-system-check.md) |
+| 2026-07-04 | **Admin 대시보드 MVP**(apps/admin 최초 구현): 쿠키+프록시 인증, KPI/사용자관리/감사로그/dual 뷰, @helpbee/ui Table 추가, 라이브 E2E 검증 | #42 (머지) | [2026-07-04-admin-dashboard-mvp.md](./2026-07-04-admin-dashboard-mvp.md) |
+| 2026-07-04 | 문의 접수(Inquiries) E2E: DB 테이블+쿼리(0002 migration)·API 라우트(5/시간 IP·허니팟)·웹 폼 실제 연결. 라우트 404 해소, 라이브 검증(201/psql/429) | (재발행 예정) | [2026-07-04-inquiries.md](./2026-07-04-inquiries.md) |
+| 2026-07-04 | 분석 권장조치(recommendations) end-to-end: AI tier문구(+정직성 caveat) → API 반환(POST·GET:id, 목록 제외) → 모바일 레포트 severity 렌더 | #36 (예정) | [2026-07-04-analysis-recommendations.md](./2026-07-04-analysis-recommendations.md) |
+| 2026-07-04 | 실패 분석 재시도: `POST /analyses`가 같은 imageId의 failed 행을 제자리 재추론·UPDATE(id 보존, CAS) → 200, success는 멱등 유지 + 모바일 "다시 시도" 버튼 | #37 (예정, #36 스택) | [2026-07-04-analysis-retry.md](./2026-07-04-analysis-retry.md) |
+| 2026-07-04 | 첫 GitHub Actions CI 파이프라인(`.github/workflows/ci.yml`): node(type-check+api vitest)·ai(pytest)·mobile(analyze+test). 모든 스텝 develop 로컬 선검증 | #38 (예정) | [2026-07-04-ci-pipeline.md](./2026-07-04-ci-pipeline.md) |
+| 2026-07-04 | AI 회귀 fixture 게이트(P1-3): 서빙 경로 스냅샷 매니페스트(이미지 미커밋·라이선스) + `-m regression` 24케이스 + skip 규칙 | #39 (예정) | [2026-07-04-ai-regression-fixtures.md](./2026-07-04-ai-regression-fixtures.md) |
 | 2026-07-04 | dev 서버 .env 자동 로드 (api --env-file-if-exists / ai load_dotenv, 기존 env 우선) | #40 | [2026-07-04-dev-env-autoload.md](./2026-07-04-dev-env-autoload.md) |
 
 (새 기록 추가 시 위 표 갱신)

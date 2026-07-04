@@ -1,0 +1,233 @@
+{
+  "_comment": "회귀 게이트 매니페스트. 이미지는 라이선스(AI Hub 71667 재배포 금지)로 커밋하지 않는다 — path/sha256/기대값만. 생성: python -m training.data.make_regression_fixtures",
+  "metadata": {
+    "script_version": "1.0.0",
+    "model_version": "v0.1.0",
+    "conf": 0.25,
+    "iou": 0.5,
+    "imgsz": 640,
+    "selection_seed": 42,
+    "dataset": "AI Hub 71667 Sample",
+    "serving_path": "run_analysis(engine='yolo') → preprocess→yolo→risk",
+    "count": 24,
+    "created_at": "2026-07-04T13:36:37Z"
+  },
+  "fixtures": [
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_날개불구바이러스감염증/011/B_001_001_20230824080642_001_003_001_002.jpg",
+      "sha256": "0e44321da29c3a298df7cdf71293ab258f30497d3bfc8c29b867ba5323eaaf8e",
+      "class_folder": "성충_날개불구바이러스감염증",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 14,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_날개불구바이러스감염증/038/C_001_001_20230829134941_001_001_001_002.jpg",
+      "sha256": "fdfbb9a5e15a8916a31b889c85eff7b04e5fcce23eda369c92278a00a6767ace",
+      "class_folder": "성충_날개불구바이러스감염증",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_날개불구바이러스감염증/067/C_001_001_20230829135615_001_001_001_002.jpg",
+      "sha256": "17e1e374d2a3f3b966193195964f8bf120cb716cc175001caf314d73ec827fb4",
+      "class_folder": "성충_날개불구바이러스감염증",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_응애/024/B_001_003_20230820110731_001_002_001_001.jpg",
+      "sha256": "f59367a5da7a698634d143fd84b2e429dbffe750e534fa52798c841c4dfa75c2",
+      "class_folder": "성충_응애",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 4,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_응애/030/B_001_003_20230822085011_001_001_001_001.jpg",
+      "sha256": "0d1745985ee22ceaf6f3c745c457b9953eec530c72032f47cd044562672f7b6a",
+      "class_folder": "성충_응애",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 8,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_응애/045/C_002_007_20230820105709_001_001_001_001.jpg",
+      "sha256": "5d5dacbca004d0d1383772aade6506a0fe775b22767b75551a7a10adf78937de",
+      "class_folder": "성충_응애",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_응애/085/A_001_001_20230822060112_002_001_001_001.jpg",
+      "sha256": "69f16ccda09d2115eb94b79f52fda6377a1cc346d52ef7a7aa88f50a3c3d7c8c",
+      "class_folder": "성충_응애",
+      "expected_risk_score": 90,
+      "expected_tier": "danger",
+      "bee_total": 6,
+      "infestation_rate": 16.6667
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_정상/036/B_001_001_20230821083126_001_003_001_000.jpg",
+      "sha256": "7e4a6599779f31df5b63acd66c661c096293769b7fec07d54dc5dacf2bd6cdba",
+      "class_folder": "성충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 47,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_정상/053/B_001_001_20230821083745_001_004_001_000.jpg",
+      "sha256": "74b1af0eca100385dc556c720ed14ca7b2124a52cfea44cb9c4694479a274ed4",
+      "class_folder": "성충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 13,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_정상/077/B_001_001_20230822083847_001_004_001_000.jpg",
+      "sha256": "b5c78db705cf6854a27d67a01747ac501e42461cdb1b0ab35503f3a234983de6",
+      "class_folder": "성충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 18,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/성충/성충_정상/079/B_001_001_20230822083849_001_003_001_000.jpg",
+      "sha256": "eb330e476c3ae34daf4e71a25253baca5f9d1591ca3602b2e23689500efe68fa",
+      "class_folder": "성충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 14,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_부저병/022/C_002_003_20230819140251_001_001_000_003.jpg",
+      "sha256": "72ab17e57764484b8177afd1d3d717bb461e21654334f224de10792538e0463e",
+      "class_folder": "유충_부저병",
+      "expected_risk_score": 70,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 100.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_부저병/027/C_002_003_20230819140327_001_001_000_003.jpg",
+      "sha256": "89754d8f3ec72904cc29483c311235bf4ba967208d7b943d550d8af58c9fcc13",
+      "class_folder": "유충_부저병",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_부저병/051/C_002_003_20230819140635_001_001_000_003.jpg",
+      "sha256": "2bab8ba61bd639882343069fee82c5c3d2bf85cc31c8f7980d5c40438520ba17",
+      "class_folder": "유충_부저병",
+      "expected_risk_score": 21,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_석고병/006/B_001_001_20230819135113_001_003_000_002.jpg",
+      "sha256": "8a23ef657bbdaa691d286183a01868704bbbafaec6840039f77f3f24e021120c",
+      "class_folder": "유충_석고병",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 5,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_석고병/030/B_001_001_20230819135415_001_002_000_002.jpg",
+      "sha256": "48dec9dd176e6b96e64662c209de579650b5d11d89748e3ebf82df88cb6f744d",
+      "class_folder": "유충_석고병",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 7,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_응애/019/C_001_001_20230829142713_001_001_000_001.jpg",
+      "sha256": "60735528d92e06b01aa5d94f04a4bc9886a977fae2b1e2951b71d790c6fc36b1",
+      "class_folder": "유충_응애",
+      "expected_risk_score": 70,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 100.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_응애/043/C_001_001_20230829142845_001_001_000_001.jpg",
+      "sha256": "d2248de7ad432699662ef6c1b28d3bf19a06b993ae12606d31164d0d43e5a2fb",
+      "class_folder": "유충_응애",
+      "expected_risk_score": 70,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 100.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_응애/047/C_001_001_20230829142901_001_001_000_001.jpg",
+      "sha256": "292f0fd58c951ad0b0b44e6fb6670072f54c864d4cad31c972f8d541ad194c4e",
+      "class_folder": "유충_응애",
+      "expected_risk_score": 70,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 100.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_응애/055/C_001_001_20230829143159_001_001_000_001.jpg",
+      "sha256": "8e76f46edf5b7c935b6d202c11cf5ec3c3d01575f458258d1ec1ca15f1793886",
+      "class_folder": "유충_응애",
+      "expected_risk_score": 70,
+      "expected_tier": "watch",
+      "bee_total": 1,
+      "infestation_rate": 100.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_정상/054/B_001_001_20230822084313_001_001_000_000.jpg",
+      "sha256": "ff983856ffa83eddd050d6510b71c29b0406e922b1b01c174f92ca69ef40b8b6",
+      "class_folder": "유충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 27,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_정상/055/B_001_001_20230822084313_001_003_000_000.jpg",
+      "sha256": "92a747d2c04be0deda4c110938201b929716c1cd0a5326487a4a1f49af3510da",
+      "class_folder": "유충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 27,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_정상/063/B_001_001_20230823081923_001_003_000_000.jpg",
+      "sha256": "de7c4de0359d39acbf5cbff8bbe0f651f4487c71a0eda82f088665d7119ff80e",
+      "class_folder": "유충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 7,
+      "infestation_rate": 0.0
+    },
+    {
+      "path": "training/datasets/Sample/01.원천데이터/유충/유충_정상/074/B_001_001_20230823133432_001_001_000_000.jpg",
+      "sha256": "eb2bdb91635910941d8405256aab53c702add8d8784e7431c5978fb488bde650",
+      "class_folder": "유충_정상",
+      "expected_risk_score": 0,
+      "expected_tier": "safe",
+      "bee_total": 12,
+      "infestation_rate": 0.0
+    }
+  ]
+}

@@ -99,6 +99,7 @@ def recommendations_for(
     *,
     low_confidence: bool = False,
     has_other_disease: bool = False,
+    count_available: bool = True,
     config: dict | None = None,
 ) -> list[str]:
     recs_all = _cfg(config)["recommendations"]
@@ -107,7 +108,14 @@ def recommendations_for(
     out = list(recs_all[tier])
     if has_other_disease:
         out += list(recs_all["other_disease"])
-    return out[:5]  # CLAUDE.md §6: recommendations ≤5
+    out = out[:5]  # CLAUDE.md §6: recommendations ≤5
+    # 응애 개체 카운트 불가(YOLO) → 자리가 남을 때만 데이터 정직성 안내 append.
+    # tier/other_disease 문구를 절대 밀어내지 않음(자리 없으면 생략).
+    if not count_available and len(out) < 5:
+        caveat = recs_all.get("no_count_caveat")
+        if caveat:
+            out.append(caveat[0] if isinstance(caveat, list) else caveat)
+    return out[:5]
 
 
 def min_bee_count(config: dict | None = None) -> int:
@@ -137,15 +145,20 @@ def compute_risk(class_counts: dict[int, int], config: dict | None = None) -> Ri
         safe_s, watch_s = band_scores(config)
         score = max(safe_s, min(watch_s, score))
     tier = tier_from_score(score, config)
+    estimated_count = None  # YOLO는 응애 개체 카운트 불가(AIHUB Q3=B)
     recommendations = recommendations_for(
-        tier, low_confidence=low_confidence, has_other_disease=other > 0, config=config
+        tier,
+        low_confidence=low_confidence,
+        has_other_disease=other > 0,
+        count_available=estimated_count is not None,
+        config=config,
     )
 
     return RiskResult(
         risk_score=score,
         tier=tier,
         infestation_rate=round(rate, 4),
-        estimated_count=None,
+        estimated_count=estimated_count,
         bee_total=bee_total,
         low_confidence=low_confidence,
         recommendations=recommendations,

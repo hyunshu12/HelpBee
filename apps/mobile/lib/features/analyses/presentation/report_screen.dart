@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
+import '../../../core/errors/app_exception.dart';
+import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/recommendations.dart';
 import '../../../core/risk/risk_tier.dart';
 import '../../../core/routing/route_paths.dart';
@@ -14,19 +16,35 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/risk_gauge.dart';
 import '../../../shared/widgets/secondary_button.dart';
+import '../data/analyses_api.dart';
 import '../data/analysis_dto.dart';
 import 'analysis_flow_args.dart';
 
 /// 레포트 (Figma 24:12): the diagnosis result. Risk gauge + tier title +
-/// analyzed-photo card + recommended actions (client-side, tier-based — the
-/// backend does not return them yet). A `failed` analysis shows a graceful
-/// "couldn't finish" state instead of a score.
+/// analyzed-photo card + recommended actions. Recommendations come from the
+/// backend (`analysis.recommendations`, with per-item severity); when absent
+/// (e.g. a list-sourced row that omits them) we fall back to client-side,
+/// tier-based copy. A `failed` analysis shows a graceful "couldn't finish"
+/// state instead of a score.
 class ReportScreen extends ConsumerWidget {
   const ReportScreen({super.key, required this.args});
 
   final ReportArgs args;
 
   Analysis get _a => args.analysis;
+
+  /// Backend recommendations (with severity) when present; otherwise fall back
+  /// to client-side tier copy so list-sourced rows (which omit them) still show
+  /// guidance. Severity for the fallback is derived from the tier.
+  List<RecommendationDto> _recommendations(AppLocalizations l10n, RiskTier tier) {
+    if (_a.recommendations.isNotEmpty) return _a.recommendations;
+    final severity = _severityForTier(tier);
+    final copy = recommendationsFor(l10n, tier);
+    return [
+      for (var i = 0; i < copy.length; i++)
+        RecommendationDto(order: i, content: copy[i], severity: severity),
+    ];
+  }
 
   void _toHome(BuildContext context) => context.go(RoutePaths.home);
 
@@ -113,11 +131,10 @@ class ReportScreen extends ConsumerWidget {
                     ),
                     AppSpacing.gapMd,
                     if (success && tier != RiskTier.unknown)
-                      _RecommendationsCard(
-                        items: recommendationsFor(l10n, tier),
-                      )
+                      _RecommendationsCard(items: _recommendations(l10n, tier))
                     else
-                      _FailedNoticeCard(message: l10n.errAiUnavailable),
+                      // 실패 상태: 사유 안내 + "다시 시도"(같은 이미지 재분석).
+                      _RetrySection(args: args),
                   ],
                 ),
               ),
@@ -239,10 +256,24 @@ class _PhotoCard extends StatelessWidget {
   }
 }
 
+/// Severity ('info'|'warn'|'danger') → tier color token. Unknown → safe.
+Color _severityColor(String severity) => switch (severity) {
+  'danger' => AppColors.tierDanger,
+  'warn' => AppColors.tierWatch,
+  _ => AppColors.tierSafe,
+};
+
+/// Fallback severity when copy is client-side tier-based (no backend severity).
+String _severityForTier(RiskTier tier) => switch (tier) {
+  RiskTier.danger => 'danger',
+  RiskTier.watch => 'warn',
+  _ => 'info',
+};
+
 class _RecommendationsCard extends StatelessWidget {
   const _RecommendationsCard({required this.items});
 
-  final List<String> items;
+  final List<RecommendationDto> items;
 
   @override
   Widget build(BuildContext context) {
@@ -270,27 +301,34 @@ class _RecommendationsCard extends StatelessWidget {
             ],
           ),
           AppSpacing.gapMd,
-          for (final item in items)
+          for (var i = 0; i < items.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 7),
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppColors.textSecondary,
-                        shape: BoxShape.circle,
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _severityColor(
+                        items[i].severity,
+                      ).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: _severityColor(items[i].severity),
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                   AppSpacing.wGapSm,
                   Expanded(
                     child: Text(
-                      item,
+                      items[i].content,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: AppColors.textPrimary,
                         height: 1.35,
@@ -337,6 +375,74 @@ class _FailedNoticeCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Failed-state block: the graceful "couldn't finish" notice + a 다시 시도
+/// button. Retry re-POSTs `/v1/analyses` with the SAME (hiveId, imageId); the
+/// backend re-runs inference and updates the failed row in place (same id),
+/// then we replace this screen with the refreshed report. A retry that fails
+/// again just lands on another failed report (this same UI). Errors before the
+/// result (network/quota) surface as a snackbar, keeping the report on screen.
+class _RetrySection extends ConsumerStatefulWidget {
+  const _RetrySection({required this.args});
+
+  final ReportArgs args;
+
+  @override
+  ConsumerState<_RetrySection> createState() => _RetrySectionState();
+}
+
+class _RetrySectionState extends ConsumerState<_RetrySection> {
+  bool _loading = false;
+
+  Analysis get _a => widget.args.analysis;
+
+  Future<void> _retry() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final result = await ref
+          .read(analysesApiProvider)
+          .create(hiveId: _a.hiveId, imageId: _a.imageId);
+      // The retried row replaced the failed one in place; refresh per-hive
+      // caches so the home card + detail timeline reflect the new result.
+      ref.invalidate(latestAnalysisProvider(_a.hiveId));
+      ref.invalidate(hiveAnalysesProvider(_a.hiveId));
+      if (!mounted) return;
+      context.pushReplacement(
+        RoutePaths.report,
+        extra: ReportArgs(
+          analysis: result,
+          hiveName: widget.args.hiveName,
+          imagePath: widget.args.imagePath,
+        ),
+      );
+    } on AppException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      messenger
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(appErrorMessage(l10n, e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      children: [
+        _FailedNoticeCard(message: l10n.errAiUnavailable),
+        AppSpacing.gapMd,
+        PrimaryButton(
+          label: l10n.commonRetry,
+          onPressed: _loading ? null : _retry,
+          loading: _loading,
+        ),
+      ],
     );
   }
 }
