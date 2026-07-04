@@ -28,6 +28,7 @@ import { analysesRoutes, type AnalysesDeps } from './routes/analyses';
 import { authRoutes, type AuthDeps } from './routes/auth';
 import { hivesRoutes, type HivesDeps } from './routes/hives';
 import { imagesRoutes, type ImagesDeps } from './routes/images';
+import { inquiriesRoutes, type InquiriesDeps } from './routes/inquiries';
 import { subscriptionsRoutes, type SubscriptionsDeps } from './routes/subscriptions';
 import * as accountProtection from './services/account-protection';
 import { createAiClient } from './services/ai-client';
@@ -186,6 +187,10 @@ export function createApp() {
     audit: (entry) => queries.auditLog.appendAuditLog(db, entry),
   };
 
+  const inquiriesDeps: InquiriesDeps = {
+    create: (input) => queries.inquiries.createInquiry(db, input),
+  };
+
   const adminDeps: AdminDeps = {
     listUsers: (opts) => queries.admin.listUsers(db, opts),
     patchUser: async (input) => {
@@ -253,6 +258,14 @@ export function createApp() {
   );
   subsApp.route('/', subscriptionsRoutes(subscriptionsDeps));
 
+  // Inquiries: 익명 공개 라우트. 남용 방지로 5회/시간/IP(브루트포스/스팸 방어). fail-closed.
+  const inquiriesApp = new Hono();
+  inquiriesApp.use(
+    '*',
+    rateLimit({ redis, limit: 5, windowSec: 3600, prefix: 'inquiries', keyFn: (c) => getClientIp(c) }),
+  );
+  inquiriesApp.route('/', inquiriesRoutes(inquiriesDeps));
+
   // Admin: requireAuth + requireAdmin(role + audience) 단일 마운트(§12.1).
   const adminApp = new Hono();
   adminApp.use('*', protectedAuth);
@@ -270,6 +283,7 @@ export function createApp() {
 
   app.route('/v1/auth', authApp);
   app.route('/v1/subscriptions', subsApp);
+  app.route('/v1/inquiries', inquiriesApp);
   app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
   app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
