@@ -45,6 +45,8 @@ export type AnalysesDeps = {
     userId: string,
   ): Promise<{ id: string; hiveId: string; storageUrl: string } | undefined>;
   findSuccessByImage(imageId: string, userId: string): Promise<unknown | undefined>;
+  /** 재시도 후보: 해당 이미지의 failed 분석(있으면 제자리 UPDATE 대상). */
+  findFailedByImage(imageId: string, userId: string): Promise<{ id: string } | undefined>;
   getEmailVerifiedAt(userId: string): Promise<Date | null | undefined>;
   getPlan(userId: string): Promise<'free' | 'basic' | 'pro'>;
   reserveQuota(userId: string): Promise<void>; // 초과 시 AppError('QUOTA_EXCEEDED') throw
@@ -53,6 +55,13 @@ export type AnalysesDeps = {
   resolveModelId(provider: 'yolo' | 'openai'): Promise<string | undefined>;
   analyze(input: { imageUrl: string; engine: 'auto' | 'yolo'; requestId: string }): Promise<AiResult>;
   storeAnalysis(input: StoreAnalysisInput): Promise<unknown>;
+  /** failed 행 제자리 재실행: id 보존, 결과/권장조치 갱신. CAS(WHERE status='failed'). */
+  retryAnalysis(input: {
+    analysisId: string;
+    modelId: string;
+    analysis: Record<string, unknown>;
+    recommendations: { order: number; content: string; severity: string }[];
+  }): Promise<unknown>;
   listForUser(
     hiveId: string,
     userId: string,
@@ -100,6 +109,13 @@ export function analysesRoutes(deps: AnalysesDeps) {
       return ok(c, withRecs(existing, recs));
     }
 
+    // ②' 재시도: 같은 이미지의 failed 행이 있으면 새 row 대신 그 행을 제자리 갱신.
+    //     (UNIQUE(image_id, model_id) + onConflictDoNothing이라 insert로는 절대 못 고침)
+    //     quota/engine 흐름은 신규와 동일 — failed는 quota를 소비하지 않은 상태이므로
+    //     재시도도 동일한 reserve/refund 경로를 탄다.
+    const failedRow = await deps.findFailedByImage(imageId, userId);
+    const isRetry = !!failedRow;
+
     // ③ 무료: 이메일 검증 게이트 + quota reserve(reserve-then-refund)
     const plan = await deps.getPlan(userId);
     const isFree = plan === 'free';
@@ -127,47 +143,59 @@ export function analysesRoutes(deps: AnalysesDeps) {
     if (failed) {
       if (isFree) await deps.refundQuota(userId);
       const modelId = (await deps.resolveModelId('yolo')) ?? '';
-      const row = await deps.storeAnalysis({
-        hiveId,
-        imageId,
-        modelId,
-        analysis: {
-          status: 'failed',
-          varroaInfectionRisk: null,
-          estimatedVarroaCount: null,
-          overallHealth: null,
-          rawResponse: result?.raw_payload ?? { error_reason: 'ai_unavailable' },
-          latencyMs: result?.latency_ms ?? null,
-          error: 'ai_unavailable',
-          analyzedAt,
-        },
-        recommendations: [],
-      });
+      const analysis = {
+        status: 'failed',
+        varroaInfectionRisk: null,
+        estimatedVarroaCount: null,
+        overallHealth: null,
+        rawResponse: result?.raw_payload ?? { error_reason: 'ai_unavailable' },
+        latencyMs: result?.latency_ms ?? null,
+        error: 'ai_unavailable',
+        analyzedAt,
+      };
+      // 재시도면 기존 failed 행을 제자리 갱신(id 보존, fresh error/analyzedAt), 신규면 insert.
+      if (isRetry) {
+        const row = await deps.retryAnalysis({
+          analysisId: failedRow!.id,
+          modelId,
+          analysis,
+          recommendations: [],
+        });
+        const recs = await deps.getRecommendations((row as { id: string }).id);
+        return ok(c, withRecs(row, recs));
+      }
+      const row = await deps.storeAnalysis({ hiveId, imageId, modelId, analysis, recommendations: [] });
       return ok(c, withRecs(row, []));
     }
 
-    // ⑤-b 성공: engine_used→model_id, 1행 저장, created(201)
+    // ⑤-b 성공: engine_used→model_id, 1행 저장(신규 201) 또는 failed 행 갱신(재시도 200)
     const tier = result!.tier as Tier;
     const provider = result!.engine_used as 'yolo' | 'openai';
     const modelId = await deps.resolveModelId(provider);
     if (!modelId) return problem(c, 'AI_UNAVAILABLE'); // 모델 메타 없음(seed/매핑 오류)
     const recs = toRecommendations(tier, result!.recommendations ?? []);
-    const row = await deps.storeAnalysis({
-      hiveId,
-      imageId,
-      modelId,
-      analysis: {
-        status: 'success',
-        varroaInfectionRisk: result!.risk_score,
-        estimatedVarroaCount: result!.estimated_count ?? null,
-        overallHealth: HEALTH[tier] ?? null,
-        rawResponse: result!.raw_payload ?? null,
-        latencyMs: result!.latency_ms ?? null,
-        error: null,
-        analyzedAt,
-      },
-      recommendations: recs,
-    });
+    const analysis = {
+      status: 'success',
+      varroaInfectionRisk: result!.risk_score,
+      estimatedVarroaCount: result!.estimated_count ?? null,
+      overallHealth: HEALTH[tier] ?? null,
+      rawResponse: result!.raw_payload ?? null,
+      latencyMs: result!.latency_ms ?? null,
+      error: null,
+      analyzedAt,
+    };
+    if (isRetry) {
+      // 재시도 성공: 같은 id를 success로 승격 + recommendations 교체 → 200(갱신).
+      const row = await deps.retryAnalysis({
+        analysisId: failedRow!.id,
+        modelId,
+        analysis,
+        recommendations: recs,
+      });
+      const finalRecs = await deps.getRecommendations((row as { id: string }).id);
+      return ok(c, withRecs(row, finalRecs));
+    }
+    const row = await deps.storeAnalysis({ hiveId, imageId, modelId, analysis, recommendations: recs });
     return created(c, withRecs(row, recs));
   });
 

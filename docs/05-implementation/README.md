@@ -76,5 +76,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | #30 (머지) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
 | 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | #31 (머지) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
 | 2026-07-04 | 분석 권장조치(recommendations) end-to-end: AI tier문구(+정직성 caveat) → API 반환(POST·GET:id, 목록 제외) → 모바일 레포트 severity 렌더 | #36 (예정) | [2026-07-04-analysis-recommendations.md](./2026-07-04-analysis-recommendations.md) |
+| 2026-07-04 | 실패 분석 재시도: `POST /analyses`가 같은 imageId의 failed 행을 제자리 재추론·UPDATE(id 보존, CAS) → 200, success는 멱등 유지 + 모바일 "다시 시도" 버튼 | #37 (예정, #36 스택) | [2026-07-04-analysis-retry.md](./2026-07-04-analysis-retry.md) |
 
 (새 기록 추가 시 위 표 갱신)

@@ -147,6 +147,7 @@
   ```
   - tier(safe/watch/danger)는 별도 컬럼이 없고 `overallHealth`(healthy/warning/critical)로 매핑됨.
 - **실패 처리**: AI 실패 시 throw가 아니라 **200 + `status:'failed'`** (UX 비차단). 프론트는 `status==='failed'`일 때 "분석 실패, 재시도" UI 필요.
+- **재시도(retry)**: `status:'failed'`인 이미지에 **같은 `{hiveId, imageId}`로 `POST` 재요청**하면 백엔드가 그 **failed 행을 제자리에서 재추론·갱신**한다(같은 `id` 유지, `status`/risk/health/recommendations/`error`/`analyzedAt` 새로 채움). 성공하면 **200**(신규 201 아님) + 채워진 결과, 또 실패하면 **200** + `status:'failed'`(새 error). `success` 행은 재요청해도 재실행 없이 그대로 반환(멱등). failed는 quota를 소비하지 않으므로 재시도도 신규와 동일한 reserve/refund 경로를 탄다.
 - **무료 사용자 quota**: `POST`는 무료 월 4회 + 10/분/user. 초과 시 `QUOTA_EXCEEDED`(402). 이메일 미인증이면 `AUTH_EMAIL_NOT_VERIFIED`(403).
 - **권장조치(recommendations)**: tier에서 파생된 한국어 처방/주의 문구 배열.
   - **포함**: `POST /v1/analyses`(신규·멱등·실패 모두)와 `GET /v1/analyses/:id`. **목록** `GET /v1/analyses`는 페이로드 크기상 **미포함**(빈 배열로 취급).
