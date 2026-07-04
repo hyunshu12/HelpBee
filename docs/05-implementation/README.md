@@ -75,5 +75,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-06-17 | 모바일 진단 흐름 5화면(카메라→검토→분석중→레포트) + 이미지 업로드 파이프라인(presign/S3/confirm) + RiskGauge + 적대적 리뷰 수정 | #29 (머지) | [2026-06-17-mobile-analysis-flow.md](./2026-06-17-mobile-analysis-flow.md) |
 | 2026-06-17 | 벌통 등록 풀스크린 폼(바텀시트→전용 화면, 설치일 날짜선택·GPS 버튼·히어로 배너) | #30 (머지) | [2026-06-17-mobile-hive-register-fullscreen.md](./2026-06-17-mobile-hive-register-fullscreen.md) |
 | 2026-06-17 | 벌통 수정 화면(등록 폼 일반화·재사용) + ⋮수정 dead-end 제거 + controller updateHive | #31 (머지) | [2026-06-17-mobile-hive-edit.md](./2026-06-17-mobile-hive-edit.md) |
+| 2026-07-04 | AI 회귀 fixture 게이트(P1-3): 서빙 경로 스냅샷 매니페스트(이미지 미커밋·라이선스) + `-m regression` 24케이스 + skip 규칙 | #39 (예정) | [2026-07-04-ai-regression-fixtures.md](./2026-07-04-ai-regression-fixtures.md) |
 
 (새 기록 추가 시 위 표 갱신)

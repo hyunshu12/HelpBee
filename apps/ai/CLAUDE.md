@@ -283,20 +283,34 @@ HELPBEE_API_INTERNAL_URL=http://api:3000
 - **전처리**: HEIC 변환, EXIF strip, 1024 다운스케일, 10MB 가드, RGBA → RGB
 - **비용 계산**: usage 토큰 → USD 환산 표 매핑
 
-### 10-2. 회귀 테스트 (`app/tests/fixtures/`)
-- 20–30장 fixture 이미지 + 기대 `risk_score` JSON
-- **회귀 게이트**: 다음 변경 시 반드시 통과해야 함
+### 10-2. 회귀 테스트 (`app/tests/regression/` + `app/tests/fixtures/`)
+
+**스냅샷 회귀 게이트** — 서빙 경로(`run_analysis(engine="yolo")` = preprocess→YOLO(ONNX)→risk)를
+그대로 돌려 현재 출력을 박제하고, 이후 변경이 이를 흔드는지 감시한다. eval/train 경로가 아니라
+**서빙 경로**를 쓴다(과거 preprocess/decode skew 재발 방지 — `docs/05-implementation/2026-06-16-yolo-inference-decode-and-preprocess-fixes.md`).
+
+- **매니페스트 방식 (라이선스)**: 71667 원본 이미지는 재배포 금지(내국인 제약)라 **이미지를 git에
+  절대 커밋하지 않는다.** 대신 `app/tests/fixtures/regression_manifest.json` 하나만 커밋:
+  `[{path, sha256, expected_risk_score, expected_tier, class_folder}]` + 메타(model_version/conf/iou/imgsz).
+  경로는 `training/datasets/Sample/...`(gitignored) 상대경로.
+- **생성**: `make regression-fixtures` (= `python -m training.data.make_regression_fixtures`).
+  클래스별 seed 고정 선택 24장(응애 8/정상 8/기타질병 8, 성충·유충 혼합). 재실행 byte-identical.
+- **skip 규칙**: 로컬에 ONNX 모델(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`) + Sample 데이터셋이
+  둘 다 있을 때만 실제로 돈다. 없으면(CI 등) 전 케이스 `pytest.skip`. sha256 불일치 시 그 케이스만 경고+skip.
+- **회귀 게이트 트리거** (아래 변경 시 반드시 통과 — 의도된 변경이면 매니페스트 재생성):
   - 프롬프트 변경 (`prompt_version` bump)
   - OpenAI 모델 핀 변경
   - YOLO 가중치 버전 변경
-  - 위험도 가중치(`risk.yaml`) 변경
+  - 위험도 가중치(`risk.yaml`) 변경 / 전처리·디코드 변경
 - 허용 오차: `abs(expected - actual) <= 10` (tier 변경은 0 허용)
+- ⚠️ golden holdout(`training/datasets/golden/`)이 로컬에 없어 fixture/golden 겹침을 정적 검증하지
+  못한다. fixture 는 학습에 쓰이지 않으므로 누수 위험은 없으나, golden 확보 후 disjoint 확인 권장.
 
 ### 10-3. 실행
 ```bash
-pytest -q                      # 전체
+pytest -q                      # 전체 (회귀 게이트 제외 — 기본 addopts: -m "not regression")
 pytest -q app/tests/unit       # 단위만
-pytest -q -m regression        # 회귀만
+pytest -q -m regression        # 회귀만 (make test-regression)
 ```
 
 ---
