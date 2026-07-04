@@ -4,16 +4,18 @@
 PY ?= python
 APP := app.main:app
 
-.PHONY: help dev test lint format \
+.PHONY: help dev test test-regression regression-fixtures lint format \
         convert-data split-data golden \
         train train-resume train-extend eval export-onnx
 
 help:
 	@echo "=== Server ==="
-	@echo "  dev             FastAPI 개발 서버 (--reload)"
-	@echo "  test            pytest -q"
-	@echo "  lint            ruff + mypy"
-	@echo "  format          ruff format + fix"
+	@echo "  dev                 FastAPI 개발 서버 (--reload)"
+	@echo "  test                pytest -q (회귀 게이트 제외)"
+	@echo "  test-regression     서빙 경로 스냅샷 회귀 게이트 (모델+Sample 필요, 없으면 skip)"
+	@echo "  regression-fixtures 회귀 매니페스트 재생성 (프롬프트/모델/risk 의도 변경 후)"
+	@echo "  lint                ruff + mypy"
+	@echo "  format              ruff format + fix"
 	@echo ""
 	@echo "=== Data pipeline ==="
 	@echo "  convert-data    AI Hub 71667 → YOLO (limit=5000)"
@@ -33,6 +35,17 @@ dev:
 
 test:
 	pytest -q
+
+# 서빙 경로(preprocess→YOLO→risk) 스냅샷. 로컬에 ONNX 모델 + 71667 Sample 있을 때만
+# 실제 실행, 없으면 전 케이스 skip (이미지는 라이선스상 미커밋).
+test-regression:
+	pytest -q -m regression
+
+# 매니페스트 재생성 — 프롬프트/모델핀/risk.yaml 을 "의도적으로" 바꾼 뒤에만.
+# created_at 은 date CLI 로 스탬프(선택/기대값은 결정적이라 재실행 byte-identical).
+regression-fixtures:
+	$(PY) -m training.data.make_regression_fixtures \
+		--created-at "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 lint:
 	ruff check . && mypy app training
