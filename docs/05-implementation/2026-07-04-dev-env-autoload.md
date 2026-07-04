@@ -1,6 +1,6 @@
 # 2026-07-04 — dev 서버 .env 자동 로드 (P0-2)
 
-> PR: #41(예정) · 브랜치: feature/dev-env-autoload → develop · 머지일: (예정)
+> PR: #40 · 브랜치: feature/dev-env-autoload → develop · 머지일: (예정)
 
 ## 범위 (Scope)
 
