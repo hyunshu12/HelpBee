@@ -52,4 +52,46 @@ void main() {
     expect(a.isSuccess, isTrue);
     expect(a.tier, RiskTier.danger);
   });
+
+  group('recommendations parsing', () {
+    test('parses recommendations[] with order/content/severity', () {
+      final a = Analysis.fromJson({
+        'id': 'x',
+        'hiveId': 'h',
+        'imageId': 'i',
+        'status': 'success',
+        'createdAt': '2026-06-16T00:00:00Z',
+        'updatedAt': '2026-06-16T00:00:00Z',
+        'recommendations': [
+          {'order': 0, 'content': '즉시 처치가 필요합니다', 'severity': 'danger'},
+          {'order': 1, 'content': '주변 벌통도 검사하세요', 'severity': 'warn'},
+        ],
+      });
+      expect(a.recommendations.length, 2);
+      expect(a.recommendations.first.content, '즉시 처치가 필요합니다');
+      expect(a.recommendations.first.severity, 'danger');
+      expect(a.recommendations[1].order, 1);
+    });
+
+    test('missing recommendations -> empty (list endpoint omits them)', () {
+      expect(_a().recommendations, isEmpty);
+    });
+
+    test('drops malformed / empty-content items', () {
+      final a = Analysis.fromJson({
+        'id': 'x',
+        'hiveId': 'h',
+        'imageId': 'i',
+        'status': 'success',
+        'createdAt': '2026-06-16T00:00:00Z',
+        'updatedAt': '2026-06-16T00:00:00Z',
+        'recommendations': [
+          {'order': 0, 'content': '유효', 'severity': 'info'},
+          {'order': 1, 'severity': 'warn'}, // no content -> dropped
+        ],
+      });
+      expect(a.recommendations.length, 1);
+      expect(a.recommendations.first.severity, 'info');
+    });
+  });
 }

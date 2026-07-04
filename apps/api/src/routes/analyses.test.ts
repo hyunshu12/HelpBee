@@ -33,6 +33,7 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
     }),
     listForUser: async () => [{ id: 'an1' }, { id: 'an2' }],
     getByIdForUser: async () => ({ id: 'an1' }),
+    getRecommendations: async () => [{ order: 0, content: '처치 검토', severity: 'warn' }],
     getTrend: async () => [{ bucket: '2026-06-10', avgRisk: 35, analysisCount: 2 }],
     ...over,
   };
@@ -68,6 +69,11 @@ describe('POST /v1/analyses', () => {
     expect(body.data.varroaInfectionRisk).toBe(35);
     expect(body.data.overallHealth).toBe('warning'); // watch → warning
     expect(body.meta.requestId).toBe('req-1');
+    // recommendations (§4): tier에서 파생, watch → severity 'warn'
+    expect(body.data.recommendations).toEqual([
+      { order: 0, content: '처치 검토', severity: 'warn' },
+      { order: 1, content: '재촬영', severity: 'warn' },
+    ]);
   });
 
   it('free engine is yolo (no fallback)', async () => {
@@ -155,7 +161,9 @@ describe('POST /v1/analyses', () => {
       { hiveId: HIVE, imageId: IMAGE },
     );
     expect(res.status).toBe(200);
-    expect((await res.json()).data.status).toBe('failed');
+    const failedBody = await res.json();
+    expect(failedBody.data.status).toBe('failed');
+    expect(failedBody.data.recommendations).toEqual([]); // 실패는 빈 배열
     expect(refundQuota).toHaveBeenCalledOnce();
   });
 
@@ -204,6 +212,16 @@ describe('GET /v1/analyses', () => {
       '/v1/analyses/an-x',
     );
     expect(res.status).toBe(404);
+  });
+
+  it('GET /:id joins recommendations into the payload', async () => {
+    const res = await makeApp(baseDeps()).request('/v1/analyses/an1');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.id).toBe('an1');
+    expect(body.data.recommendations).toEqual([
+      { order: 0, content: '처치 검토', severity: 'warn' },
+    ]);
   });
 
   it('GET /trend returns trend buckets (not caught by /:id)', async () => {

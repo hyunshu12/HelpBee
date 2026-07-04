@@ -142,12 +142,16 @@
     estimatedVarroaCount: number|null,
     overallHealth: 'healthy'|'warning'|'critical'|null,
     rawResponse, latencyMs, error,
-    analyzedAt, createdAt, updatedAt }
+    analyzedAt, createdAt, updatedAt,
+    recommendations?: { order, content, severity }[] }  // POST · GET /:id 만 (아래)
   ```
   - tier(safe/watch/danger)는 별도 컬럼이 없고 `overallHealth`(healthy/warning/critical)로 매핑됨.
 - **실패 처리**: AI 실패 시 throw가 아니라 **200 + `status:'failed'`** (UX 비차단). 프론트는 `status==='failed'`일 때 "분석 실패, 재시도" UI 필요.
 - **무료 사용자 quota**: `POST`는 무료 월 4회 + 10/분/user. 초과 시 `QUOTA_EXCEEDED`(402). 이메일 미인증이면 `AUTH_EMAIL_NOT_VERIFIED`(403).
-- ⚠️ **GAP — 권장조치(recommendations) 미반환**: 권장조치 문구는 DB에 저장만 되고 **어떤 분석 응답에도 포함되지 않는다.** 결과 화면에 처방/주의 문구를 표시하려면 **백엔드에 recommendations join/반환 추가가 선행되어야 함**(§10). 현재는 risk/health만 표시 가능.
+- **권장조치(recommendations)**: tier에서 파생된 한국어 처방/주의 문구 배열.
+  - **포함**: `POST /v1/analyses`(신규·멱등·실패 모두)와 `GET /v1/analyses/:id`. **목록** `GET /v1/analyses`는 페이로드 크기상 **미포함**(빈 배열로 취급).
+  - 각 항목: `{ order:number, content:string, severity:'info'|'warn'|'danger' }`. `order` 오름차순 표시. `severity`는 tier 매핑(safe→info / watch→warn / danger→danger).
+  - `status:'failed'`이면 빈 배열 `[]`. YOLO 결과에는 "AI 추정치는 참고용…실측 병행" 정직성 안내가 마지막에 붙을 수 있음(≤5개).
 
 ---
 
@@ -263,12 +267,12 @@ CORS_ALLOWLIST=http://localhost:3000,http://localhost:3001 \
 | Auth / Hives / Images(presign·confirm) / Subscriptions / Admin **계약** | ✅ 코드 완성·로컬 검증 | 그대로 붙이면 됨 |
 | **AI 추론 실제 동작** | ✅ **로컬 동작 (2026-07-04 확인)** | AI 서버(:8000, `.env` 로드 필수) + YOLO v0.1.0 ONNX(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`)로 presign→S3→confirm→`POST /analyses` E2E 성공(응애 샘플 risk 70/warning, 197ms). ⚠️ 단, **AI 실패로 `status:'failed'` 저장된 이미지는 재분석 불가**(UNIQUE 제약 + 기존 row 반환) — `failed` 상태 UI는 여전히 필요, 재시도 경로는 루트 CLAUDE.md P0-1 |
 | **이메일 인증 발송** | 🔴 미구현 | 무료 사용자(=현재 전원)는 `email_verified` 전까지 분석 차단(`AUTH_EMAIL_NOT_VERIFIED` 403). 개발 중엔 DB에서 `users.email_verified_at` 수동 set 하거나, **시드 계정**(`beekeeper1@helpbee.local` / `helpbee-dev-2026`, verified 상태) 사용 |
-| **권장조치(recommendations) 응답** | ⚠️ 미반환 | 결과 화면 처방 문구 불가 — 백엔드 보강 선행 필요(§4, 루트 CLAUDE.md P0-3) |
+| **권장조치(recommendations) 응답** | ✅ 반환 | `POST /analyses`·`GET /analyses/:id`가 `recommendations[{order,content,severity}]` 포함(목록은 미포함). 결과 화면 처방 문구 표시 가능(§4) |
 | **문의 폼(`POST /v1/inquiries`)** | ✅ **구현·라이브 검증**(2026-07-04) | `apps/web` 문의 폼이 실제로 접수됨(§5.5). 5/시간/IP 제한, 익명, 허니팟. 이전 "라우트 없음(404)" 해소 |
 | **인프라 배포(staging/prod)** | 🔴 미배포 | 원격 base URL 없음. 현재 **localhost:3001** 만. 배포 후 환경별 URL 주입 |
 | **결제** | 🟡 inert | 전원 무료. 유료 UI는 표시만(`/plans`) |
 
-> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드/**AI 분석(로컬)** 흐름은 **지금 바로 붙여 개발 가능**. 남은 프론트 차단 요소는 recommendations 미반환(처방 문구)·이메일 인증 발송·`/inquiries` 부재. admin 화면은 admin 토큰 발급(DB 승격 또는 시드 `admin@helpbee.local`)만 되면 전부 동작. 서버 기동 시 **`.env` 수동 로드 필수**(`set -a; source .env; set +a`) — 자동 로드 개선은 루트 CLAUDE.md P0-2.
+> **요약**: 로그인/회원가입/벌통 관리/이미지 업로드/AI 분석(로컬)/문의 접수/**권장조치 반환** 모두 동작. 남은 프론트 차단 요소는 이메일 인증 발송뿐. 서버 기동 시 `.env` 수동 로드 필요(자동 로드는 PR #40).
 
 ---
 

@@ -1,9 +1,12 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 
 import type { Database } from '../client';
 import { type Analysis, analyses, type NewAnalysis } from '../schema/analyses';
 import { hives } from '../schema/hives';
 import { recommendations } from '../schema/recommendations';
+
+/** 응답용 권장 조치(표시 순서 order 오름차순). id/analysisId/createdAt은 제외. */
+export type AnalysisRecommendation = { order: number; content: string; severity: string };
 
 export type DualAnalysisInput = {
   hiveId: string;
@@ -174,6 +177,36 @@ export async function getAnalysisByIdForUser(
     .where(and(eq(analyses.id, analysisId), eq(hives.userId, userId), isNull(hives.deletedAt)))
     .limit(1);
   return rows[0]?.a;
+}
+
+/**
+ * 분석 ID들의 권장 조치를 order 오름차순으로 조회 → {analysisId: items[]} Map.
+ * GET /:id 등 응답 조립 시 join용. 소유권 검증은 호출부(분석 자체 조회)에서 이미 수행.
+ * ids가 비면 빈 Map 반환(쿼리 스킵).
+ */
+export async function listRecommendationsByAnalysisIds(
+  db: Database,
+  analysisIds: string[],
+): Promise<Map<string, AnalysisRecommendation[]>> {
+  const out = new Map<string, AnalysisRecommendation[]>();
+  if (analysisIds.length === 0) return out;
+  const rows = await db
+    .select({
+      analysisId: recommendations.analysisId,
+      order: recommendations.order,
+      content: recommendations.content,
+      severity: recommendations.severity,
+    })
+    .from(recommendations)
+    .where(inArray(recommendations.analysisId, analysisIds))
+    .orderBy(asc(recommendations.order));
+  for (const r of rows) {
+    const list = out.get(r.analysisId);
+    const item = { order: r.order, content: r.content, severity: r.severity };
+    if (list) list.push(item);
+    else out.set(r.analysisId, [item]);
+  }
+  return out;
 }
 
 /** 멱등 short-circuit용: 해당 이미지의 success 분석(소유권 검증). 있으면 재추론 스킵. */

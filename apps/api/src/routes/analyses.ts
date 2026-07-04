@@ -59,6 +59,9 @@ export type AnalysesDeps = {
     opts: { limit: number; offset: number },
   ): Promise<unknown[]>;
   getByIdForUser(id: string, userId: string): Promise<unknown | undefined>;
+  getRecommendations(
+    analysisId: string,
+  ): Promise<{ order: number; content: string; severity: string }[]>;
   getTrend(hiveId: string, userId: string, from: Date, to: Date): Promise<unknown[]>;
 };
 
@@ -67,8 +70,15 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 const HEALTH: Record<Tier, string> = { safe: 'healthy', watch: 'warning', danger: 'critical' };
 const SEVERITY: Record<Tier, string> = { safe: 'info', watch: 'warn', danger: 'danger' };
 
-function toRecommendations(tier: Tier, list: string[]) {
+type Recommendation = { order: number; content: string; severity: string };
+
+function toRecommendations(tier: Tier, list: string[]): Recommendation[] {
   return list.slice(0, 5).map((content, i) => ({ order: i, content, severity: SEVERITY[tier] }));
+}
+
+/** 분석 row에 recommendations 배열을 실어 응답 페이로드로 만든다(계약: §4). */
+function withRecs(row: unknown, recs: Recommendation[]) {
+  return { ...(row as Record<string, unknown>), recommendations: recs };
 }
 
 export function analysesRoutes(deps: AnalysesDeps) {
@@ -85,7 +95,10 @@ export function analysesRoutes(deps: AnalysesDeps) {
 
     // ② 멱등 short-circuit (중복 제출 → 기존 success 반환, 재추론·재과금 X)
     const existing = await deps.findSuccessByImage(imageId, userId);
-    if (existing) return ok(c, existing);
+    if (existing) {
+      const recs = await deps.getRecommendations((existing as { id: string }).id);
+      return ok(c, withRecs(existing, recs));
+    }
 
     // ③ 무료: 이메일 검증 게이트 + quota reserve(reserve-then-refund)
     const plan = await deps.getPlan(userId);
@@ -130,7 +143,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
         },
         recommendations: [],
       });
-      return ok(c, row);
+      return ok(c, withRecs(row, []));
     }
 
     // ⑤-b 성공: engine_used→model_id, 1행 저장, created(201)
@@ -138,6 +151,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const provider = result!.engine_used as 'yolo' | 'openai';
     const modelId = await deps.resolveModelId(provider);
     if (!modelId) return problem(c, 'AI_UNAVAILABLE'); // 모델 메타 없음(seed/매핑 오류)
+    const recs = toRecommendations(tier, result!.recommendations ?? []);
     const row = await deps.storeAnalysis({
       hiveId,
       imageId,
@@ -152,9 +166,9 @@ export function analysesRoutes(deps: AnalysesDeps) {
         error: null,
         analyzedAt,
       },
-      recommendations: toRecommendations(tier, result!.recommendations ?? []),
+      recommendations: recs,
     });
-    return created(c, row);
+    return created(c, withRecs(row, recs));
   });
 
   app.get('/', zValidator('query', listAnalysesQuerySchema), async (c) => {
@@ -178,7 +192,8 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const userId = c.get('userId') as string;
     const row = await deps.getByIdForUser(c.req.param('id'), userId);
     if (!row) return problem(c, 'NOT_FOUND');
-    return ok(c, row);
+    const recs = await deps.getRecommendations((row as { id: string }).id);
+    return ok(c, withRecs(row, recs));
   });
 
   return app;

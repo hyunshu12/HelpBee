@@ -79,5 +79,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-04 | **전체 시스템 라이브 점검**: 4앱 테스트 스위트 + 진단 E2E(presign→S3→confirm→YOLO 추론 성공, 197ms) 실측 · 문제 9건 발견 · 개선 계획(P0~P2)은 루트 CLAUDE.md §C | 없음 (점검) | [2026-07-04-system-check.md](./2026-07-04-system-check.md) |
 | 2026-07-04 | **Admin 대시보드 MVP**(apps/admin 최초 구현): 쿠키+프록시 인증, KPI/사용자관리/감사로그/dual 뷰, @helpbee/ui Table 추가, 라이브 E2E 검증 | #42 (머지) | [2026-07-04-admin-dashboard-mvp.md](./2026-07-04-admin-dashboard-mvp.md) |
 | 2026-07-04 | 문의 접수(Inquiries) E2E: DB 테이블+쿼리(0002 migration)·API 라우트(5/시간 IP·허니팟)·웹 폼 실제 연결. 라우트 404 해소, 라이브 검증(201/psql/429) | (재발행 예정) | [2026-07-04-inquiries.md](./2026-07-04-inquiries.md) |
+| 2026-07-04 | 분석 권장조치(recommendations) end-to-end: AI tier문구(+정직성 caveat) → API 반환(POST·GET:id, 목록 제외) → 모바일 레포트 severity 렌더 | #36 (예정) | [2026-07-04-analysis-recommendations.md](./2026-07-04-analysis-recommendations.md) |
 
 (새 기록 추가 시 위 표 갱신)

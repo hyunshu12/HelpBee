@@ -75,7 +75,7 @@ def _openai_response(
             estimated_count=None,
             confidence=round(ores.confidence, 4),
             recommendations=risk_mod.recommendations_for(
-                tier, low_confidence=low_conf, config=config
+                tier, low_confidence=low_conf, count_available=False, config=config
             ),
             model_version=ores.model_version,
             prompt_version=ores.prompt_version,

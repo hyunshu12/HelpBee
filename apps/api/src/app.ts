@@ -88,6 +88,9 @@ export function createApp() {
     listForUser: (hiveId, userId, opts) =>
       queries.analyses.listAnalysesByHiveForUser(db, hiveId, userId, opts),
     getByIdForUser: (id, userId) => queries.analyses.getAnalysisByIdForUser(db, id, userId),
+    getRecommendations: async (analysisId) =>
+      (await queries.analyses.listRecommendationsByAnalysisIds(db, [analysisId])).get(analysisId) ??
+      [],
     getTrend: (hiveId, userId, from, to) => queries.hives.getHiveTrend(db, hiveId, userId, from, to),
   };
 
