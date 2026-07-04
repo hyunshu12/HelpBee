@@ -81,5 +81,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-04 | 문의 접수(Inquiries) E2E: DB 테이블+쿼리(0002 migration)·API 라우트(5/시간 IP·허니팟)·웹 폼 실제 연결. 라우트 404 해소, 라이브 검증(201/psql/429) | (재발행 예정) | [2026-07-04-inquiries.md](./2026-07-04-inquiries.md) |
 | 2026-07-04 | 분석 권장조치(recommendations) end-to-end: AI tier문구(+정직성 caveat) → API 반환(POST·GET:id, 목록 제외) → 모바일 레포트 severity 렌더 | #36 (예정) | [2026-07-04-analysis-recommendations.md](./2026-07-04-analysis-recommendations.md) |
 | 2026-07-04 | 실패 분석 재시도: `POST /analyses`가 같은 imageId의 failed 행을 제자리 재추론·UPDATE(id 보존, CAS) → 200, success는 멱등 유지 + 모바일 "다시 시도" 버튼 | #37 (예정, #36 스택) | [2026-07-04-analysis-retry.md](./2026-07-04-analysis-retry.md) |
+| 2026-07-04 | 첫 GitHub Actions CI 파이프라인(`.github/workflows/ci.yml`): node(type-check+api vitest)·ai(pytest)·mobile(analyze+test). 모든 스텝 develop 로컬 선검증 | #38 (예정) | [2026-07-04-ci-pipeline.md](./2026-07-04-ci-pipeline.md) |
 
 (새 기록 추가 시 위 표 갱신)
