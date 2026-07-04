@@ -9,3 +9,4 @@ export { Badge, badgeVariants, type BadgeProps } from './components/Badge';
 export { Input, type InputProps } from './components/Input';
 export { Textarea, type TextareaProps } from './components/Textarea';
 export { Skeleton, type SkeletonProps } from './components/Skeleton';
+export { Table, THead, TBody, Tr, Th, Td } from './components/Table';
