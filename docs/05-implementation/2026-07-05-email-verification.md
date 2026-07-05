@@ -59,3 +59,5 @@ signup → 인증 메일 발송 → 링크 클릭 → `email_verified_at` set �
 - **Resend 미검증 도메인 제약**: 실제 사용자 전송하려면 `resend.com/domains`에서 도메인 검증 후
   `EMAIL_FROM`을 그 도메인 주소로 교체 필요(운영 전 인프라 과제). 현재는 계정 소유자에게만 발송 가능.
 - **follow-up**: 모바일 분석 error-state에 "인증 메일 다시 받기" 버튼 연결(리포지토리 메서드는 준비됨).
+
+> 운영 절차(도메인 인증·발신자 교체·트러블슈팅): [docs/04-operation/email-verification-runbook.md](../04-operation/email-verification-runbook.md)
