@@ -45,6 +45,9 @@ const envSchema = z
     EMAIL_VERIFY_BASE_URL: z.string().min(1).default('http://localhost:3001'),
     AWS_REGION: z.string().min(1).default('ap-northeast-2'),
     S3_IMAGES_BUCKET: z.string().min(1),
+    // 클라이언트 IP 신뢰 모드(lib/client-ip.ts). cloudflare=CF-Connecting-IP 만 신뢰(beta 실배포),
+    // xff=XFF 첫 홉(로컬/테스트 전용 — 위조 가능, production 이면 부팅 시 경고).
+    TRUSTED_PROXY: z.enum(['xff', 'cloudflare']).default('xff'),
     PORT: z.coerce.number().int().positive().default(3001),
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   })

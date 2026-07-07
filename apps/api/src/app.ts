@@ -13,7 +13,7 @@ import { secureHeaders } from 'hono/secure-headers';
 import Redis from 'ioredis';
 
 import { loadEnv } from './config/env';
-import { getClientIp } from './lib/client-ip';
+import { configureTrustedProxy, getClientIp } from './lib/client-ip';
 import { AppError } from './lib/error-codes';
 import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
@@ -50,6 +50,14 @@ import * as s3 from './services/s3-client';
 export function createApp() {
   // pragma: no cover - 통합(실 인프라) 대상
   const env = loadEnv();
+  // IP 신뢰 모드 주입 — production 에서 xff 는 스푸핑 가능(레이트리밋/잠금/감사 IP 오염)
+  configureTrustedProxy(env.TRUSTED_PROXY);
+  if (env.NODE_ENV === 'production' && env.TRUSTED_PROXY !== 'cloudflare') {
+    logger.warn(
+      {},
+      '[net] TRUSTED_PROXY=xff in production — client IP is spoofable; set TRUSTED_PROXY=cloudflare behind Cloudflare',
+    );
+  }
   const redis = new Redis(env.REDIS_URL);
   const s3client = new S3Client({ region: env.AWS_REGION });
   const http = axios.create({ baseURL: env.AI_BASE_URL });
