@@ -7,9 +7,9 @@
  * app.ts가 실제 구현(@helpbee/database queries, services/*)을 주입.
  */
 import { zValidator } from '@hono/zod-validator';
-import type { Context } from 'hono';
 import { Hono } from 'hono';
 
+import { getClientIp } from '../lib/client-ip';
 import { created, ok } from '../lib/envelope';
 import { AppError } from '../lib/error-codes';
 import { problem } from '../lib/problem';
@@ -85,13 +85,6 @@ export type AuthDeps = {
   now(): number;
 };
 
-function clientIp(c: Context): string {
-  // CloudFront+ALB 환경에서 정확 추출은 §7.5(신뢰 프록시 홉)로 강화 예정.
-  const xff = c.req.header('x-forwarded-for');
-  if (xff) return xff.split(',')[0]!.trim();
-  return c.req.header('x-real-ip') ?? 'unknown';
-}
-
 function isUniqueViolation(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }
@@ -102,7 +95,7 @@ export function authRoutes(deps: AuthDeps) {
   // POST /signup (201)
   app.post('/signup', zValidator('json', signupSchema), async (c) => {
     const { email, password, name } = c.req.valid('json');
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
 
     const passwordHash = await deps.hashPassword(password);
@@ -153,7 +146,7 @@ export function authRoutes(deps: AuthDeps) {
   // POST /login (200)
   app.post('/login', zValidator('json', loginSchema), async (c) => {
     const { email, password } = c.req.valid('json');
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
 
     // 계정 보호 게이트 — argon2 verify 이전(메모리 DoS·lockout-DoS 차단)
@@ -215,7 +208,7 @@ export function authRoutes(deps: AuthDeps) {
   // POST /refresh (200) — 회전 + 재사용 감지 + grace window
   app.post('/refresh', zValidator('json', refreshSchema), async (c) => {
     const { refreshToken } = c.req.valid('json');
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
     const hash = deps.hashRefresh(refreshToken);
 
@@ -285,7 +278,7 @@ export function authRoutes(deps: AuthDeps) {
   app.post('/logout', zValidator('json', logoutSchema), async (c) => {
     const userId = c.get('userId') as string;
     const { refreshToken } = c.req.valid('json');
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
 
     const row = await deps.getRefreshByHash(deps.hashRefresh(refreshToken));
@@ -308,7 +301,7 @@ export function authRoutes(deps: AuthDeps) {
   // GET /verify-email?token= (🔓) — 이메일 링크에서 브라우저로 진입. 항상 HTML(성공/만료/무효).
   app.get('/verify-email', async (c) => {
     const token = c.req.query('token') ?? '';
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
 
     const result = deps.verifyEmailToken(token);
@@ -342,7 +335,7 @@ export function authRoutes(deps: AuthDeps) {
   // POST /resend-verification (🔐) — requireAuth + 3회/시간/user 레이트리밋은 app.ts에서 마운트.
   app.post('/resend-verification', async (c) => {
     const userId = c.get('userId') as string;
-    const ip = clientIp(c);
+    const ip = getClientIp(c);
     const ua = c.req.header('user-agent') ?? null;
 
     const user = await deps.getActiveUserById(userId);

@@ -14,6 +14,9 @@
  *
  * 모드는 env.TRUSTED_PROXY → createApp 의 configureTrustedProxy() 로 주입.
  * (getClientIp 는 rate-limit keyFn 등에서 Context 만으로 호출되는 시그니처를 유지.)
+ *
+ * ⚠️ 클라이언트 IP 는 반드시 이 모듈로만 추출한다 — 라우트에서 XFF 를 직접 파싱하면
+ * 신뢰 모드를 우회한다 (리뷰에서 auth 로그인 잠금 우회 사례로 실증됨).
  */
 import type { Context } from 'hono';
 
