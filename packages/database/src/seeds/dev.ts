@@ -51,6 +51,13 @@ const SEED_AI_MODELS = [
 ];
 
 async function main(): Promise<void> {
+  // 실환경 실행 가드 (plans/2026-07-07 PR-7): 고정 비밀번호가 git에 공개돼 있어
+  // 실사용자 도달 가능 DB(beta 포함)에 실행되면 즉시 알려진 계정 침해 벡터가 된다.
+  if (process.env.NODE_ENV === 'production' || process.env.HELPBEE_ENV === 'beta') {
+    throw new Error(
+      '[seed:dev] production/beta 환경 실행 금지 — seeds/prod.ts (seed:prod) 를 사용할 것',
+    );
+  }
   const url = process.env.DATABASE_URL ?? DEFAULT_URL;
   console.log(`[seed:dev] connecting to ${url.replace(/:[^@:]+@/, ':***@')}`);
 

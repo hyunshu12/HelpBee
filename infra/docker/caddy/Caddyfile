@@ -1,0 +1,13 @@
+# HelpBee beta — api.helpbee.kr TLS 종단 (Cloudflare 프록시 뒤 오리진)
+#
+# TLS = Cloudflare Origin CA 인증서 (15년 유효, Let's Encrypt 불필요).
+#   EC2 /opt/helpbee/certs/{origin.pem,origin.key} 로 배치 (사람/user-data).
+#   Cloudflare 대시보드: SSL/TLS 모드 "Full (strict)" 필수.
+# ai(:8000) 는 외부 비노출 — api 가 내부 네트워크에서 HMAC 인증으로만 호출.
+# 클라이언트 IP 는 Cloudflare 의 CF-Connecting-IP 헤더 사용 (apps/api client-ip.ts).
+
+api.helpbee.kr {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+	encode gzip
+	reverse_proxy api:3001
+}

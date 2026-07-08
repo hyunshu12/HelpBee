@@ -1,0 +1,65 @@
+name: Docker Build
+
+# 컨테이너 이미지가 실제로 빌드되는지 PR 시점에 검증 (push 없음).
+# 배포용 build+push 는 deploy-beta.yml 담당 (PR-6).
+# 로컬(macOS, Docker 미설치)에서 빌드 검증이 불가능하므로 이 워크플로가 유일한 게이트.
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'apps/api/Dockerfile'
+      - 'apps/ai/Dockerfile'
+      - 'apps/ai/requirements.txt'
+      - '.dockerignore'
+      - 'docker-compose.beta.yml'
+      - 'infra/docker/**'
+      - '**/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: helpbee-api
+            dockerfile: apps/api/Dockerfile
+          - image: helpbee-ai
+            dockerfile: apps/ai/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ${{ matrix.image }}:pr-check
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  compose-config:
+    name: Validate docker-compose.beta.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        # EC2 레이아웃(.env/Caddyfile/certs) 을 흉내내 문법·치환 검증
+        run: |
+          mkdir -p /tmp/beta/certs /tmp/beta/cache/yolo
+          cp docker-compose.beta.yml /tmp/beta/docker-compose.yml
+          cp infra/docker/caddy/Caddyfile /tmp/beta/Caddyfile
+          printf 'ECR_REGISTRY=000000000000.dkr.ecr.ap-northeast-2.amazonaws.com\nIMAGE_TAG=ci-check\n' > /tmp/beta/.env
+          docker compose -f /tmp/beta/docker-compose.yml config --quiet

@@ -1,0 +1,92 @@
+# HelpBee beta 배포용 compose — 단일 EC2 절감 모드
+# (plans/2026-07-07_배포인프라-절감모드.md · infra/CLAUDE.md 절감 모드 섹션)
+#
+# ⚠️ 이 파일은 EC2 전용이다. 로컬 개발은 기존 docker-compose.yml(postgres+redis) 사용.
+#
+# EC2 실행 레이아웃 (user-data + deploy-beta.yml 이 준비):
+#   /opt/helpbee/
+#   ├── docker-compose.yml   ← 이 파일의 배포 SHA 시점 복사본
+#   ├── Caddyfile            ← infra/docker/caddy/Caddyfile 복사본
+#   ├── .env                 ← SSM Parameter Store 렌더링 (600 권한).
+#   │                          compose 변수 치환(ECR_REGISTRY/IMAGE_TAG)과
+#   │                          컨테이너 env_file 양쪽에 같은 파일 사용
+#   ├── certs/               ← Cloudflare Origin CA (origin.pem / origin.key)
+#   └── cache/yolo/          ← YOLO 모델 캐시 (chown 1001 — ai 컨테이너 uid)
+#
+# .env 필수 키(컨테이너 주입): DATABASE_URL(RDS), JWT_SECRET, REFRESH_TOKEN_PEPPER,
+#   AI_INTERNAL_HMAC_SECRET, S3_IMAGES_BUCKET, AWS_REGION, CORS_ALLOWLIST,
+#   EMAIL_PROVIDER/RESEND_API_KEY/EMAIL_FROM/EMAIL_VERIFY_BASE_URL,
+#   IMAGE_ALLOWLIST_HOSTS, YOLO_MODEL_VERSION 등 (.env.example 참조)
+# + compose 치환용: ECR_REGISTRY, IMAGE_TAG
+#
+# AWS 자격증명은 넣지 않는다 — EC2 instance profile 사용.
+#   (컨테이너가 IMDS 를 쓰려면 인스턴스 metadata hop limit=2 필요 — Terraform 설정)
+#
+# 마이그레이션(배포 스크립트가 컨테이너 재기동 전 1회 실행):
+#   docker compose run --rm --no-deps api \
+#     ./node_modules/.bin/tsx ../../packages/database/src/migrate.ts
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    mem_limit: 128m
+
+  api:
+    image: ${ECR_REGISTRY}/helpbee-api:${IMAGE_TAG}
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      # compose 네트워크 토폴로지는 여기서 고정 (.env 값보다 우선)
+      REDIS_URL: redis://redis:6379
+      AI_BASE_URL: http://ai:8000
+    expose:
+      - "3001"
+    depends_on:
+      - redis
+      - ai
+    mem_limit: 768m
+
+  ai:
+    image: ${ECR_REGISTRY}/helpbee-ai:${IMAGE_TAG}
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    volumes:
+      # 컨테이너 재시작 시 S3 모델 재다운로드 방지 (best.onnx ~37MB)
+      - ./cache/yolo:/var/cache/helpbee/yolo
+    expose:
+      - "8000"
+    mem_limit: 1536m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # rate-limit/quota 카운터 용도 — eviction 되면 무료 quota 우회가 가능해지므로
+    # noeviction + 여유 있는 maxmemory. RDB 스냅샷(5분/1변경)으로 재시작 시 quota 보존.
+    command:
+      [
+        "redis-server",
+        "--maxmemory", "192mb",
+        "--maxmemory-policy", "noeviction",
+        "--save", "300", "1",
+      ]
+    volumes:
+      - redis_data:/data
+    mem_limit: 256m
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

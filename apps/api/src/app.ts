@@ -15,6 +15,7 @@ import Redis from 'ioredis';
 import { loadEnv } from './config/env';
 import { configureTrustedProxy, getClientIp } from './lib/client-ip';
 import { AppError } from './lib/error-codes';
+import { initSentry } from './lib/sentry';
 import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
 import { requireAuth, requireAdmin } from './middleware/auth';
@@ -50,6 +51,8 @@ import * as s3 from './services/s3-client';
 export function createApp() {
   // pragma: no cover - 통합(실 인프라) 대상
   const env = loadEnv();
+  // 관측성: DSN 미설정(로컬/테스트) 시 no-op — 미분류 500 은 error-handler 가 캡처
+  initSentry(env.SENTRY_DSN, env.NODE_ENV);
   // IP 신뢰 모드 주입 — production 에서 xff 는 스푸핑 가능(레이트리밋/잠금/감사 IP 오염)
   configureTrustedProxy(env.TRUSTED_PROXY);
   if (env.NODE_ENV === 'production' && env.TRUSTED_PROXY !== 'cloudflare') {
