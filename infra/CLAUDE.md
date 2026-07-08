@@ -6,6 +6,51 @@
 
 ---
 
+## 🚨 2026-07-07 결정: 베타는 절감 모드 (단일 EC2) — 이 섹션이 우선한다
+
+> **상세 계획·실행 순서(PR-1~8)·리스크: [`plans/2026-07-07_배포인프라-절감모드.md`](../plans/2026-07-07_배포인프라-절감모드.md) ← 인프라 작업 전 필독.**
+> 아래 본문(§3 환경, §5 컨테이너, §7 CI/CD, §17 비용)의 ECS Fargate/ALB/CloudFront 구성은
+> **정식 런칭(500명) 시점용**으로 순연됐다. 베타(~100명)는 이 섹션이 기준.
+
+### 확정 아키텍처 (7차원 감사 + 교차 검증 완료)
+
+| 항목 | 결정 |
+|---|---|
+| 컴퓨트 | **단일 EC2 t3.medium (x86_64)** — Caddy + api + ai + redis 컨테이너 (`docker-compose.beta.yml`). ARM(t4g)은 GHA x86 러너·네이티브 휠 리스크로 배제 |
+| DB | **RDS PostgreSQL 16 db.t4g.micro 단일 AZ** — hard 보존 데이터 자동백업/PITR 확보, Fargate 전환 시 무변경 |
+| Redis | EC2 내 컨테이너 (ElastiCache 미도입). Fargate 전환 시 ElastiCache 컷오버 필요 — 컷오버는 비영속 데이터라 수 분 다운타임으로 충분 |
+| DNS/TLS | **Cloudflare 무료** (DNS+프록시+Universal SSL) + 오리진은 Origin CA를 Caddy가 종단. Route53/ACM/ALB/CloudFront/AWS WAF **베타 미도입** |
+| 배포 | GHA build → ECR push → **SSM Run Command** (`deploy-beta.yml` + `scripts/deploy-ec2.sh`). SSH 22 미개방. 트리거는 **develop** 기준 + Environment `beta` 승인 1단계 (§7 표의 'main 머지→staging'·gitworkflow.md 불일치는 develop으로 통일) |
+| 시크릿 | **SSM Parameter Store SecureString**(무료) + EC2 instance profile — Secrets Manager는 정식 런칭 시 재검토 |
+| 모니터링 | CloudWatch Agent + UptimeRobot 무료 + Sentry 무료 티어. Grafana/OTel 베타 생략 |
+| web/admin | **Vercel 유지** — EC2는 api+ai 전용 (상태 비저장 프론트를 EC2에 올리지 않는다) |
+| 백업 | RDS 자동백업 7일 + `scripts/backup-db.sh`(nightly pg_dump→S3, 2차 방어선) + `scripts/restore-drill.sh` 월 1회 |
+
+### 절감 모드 월 비용표 (bottom-up, ap-northeast-2)
+
+| 항목 | 월 비용 (USD) |
+|---|---|
+| EC2 t3.medium | $38 |
+| EBS gp3 30GB | $3 |
+| 공인 IPv4 (2024-02 정책) | $3.65 |
+| RDS db.t4g.micro | $17 |
+| ECR / CloudWatch / S3 / 도메인 | $5~9 |
+| Cloudflare / UptimeRobot / Sentry | $0 |
+| **AWS 소계** | **≈ $66~71** |
+| (미결정) Vercel Pro | +$20 |
+
+egress는 월 100GB 무료 티어 내 운용 가정 — 실사용 1~2주 후 실측 재보정. 예산 알람 80% 필수.
+
+### 선행 사람 액션 (P0 — 계획서 §3)
+
+① AWS ROOT 키 회전+MFA+CloudTrail (2026-06 미해결 P0) ② helpbee.kr 구매(이메일 인증 동시 블로커) ③ 관리자 권한 AWS 재고 확인 ④ OIDC IdP·tf-state 버킷 부트스트랩(claude_helpBee 권한 부족) ⑤ Vercel 프로젝트 생성 + Pro 결정
+
+### 레거시 IaC 정리 (2026-07-08)
+
+`infra/terraform/environments/`(구 EKS) · `infra/terraform/modules/eks/` · `infra/k8s/` · 루트 `services/{auth,user,analysis}`(2026-04 스캐폴딩 잔재)는 **삭제됨** — 현재 아키텍처(apps/api 단일 게이트웨이)와 무관하며 참조 0건 확인. 남은 `modules/{vpc,rds}`도 구 자산: vpc는 NAT GW 강제 생성이라 절감 모드에서 사용 금지(default VPC 사용), rds는 뼈대 재사용 가능. Terraform state 버킷 이름은 **`helpbee-tf-state`로 통일** (구 코드의 `helpbee-terraform-state` 참조 폐기 — 두 버킷 다 실존한 적 없음).
+
+---
+
 ## 1. 목적 (Goal)
 
 - **베타 100명 → 정식 런칭 500명** 트래픽을 안정적으로 감당하는 인프라 구성.
@@ -190,7 +235,7 @@ helpbee/
 | 워크플로 | 트리거 | 동작 |
 | --- | --- | --- |
 | `ci.yml` ✅구현(2026-07-04, #38) | PR→develop/main, push→develop | node(type-check: types/database/api + api vitest) · ai(pytest) · mobile(flutter analyze+test). lint/ui·admin·web type-check/dart format은 develop 기준 미설정·미포맷이라 제외. 상세: `docs/05-implementation/2026-07-04-ci-pipeline.md` |
-| `deploy-staging.yml` | `main` 머지 | docker build → ECR push → `aws ecs update-service` (force new deployment) |
+| `deploy-staging.yml` | ~~`main` 머지~~ | ⚠️ 절감 모드에선 **`deploy-beta.yml`이 대체** (✅구현, develop 기준 + SSM 배포 — 상단 절감 모드 섹션). ECS 버전은 Fargate 전환 시 작성 |
 | `deploy-production.yml` | tag `v0.x.0` push | **manual approval gate** (environment: production) → ECR push → ECS rolling update |
 | `mobile-beta.yml` | mobile 디렉터리 변경 + tag | Flutter build → fastlane → TestFlight + Play Internal |
 
@@ -519,4 +564,4 @@ aws secretsmanager get-secret-value --secret-id helpbee/prod/db --query SecretSt
 
 ---
 
-마지막 업데이트: 2026-05-02. 이 문서는 인프라 변경과 함께 갱신한다. PR 의 `infra/**` 변경은 반드시 이 문서에 영향이 있는지 확인한다.
+마지막 업데이트: 2026-07-08 (절감 모드 섹션 신설 + 레거시 IaC 정리). 이 문서는 인프라 변경과 함께 갱신한다. PR 의 `infra/**` 변경은 반드시 이 문서에 영향이 있는지 확인한다.
