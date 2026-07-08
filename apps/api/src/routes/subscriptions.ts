@@ -5,6 +5,7 @@
  */
 import { Hono } from 'hono';
 
+import { getClientIp } from '../lib/client-ip';
 import { ok } from '../lib/envelope';
 import { PLAN_CATALOG } from '../schemas/subscriptions';
 import { resolveUserPlan, type SubscriptionRow } from '../services/subscription-service';
@@ -54,7 +55,7 @@ export function subscriptionsRoutes(deps: SubscriptionsDeps) {
       entity: 'subscription',
       entityId: null,
       metadata: { eventType: body.eventType ?? null, eventId: body.eventId ?? null }, // PII/카드 금지
-      ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      ip: getClientIp(c),
       userAgent: c.req.header('user-agent') ?? null,
     });
     // MVP: 서명·타임스탬프 검증만 통과시키고 plan mutation은 Phase 2(inert).

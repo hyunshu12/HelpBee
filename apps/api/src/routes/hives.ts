@@ -7,6 +7,7 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 
+import { getClientIp } from '../lib/client-ip';
 import { created, ok } from '../lib/envelope';
 import { problem } from '../lib/problem';
 import {
@@ -117,7 +118,7 @@ export function hivesRoutes(deps: HivesDeps) {
       action: 'hive.deleted',
       entity: 'hive',
       entityId: id,
-      ip: c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
+      ip: getClientIp(c),
       userAgent: c.req.header('user-agent') ?? null,
     });
     return ok(c, { id: result.id, deletedAt: result.deletedAt });

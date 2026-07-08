@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { configureTrustedProxy } from '../lib/client-ip';
 import { AppError } from '../lib/error-codes';
 import { errorHandler } from '../middleware/error-handler';
 import { requestId } from '../middleware/request-id';
@@ -397,5 +398,29 @@ describe('POST /resend-verification', () => {
     const deps = makeDeps({ getActiveUserById: vi.fn(async () => undefined) });
     const res = await post(makeApp(deps, 'ghost'), '/resend-verification', {});
     expect(res.status).toBe(404);
+  });
+});
+
+// 리뷰 회귀 (plans/2026-07-07 PR-5 보강): 로그인 잠금 복합키(email+ip)의 ip 가
+// 신뢰 모드를 따라야 한다 — 과거 auth.ts 자체 XFF 파싱은 cloudflare 배포에서도
+// 위조 XFF 로 잠금을 영구 우회할 수 있었다.
+describe('login lockout IP — trusted proxy 모드 통일', () => {
+  afterEach(() => configureTrustedProxy('xff'));
+
+  it('cloudflare 모드: 위조 XFF 무시, CF-Connecting-IP 가 잠금 키에 쓰인다', async () => {
+    configureTrustedProxy('cloudflare');
+    const deps = makeDeps({ verifyPassword: vi.fn(async () => false) });
+    const res = await makeApp(deps).request('/login', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.9',
+        'x-forwarded-for': '6.6.6.6', // 공격자 제어값 — 무시돼야 함
+      },
+      body: JSON.stringify({ email: 'a@b.com', password: 'bad' }),
+    });
+    expect(res.status).toBe(401);
+    expect(deps.assertNotLocked).toHaveBeenCalledWith({ email: 'a@b.com', ip: '203.0.113.9' });
+    expect(deps.recordLoginFailure).toHaveBeenCalledWith({ email: 'a@b.com', ip: '203.0.113.9' });
   });
 });
