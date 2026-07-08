@@ -1,0 +1,139 @@
+name: Deploy Beta
+
+# beta(단일 EC2) 배포 — plans/2026-07-07_배포인프라-절감모드.md PR-6.
+#
+# ⚠️ 의도적으로 workflow_dispatch 전용이다.
+#   beta EC2 = 실사용자 데이터가 사는 사실상 프로덕션이므로, GitHub Environment
+#   'beta'에 required reviewers 를 설정하기 전까지 자동 트리거(workflow_run)를
+#   걸지 않는다. Environment 보호 설정 후 아래 블록을 활성화할 것:
+#
+#   # on:
+#   #   workflow_run:
+#   #     workflows: [CI]
+#   #     types: [completed]
+#   #     branches: [develop]
+#   # (+ deploy job 에 if: github.event.workflow_run.conclusion == 'success')
+#
+# 선행 사람 액션 (계획서 §3):
+#   - GHA OIDC IdP + 배포 role (trust: repo:hyunshu12/HelpBee ref/environment 한정)
+#   - Environment 'beta' 생성: secret AWS_ROLE_ARN / variable EC2_INSTANCE_ID
+#   - EC2 + /opt/helpbee 레이아웃 (Terraform PR-3)
+#
+# 롤백 = 이전에 push 된 태그로 workflow_dispatch(image_tag) 재실행.
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: '재배포/롤백할 기존 ECR 태그 (비우면 현재 SHA 를 빌드+푸시)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+# 배포 도중 취소는 반쯤 배포된 상태를 남기므로 취소하지 않고 직렬화만 한다
+concurrency:
+  group: deploy-beta
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+
+jobs:
+  build-push:
+    name: Build & push (${{ github.sha }})
+    if: inputs.image_tag == ''
+    runs-on: ubuntu-latest
+    environment: beta
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image tag
+        id: meta
+        run: echo "tag=develop-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push helpbee-api
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/helpbee-api:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=helpbee-api
+          cache-to: type=gha,mode=max,scope=helpbee-api
+
+      - name: Build & push helpbee-ai
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/ai/Dockerfile
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/helpbee-ai:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=helpbee-ai
+          cache-to: type=gha,mode=max,scope=helpbee-ai
+
+  deploy:
+    name: Deploy to EC2 (SSM)
+    needs: [build-push]
+    # image_tag 지정 시 build-push 는 skipped — 그 경우에도 배포는 진행
+    if: always() && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: beta
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy via SSM Run Command
+        env:
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          TAG: ${{ inputs.image_tag != '' && inputs.image_tag || needs.build-push.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "deploying tag=${TAG} sha=${GITHUB_SHA} to ${EC2_INSTANCE_ID}"
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "helpbee beta deploy ${TAG}" \
+            --parameters "commands=[\"curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/deploy-ec2.sh | bash -s -- ${TAG} ${GITHUB_SHA}\"],executionTimeout=[\"1800\"]" \
+            --query 'Command.CommandId' --output text)
+          echo "ssm command: $CMD_ID"
+
+          STATUS=Pending
+          for _ in $(seq 1 90); do # 최대 15분
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break ;; esac
+            sleep 10
+          done
+
+          echo "── EC2 stdout ──────────────────────────────"
+          aws ssm get-command-invocation \
+            --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE_ID" \
+            --query StandardOutputContent --output text || true
+          echo "── EC2 stderr ──────────────────────────────"
+          aws ssm get-command-invocation \
+            --command-id "$CMD_ID" --instance-id "$EC2_INSTANCE_ID" \
+            --query StandardErrorContent --output text || true
+
+          [ "$STATUS" = "Success" ] || { echo "deploy failed: status=$STATUS"; exit 1; }
+          echo "deploy OK: ${TAG}"
