@@ -85,5 +85,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-04 | AI 회귀 fixture 게이트(P1-3): 서빙 경로 스냅샷 매니페스트(이미지 미커밋·라이선스) + `-m regression` 24케이스 + skip 규칙 | #39 (예정) | [2026-07-04-ai-regression-fixtures.md](./2026-07-04-ai-regression-fixtures.md) |
 | 2026-07-04 | dev 서버 .env 자동 로드 (api --env-file-if-exists / ai load_dotenv, 기존 env 우선) | #40 | [2026-07-04-dev-env-autoload.md](./2026-07-04-dev-env-autoload.md) |
 | 2026-07-05 | 이메일 인증 발송(P1-4): stateless HMAC 토큰 + provider 추상화(console/Resend) + verify-email HTML·resend-verification(3/hr) → 분석 게이트 라이브 통과, 실 Resend messageId 확인 | #44 (예정) | [2026-07-05-email-verification.md](./2026-07-05-email-verification.md) |
+| 2026-07-08 | **배포 인프라 절감 모드**: 계획 확정(단일 EC2, ~$66/월) + api/ai 컨테이너화(tsx 런타임) + client-ip Cloudflare 대응 + SSM 배포 워크플로 + Sentry/gitleaks/백업/prod시드 + 레거시 IaC 삭제 | #46~#51 | [2026-07-08-deploy-infra-cost-saving-mode.md](./2026-07-08-deploy-infra-cost-saving-mode.md) |
 
 (새 기록 추가 시 위 표 갱신)
