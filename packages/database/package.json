@@ -13,6 +13,7 @@
     "check": "drizzle-kit check:pg",
     "studio": "drizzle-kit studio",
     "seed:dev": "tsx src/seeds/dev.ts",
+    "seed:prod": "tsx src/seeds/prod.ts",
     "test:integration": "DB_ITEST=1 vitest run",
     "type-check": "tsc --noEmit"
   },

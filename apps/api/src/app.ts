@@ -15,6 +15,7 @@ import Redis from 'ioredis';
 import { loadEnv } from './config/env';
 import { getClientIp } from './lib/client-ip';
 import { AppError } from './lib/error-codes';
+import { initSentry } from './lib/sentry';
 import { isSessionRevoked, bumpSessionsValidAfter } from './lib/sessions';
 import { errorHandler } from './middleware/error-handler';
 import { requireAuth, requireAdmin } from './middleware/auth';
@@ -50,6 +51,8 @@ import * as s3 from './services/s3-client';
 export function createApp() {
   // pragma: no cover - 통합(실 인프라) 대상
   const env = loadEnv();
+  // 관측성: DSN 미설정(로컬/테스트) 시 no-op — 미분류 500 은 error-handler 가 캡처
+  initSentry(env.SENTRY_DSN, env.NODE_ENV);
   const redis = new Redis(env.REDIS_URL);
   const s3client = new S3Client({ region: env.AWS_REGION });
   const http = axios.create({ baseURL: env.AI_BASE_URL });

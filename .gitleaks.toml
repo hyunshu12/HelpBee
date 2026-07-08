@@ -1,0 +1,21 @@
+# gitleaks 설정 (plans/2026-07-07 PR-7 — 시크릿 스캐닝 게이트)
+# 기본 룰셋 확장 + 개발용 더미 시크릿 경로 allowlist.
+# 실제 시크릿은 SSM Parameter Store 로만 — 리포에 커밋 금지.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "개발 전용 더미 값 — 실환경 재사용 금지가 문서화된 경로만 최소 허용"
+paths = [
+  '''\.env\.example$''',
+  '''packages/database/src/seeds/dev\.ts$''',
+  '''^docs/''',
+  '''\.test\.ts$''',
+  '''^apps/api/bruno/''',
+  '''^apps/api/src/tests/''',
+]
+regexes = [
+  # .env.example 컨벤션의 더미 시크릿 프리픽스
+  '''dev_only_[a-z_]+''',
+]
