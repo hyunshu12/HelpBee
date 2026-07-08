@@ -6,15 +6,18 @@ services:
     image: postgres:16-alpine
     container_name: helpbee-postgres
     environment:
-      POSTGRES_USER: helpbee_user
-      POSTGRES_PASSWORD: helpbee_password
-      POSTGRES_DB: helpbee
+      # 로컬 개발 전용 기본값 — 이 파일은 절대 beta/production 에 쓰지 않는다
+      # (배포는 docker-compose.beta.yml + RDS). 기본값 문자열은 git 에 있으므로
+      # 실환경 비밀번호로 재사용 금지.
+      POSTGRES_USER: ${POSTGRES_USER:-helpbee_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helpbee_password}
+      POSTGRES_DB: ${POSTGRES_DB:-helpbee}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U helpbee_user"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-helpbee_user}"]
       interval: 10s
       timeout: 5s
       retries: 5

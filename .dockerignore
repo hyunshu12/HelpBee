@@ -1,0 +1,39 @@
+# 두 Dockerfile(apps/api, apps/ai) 공용 — 빌드 컨텍스트는 모노레포 루트.
+# 여기서 제외해도 Dockerfile 의 명시적 COPY 대상은 영향받지 않도록,
+# COPY 에 필요한 경로(apps/ai/training/configs 등)는 절대 넣지 말 것.
+
+.git
+.github
+.turbo
+**/node_modules
+**/dist
+**/.next
+**/coverage
+
+# 시크릿 — 어떤 경우에도 이미지에 넣지 않는다
+.env
+.env.*
+**/.env
+**/.env.*
+
+# AI 학습 자산 (수 GB — 이미지·컨텍스트 오염 방지)
+apps/ai/.venv
+apps/ai/training/datasets
+apps/ai/training/runs
+apps/ai/wandb
+**/*.pt
+**/*.onnx
+
+# 이미지에 들어가지 않는 앱/자산
+apps/mobile
+infra/terraform
+infra/k8s
+infra/k6
+docs
+plans
+services
+scripts
+
+# 잡동사니
+**/*.log
+.DS_Store
