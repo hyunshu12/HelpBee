@@ -101,3 +101,6 @@ AI_양봉진단_사업제안서.md
 
 # 루트 CLAUDE.md만 무시 (도메인별 apps/*/CLAUDE.md, packages/*/CLAUDE.md, infra/CLAUDE.md 는 추적)
 /CLAUDE.md
+
+# 시연용 이미지 — AI Hub 71667 원본 재배포 금지(내국인 제약). 절대 커밋 금지
+demo-assets/

@@ -16,6 +16,18 @@
 - `apps/web/src/app/[locale]/page.tsx` — 홈 인용 문단에 `text-balance`(줄 길이 균등 분배) 추가, 줄 간격 1.625 → 1.5.
 - `apps/mobile/lib/core/text/korean_wrap.dart` (신규) — `keepAll()`. 연속된 한글 음절 사이에 WORD JOINER(U+2060)를 삽입해 어절 중간 줄바꿈을 막는다.
 - `apps/mobile` 9개 화면 호출부에 `keepAll()` 적용 — onboarding, analyzing, photo_review, capture, hives_list, analysis_history, quota_banner, hive_detail, report.
+- `apps/mobile/lib/features/hives/presentation/hive_detail_screen.dart` — **실패 분석 행 가로 오버플로 수정**(아래 별도 항목).
+- `apps/mobile/test/hive_detail_timeline_test.dart` (신규) — 그 오버플로 회귀 테스트.
+
+### 곁다리로 잡은 버그 — 실패 분석 행 오버플로 233px
+
+시뮬레이터에서 확인하다 발견했다. 타임라인 행의 값 텍스트는 성공이면 `"90점 (위험)"`처럼 짧지만
+실패면 `errAiUnavailable` **문장 전체**가 들어간다. 이게 라벨과 같은 `Row`에 **폭 제한 없이**
+놓여 있어서, flex 없는 자식이 폭을 먼저 다 가져가고 `Expanded` 라벨이 0으로 밀렸다. 그 결과
+"AI 자동 정밀 판독"이 한 글자씩 세로로 쌓이고 행이 233px 넘쳤다.
+
+실패일 때만 `Column`으로 바꿔 문장을 라벨 아래 줄로 내렸다. 성공 행의 `라벨 ─ 점수` 좌우 배치는 유지.
+이 PR과 무관하게 원래 있던 버그다(2026-07-04자 실패 행에서도 재현).
 
 ## 주요 결정 (Decisions)
 
