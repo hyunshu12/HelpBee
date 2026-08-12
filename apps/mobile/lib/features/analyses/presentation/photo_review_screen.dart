@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/secondary_button.dart';
@@ -80,7 +81,7 @@ class PhotoReviewScreen extends StatelessWidget {
                     ),
                     AppSpacing.gapSm,
                     Text(
-                      l10n.reviewBody,
+                      keepAll(l10n.reviewBody),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.85),

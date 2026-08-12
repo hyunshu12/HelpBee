@@ -10,6 +10,7 @@ import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/recommendations.dart';
 import '../../../core/risk/risk_tier.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -340,7 +341,7 @@ class _RecommendationsCard extends StatelessWidget {
             ),
           const SizedBox(height: 2),
           Text(
-            l10n.reportRecommendDisclaimer,
+            keepAll(l10n.reportRecommendDisclaimer),
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.hintBorder,
             ),

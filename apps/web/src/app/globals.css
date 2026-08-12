@@ -16,5 +16,7 @@
     font-family: var(--font-sans), system-ui, sans-serif;
     font-size: 1.125rem; /* 18px base — 장년층 가독성 */
     line-height: 1.6;
+    word-break: keep-all; /* 한국어를 어절 중간에서 끊지 않는다 (기본값은 음절 단위로 끊음) */
+    overflow-wrap: break-word; /* keep-all이 못 끊는 긴 URL 등이 컨테이너를 넘치지 않도록 */
   }
 }

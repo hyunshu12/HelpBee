@@ -5,6 +5,7 @@ import 'package:helpbee/l10n/app_localizations.dart';
 
 import '../../../core/errors/error_messages.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
@@ -127,7 +128,7 @@ class _AnalyzingView extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
           child: Text(
-            l10n.analyzingBody,
+            keepAll(l10n.analyzingBody),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: AppColors.textSecondary,

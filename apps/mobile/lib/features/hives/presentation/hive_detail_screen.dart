@@ -7,6 +7,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/risk_tier.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -34,7 +35,7 @@ class HiveDetailScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(l10n.deleteHive),
-        content: Text(l10n.deleteHiveConfirm),
+        content: Text(keepAll(l10n.deleteHiveConfirm)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
@@ -152,7 +153,7 @@ class _OnboardingPageView extends StatelessWidget {
           ),
           AppSpacing.gapXl,
           Text(
-            page.title,
+            keepAll(page.title),
             textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w700,
@@ -161,7 +162,7 @@ class _OnboardingPageView extends StatelessWidget {
           ),
           AppSpacing.gapSm,
           Text(
-            page.body,
+            keepAll(page.body),
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: AppColors.textSecondary,

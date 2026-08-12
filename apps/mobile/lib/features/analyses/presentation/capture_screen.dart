@@ -6,6 +6,7 @@ import 'package:helpbee/l10n/app_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import 'analysis_flow_args.dart';
 
@@ -157,9 +158,9 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
   }
 
   String _captionText(AppLocalizations l10n) {
-    if (_noCamera) return l10n.captureNoCamera;
-    if (_initFailed) return l10n.captureCameraRetry;
-    return l10n.captureGuide;
+    if (_noCamera) return keepAll(l10n.captureNoCamera);
+    if (_initFailed) return keepAll(l10n.captureCameraRetry);
+    return keepAll(l10n.captureGuide);
   }
 
   String _flashLabel(AppLocalizations l10n) => switch (_flash) {

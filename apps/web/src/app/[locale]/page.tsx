@@ -101,7 +101,7 @@ export default function HomePage({ params }: { params: { locale: string } }) {
       <section className="py-16 md:py-24">
         <Container>
           <div className="rounded-3xl bg-surface-cream px-8 py-12 text-center md:px-16 md:py-16">
-            <p className="mx-auto max-w-3xl text-2xl font-semibold leading-relaxed text-bee-black md:text-3xl md:leading-relaxed">
+            <p className="mx-auto max-w-3xl text-balance text-2xl font-semibold leading-normal text-bee-black md:text-3xl md:leading-normal">
               {t('quote')}
             </p>
           </div>
