@@ -7,11 +7,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 
 from app.services.openai_client import OpenAIVisionClient
 from app.services.yolo_engine import OnnxYoloEngine
+
+_log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -26,11 +29,30 @@ def get_yolo_engine() -> OnnxYoloEngine:  # pragma: no cover - 런타임 의존
 
 
 @lru_cache(maxsize=1)
-def get_openai_client() -> OpenAIVisionClient:  # pragma: no cover - 런타임 의존
-    from openai import OpenAI  # lazy import
+def get_openai_client() -> OpenAIVisionClient | None:  # pragma: no cover - 런타임 의존
+    """OpenAI를 쓸 수 없으면 raise 대신 None.
+
+    run_analysis 는 `openai is None` 이면 폴백을 끄고 YOLO 결과를 그대로 쓴다
+    (`fallback_allowed = engine == "auto" and openai is not None`).
+
+    키 미설정이나 패키지 미설치(추론 서버는 CPU용 requirements 라 openai 가 없다)는
+    **설정 상태이지 요청 실패가 아니다.** 여기서 raise 하면 engine=auto 로 오는
+    유료 사용자의 분석이 통째로 500 → `ai_unavailable` 로 죽는다. CLAUDE.md §6의
+    "실패해도 UX를 막지 않는다" 원칙에 따라 조용히 YOLO 단독으로 내려간다.
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        _log.warning("OPENAI_API_KEY 미설정 — engine=auto 요청도 YOLO 단독으로 처리한다")
+        return None
+
+    try:
+        from openai import OpenAI  # lazy import
+    except ModuleNotFoundError:
+        _log.warning("openai 패키지 미설치 — engine=auto 요청도 YOLO 단독으로 처리한다")
+        return None
 
     return OpenAIVisionClient(
-        OpenAI(api_key=os.environ["OPENAI_API_KEY"]),
+        OpenAI(api_key=api_key),
         model=os.getenv("OPENAI_MODEL", "gpt-4o-mini-2024-07-18"),
         prompt_version=os.getenv("PROMPT_VERSION", "varroa@1.0"),
     )
