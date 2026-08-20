@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:helpbee/l10n/app_localizations.dart';
 
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../data/subscriptions_api.dart';
@@ -32,7 +33,7 @@ class QuotaBanner extends ConsumerWidget {
         children: [
           Expanded(
             child: Text(
-              l10n.quotaBanner(n),
+              keepAll(l10n.quotaBanner(n)),
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 18,

@@ -5,6 +5,7 @@ import 'package:helpbee/l10n/app_localizations.dart';
 
 import '../../../core/errors/error_messages.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/empty_state.dart';
 import 'hive_form_screen.dart';
@@ -36,7 +37,7 @@ class HivesListView extends ConsumerWidget {
           return EmptyState(
             icon: Icons.hive_outlined,
             title: l10n.hivesEmptyTitle,
-            message: l10n.hivesEmptyBody,
+            message: keepAll(l10n.hivesEmptyBody),
             actionLabel: l10n.addHive,
             onAction: () => createHiveAndNotify(context),
           );

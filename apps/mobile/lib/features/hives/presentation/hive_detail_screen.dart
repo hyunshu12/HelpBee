@@ -7,6 +7,7 @@ import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_messages.dart';
 import '../../../core/risk/risk_tier.dart';
 import '../../../core/routing/route_paths.dart';
+import '../../../core/text/korean_wrap.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -34,7 +35,7 @@ class HiveDetailScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(l10n.deleteHive),
-        content: Text(l10n.deleteHiveConfirm),
+        content: Text(keepAll(l10n.deleteHiveConfirm)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -407,6 +408,12 @@ class _TimelineRow extends StatelessWidget {
       valueText = l10n.noAnalysisYet;
     }
 
+    final labelStyle = theme.textTheme.bodyLarge?.copyWith(
+        color: AppColors.textPrimary, fontWeight: FontWeight.w700);
+    final valueStyle = theme.textTheme.bodyLarge?.copyWith(
+        color: analysis.isFailed ? AppColors.textSecondary : color,
+        fontWeight: FontWeight.w700);
+
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,22 +451,26 @@ class _TimelineRow extends StatelessWidget {
                       borderRadius: AppRadius.inputRadius,
                       border: Border.all(color: AppColors.divider),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(l10n.aiAutoDiagnosis,
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w700)),
-                        ),
-                        Text(valueText,
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                                color: analysis.isFailed
-                                    ? AppColors.textSecondary
-                                    : color,
-                                fontWeight: FontWeight.w700)),
-                      ],
-                    ),
+                    // 실패 문구는 짧은 점수가 아니라 한 문장이라, 라벨과 같은 줄에 두면
+                    // 폭을 다 가져가 라벨을 0으로 밀어내고 Row를 넘친다. 실패일 때만 아래 줄로 내린다.
+                    child: analysis.isFailed
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(l10n.aiAutoDiagnosis, style: labelStyle),
+                              const SizedBox(height: 4),
+                              Text(keepAll(valueText), style: valueStyle),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child:
+                                    Text(l10n.aiAutoDiagnosis, style: labelStyle),
+                              ),
+                              Text(valueText, style: valueStyle),
+                            ],
+                          ),
                   ),
                 ],
               ),
