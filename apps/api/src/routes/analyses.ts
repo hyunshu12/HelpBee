@@ -62,8 +62,9 @@ export type AnalysesDeps = {
     analysis: Record<string, unknown>;
     recommendations: { order: number; content: string; severity: string }[];
   }): Promise<unknown>;
+  /** hiveId=undefined → 내 모든 벌통의 이력(진단 이력 탭). 지정 시 해당 벌통만. */
   listForUser(
-    hiveId: string,
+    hiveId: string | undefined,
     userId: string,
     opts: { limit: number; offset: number },
   ): Promise<unknown[]>;

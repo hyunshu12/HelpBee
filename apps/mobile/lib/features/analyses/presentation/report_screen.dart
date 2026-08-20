@@ -409,10 +409,11 @@ class _RetrySectionState extends ConsumerState<_RetrySection> {
       final result = await ref
           .read(analysesApiProvider)
           .create(hiveId: _a.hiveId, imageId: _a.imageId);
-      // The retried row replaced the failed one in place; refresh per-hive
-      // caches so the home card + detail timeline reflect the new result.
+      // The retried row replaced the failed one in place; refresh the caches
+      // so the home card + detail timeline + 진단 이력 탭 reflect the new result.
       ref.invalidate(latestAnalysisProvider(_a.hiveId));
       ref.invalidate(hiveAnalysesProvider(_a.hiveId));
+      ref.invalidate(allAnalysesProvider);
       if (!mounted) return;
       context.pushReplacement(
         RoutePaths.report,

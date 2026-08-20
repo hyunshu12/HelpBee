@@ -15,8 +15,10 @@ export const createAnalysisSchema = z
   })
   .strict(); // 모르는 키 거부 (Mass Assignment 차단)
 
+// hiveId 생략 = 내 모든 벌통의 진단 이력(최신순). 모바일 "진단 이력" 탭이 쓴다.
+// 지정하면 기존대로 해당 벌통만. 어느 쪽이든 소유권은 쿼리의 hives JOIN이 강제.
 export const listAnalysesQuerySchema = z.object({
-  hiveId: uuid,
+  hiveId: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });

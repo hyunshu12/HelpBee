@@ -44,5 +44,6 @@ final runAnalysisProvider = FutureProvider.autoDispose
 
       ref.invalidate(latestAnalysisProvider(req.hiveId));
       ref.invalidate(hiveAnalysesProvider(req.hiveId));
+      ref.invalidate(allAnalysesProvider); // 진단 이력 탭
       return analysis;
     });

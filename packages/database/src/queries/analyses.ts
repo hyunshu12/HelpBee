@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from '../client';
 import { type Analysis, analyses, type NewAnalysis } from '../schema/analyses';
@@ -159,6 +159,40 @@ export async function listAnalysesByHiveForUser(
     .innerJoin(hives, eq(hives.id, analyses.hiveId))
     .where(and(eq(analyses.hiveId, hiveId), eq(hives.userId, userId), isNull(hives.deletedAt)))
     .orderBy(desc(analyses.analyzedAt))
+    .limit(limit)
+    .offset(offset);
+  return rows.map((r) => r.a);
+}
+
+/**
+ * 사용자의 **모든 벌통**에 걸친 분석 이력 (최신순) — 모바일 "진단 이력" 탭용.
+ * listAnalysesByHiveForUser와 같은 INNER JOIN + userId 필터라 IDOR 차단은 동일하고,
+ * soft-deleted 벌통(deletedAt)의 분석은 제외된다.
+ *
+ * 정렬이 `desc(analyzedAt)` 한 컬럼이면 안 되는 이유:
+ * ① analyzedAt은 nullable(pending) → PG 기본 DESC는 NULL을 맨 앞에 올려 미완료 건이
+ *    최신 결과를 밀어낸다 → NULLS LAST.
+ * ② 한 벌통에 같은 analyzedAt이 여러 건 존재한다(배치 시드/연속 분석 실측 확인).
+ *    tie-breaker가 없으면 offset 페이지네이션에서 같은 행이 중복/누락된다
+ *    → createdAt, id까지 내려 전순서(total order)를 만든다.
+ */
+export async function listAnalysesForUser(
+  db: Database,
+  userId: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<Analysis[]> {
+  const limit = Math.min(opts.limit ?? 50, 100);
+  const offset = Math.max(opts.offset ?? 0, 0);
+  const rows = await db
+    .select({ a: analyses })
+    .from(analyses)
+    .innerJoin(hives, eq(hives.id, analyses.hiveId))
+    .where(and(eq(hives.userId, userId), isNull(hives.deletedAt)))
+    .orderBy(
+      sql`${analyses.analyzedAt} DESC NULLS LAST`,
+      desc(analyses.createdAt),
+      desc(analyses.id),
+    )
     .limit(limit)
     .offset(offset);
   return rows.map((r) => r.a);
