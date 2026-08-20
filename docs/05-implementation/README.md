@@ -87,5 +87,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-05 | 이메일 인증 발송(P1-4): stateless HMAC 토큰 + provider 추상화(console/Resend) + verify-email HTML·resend-verification(3/hr) → 분석 게이트 라이브 통과, 실 Resend messageId 확인 | #44 (예정) | [2026-07-05-email-verification.md](./2026-07-05-email-verification.md) |
 | 2026-07-08 | **배포 인프라 절감 모드**: 계획 확정(단일 EC2, ~$66/월) + api/ai 컨테이너화(tsx 런타임) + client-ip Cloudflare 대응 + SSM 배포 워크플로 + Sentry/gitleaks/백업/prod시드 + 레거시 IaC 삭제 | #46~#51 | [2026-07-08-deploy-infra-cost-saving-mode.md](./2026-07-08-deploy-infra-cost-saving-mode.md) |
 | 2026-08-12 | 한국어 어절 중간 줄바꿈 수정: 웹 전역 `word-break: keep-all`(+overflow-wrap) · 홈 인용 `text-balance` · 모바일 `keepAll()`(WORD JOINER) 9개 화면 | #52 (예정) | [2026-08-12-korean-text-wrapping.md](./2026-08-12-korean-text-wrapping.md) |
+| 2026-08-20 | **진단 이력 탭 구현**: `GET /v1/analyses`의 `hiveId` optional화(전체 벌통 이력 쿼리 + NULLS LAST·tie-breaker 정렬) + 플레이스홀더였던 모바일 이력 화면을 실제 목록으로 교체(로딩/에러/빈상태/pull-to-refresh/리포트 이동) | (미생성) | [2026-08-20-analysis-history-tab.md](./2026-08-20-analysis-history-tab.md) |
 
 (새 기록 추가 시 위 표 갱신)

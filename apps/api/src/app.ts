@@ -126,7 +126,9 @@ export function createApp() {
         recommendations: input.recommendations,
       }),
     listForUser: (hiveId, userId, opts) =>
-      queries.analyses.listAnalysesByHiveForUser(db, hiveId, userId, opts),
+      hiveId === undefined
+        ? queries.analyses.listAnalysesForUser(db, userId, opts)
+        : queries.analyses.listAnalysesByHiveForUser(db, hiveId, userId, opts),
     getByIdForUser: (id, userId) => queries.analyses.getAnalysisByIdForUser(db, id, userId),
     getRecommendations: async (analysisId) =>
       (await queries.analyses.listRecommendationsByAnalysisIds(db, [analysisId])).get(analysisId) ??

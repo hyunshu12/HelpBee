@@ -131,7 +131,7 @@
 | Method | Path | 요청 | 성공 |
 |---|---|---|---|
 | POST | `/v1/analyses` | `{ hiveId, imageId }` | **201**(새 분석 완료, 동기) 또는 **200**(멱등 기존/실패) |
-| GET | `/v1/analyses` | query `{ hiveId, limit?, offset? }` | 200 `Analysis[]` + pagination |
+| GET | `/v1/analyses` | query `{ hiveId?, limit?, offset? }` | 200 `Analysis[]` + pagination. **`hiveId` 생략 = 내 모든 벌통의 이력**(최신순, 진단 이력 탭). 지정 시 해당 벌통만 |
 | GET | `/v1/analyses/trend` | query `{ hiveId, from?, to? }` (ISO) | 200 `[{ bucket, avgRisk, analysisCount }]` |
 | GET | `/v1/analyses/:id` | — | 200 `Analysis` / 404 |
 

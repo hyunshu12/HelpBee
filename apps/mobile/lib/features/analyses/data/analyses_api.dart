@@ -73,6 +73,25 @@ class AnalysesApi {
     });
   }
 
+  /// GET /v1/analyses?limit=&offset= (hiveId 생략) -> 내 모든 벌통의 이력,
+  /// 최신순. 진단 이력 탭이 쓴다. 소유권/삭제 벌통 제외는 백엔드 JOIN이 강제.
+  Future<AnalysisListResult> listAll({int? limit, int? offset}) async {
+    return _guard(() async {
+      final res = await _dio.get<dynamic>(
+        _path(),
+        queryParameters: <String, dynamic>{
+          'limit': ?limit,
+          'offset': ?offset,
+        },
+      );
+      final unwrapped = unwrapEnvelope(res, _parseList);
+      return AnalysisListResult(
+        items: unwrapped.data,
+        pagination: unwrapped.meta.pagination,
+      );
+    });
+  }
+
   /// GET /v1/analyses/:id -> Analysis.
   Future<Analysis> getById(String id) async {
     return _guard(() async {
@@ -163,6 +182,18 @@ final latestAnalysisProvider =
   final result =
       await ref.read(analysesApiProvider).listByHive(hiveId, limit: 1);
   return result.items.isEmpty ? null : result.items.first;
+});
+
+/// Every analysis across the user's hives (진단 이력 탭), most-recent first.
+///
+/// Caps at the backend's max page size (100) rather than paging: the beta's
+/// per-user volume is far below that, and an offset-paged infinite list would
+/// need cursor semantics to stay stable. If a user ever exceeds 100 analyses
+/// the tab shows the newest 100 — revisit with a cursor endpoint then.
+final allAnalysesProvider =
+    FutureProvider.autoDispose<List<Analysis>>((ref) async {
+  final result = await ref.read(analysesApiProvider).listAll(limit: 100);
+  return result.items;
 });
 
 /// Recent analyses for a hive (detail timeline, most-recent first).

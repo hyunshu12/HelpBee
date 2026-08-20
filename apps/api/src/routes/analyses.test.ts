@@ -301,6 +301,30 @@ describe('GET /v1/analyses', () => {
     expect(body.meta.pagination.limit).toBe(50);
   });
 
+  it('without hiveId lists across all of the user\'s hives (진단 이력 탭)', async () => {
+    const listForUser = vi.fn(async () => [{ id: 'an1' }, { id: 'an2' }]);
+    const res = await makeApp(baseDeps({ listForUser })).request('/v1/analyses');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.length).toBe(2);
+    // hiveId=undefined가 그대로 내려가야 app.ts가 전체-벌통 쿼리로 분기한다
+    expect(listForUser).toHaveBeenCalledWith(undefined, 'u1', { limit: 50, offset: 0 });
+  });
+
+  it('passes hiveId through when given (per-hive branch)', async () => {
+    const listForUser = vi.fn(async () => [{ id: 'an1' }]);
+    const res = await makeApp(baseDeps({ listForUser })).request(
+      `/v1/analyses?hiveId=${HIVE}&limit=10&offset=20`,
+    );
+    expect(res.status).toBe(200);
+    expect(listForUser).toHaveBeenCalledWith(HIVE, 'u1', { limit: 10, offset: 20 });
+  });
+
+  it('still rejects a malformed hiveId (optional ≠ anything goes)', async () => {
+    const res = await makeApp(baseDeps()).request('/v1/analyses?hiveId=not-a-uuid');
+    expect(res.status).toBe(400);
+  });
+
   it('GET /:id returns 404 when not found', async () => {
     const res = await makeApp(baseDeps({ getByIdForUser: async () => undefined })).request(
       '/v1/analyses/an-x',
