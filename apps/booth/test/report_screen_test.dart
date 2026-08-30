@@ -115,4 +115,30 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('onHistory 를 주면 기록 보기 버튼이 생기고 눌린다', (tester) async {
+    await useBoothSurface(tester);
+    var tapped = false;
+    await tester.pumpWidget(
+      _wrap(
+        ReportScreen(
+          case_: _danger(),
+          guess: null,
+          onRestart: () {},
+          onHistory: () => tapped = true,
+        ),
+      ),
+    );
+    expect(find.text('기록 보기'), findsOneWidget);
+    await tester.tap(find.text('기록 보기'));
+    expect(tapped, isTrue);
+  });
+
+  testWidgets('onHistory 가 없으면 기록 보기 버튼도 없다', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(
+      _wrap(ReportScreen(case_: _danger(), guess: null, onRestart: () {})),
+    );
+    expect(find.text('기록 보기'), findsNothing);
+  });
 }

@@ -28,3 +28,8 @@ RiskTier riskTierFromName(String? name) => switch (name) {
   'danger' => RiskTier.danger,
   _ => RiskTier.unknown,
 };
+
+/// 점수만 있을 때의 티어 (<30 안전 / <70 주의 / 그 외 위험). risk.yaml 밴드와 같다.
+RiskTier riskTierFromScore(int score) => score < 30
+    ? RiskTier.safe
+    : (score < 70 ? RiskTier.watch : RiskTier.danger);

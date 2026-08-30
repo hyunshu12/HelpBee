@@ -10,6 +10,7 @@ import 'data/operator_gesture.dart';
 import 'screens/analyzing_screen.dart';
 import 'screens/attract_screen.dart';
 import 'screens/guess_screen.dart';
+import 'screens/history_screen.dart';
 import 'screens/intro_screen.dart';
 import 'screens/outro_screen.dart';
 import 'screens/picker_screen.dart';
@@ -26,8 +27,16 @@ Future<void> main() async {
   runApp(const BoothApp());
 }
 
-/// history 는 Task 7 에서 추가한다 (HistoryScreen 이 아직 없다).
-enum BoothStage { attract, intro, picker, guess, analyzing, report, outro }
+enum BoothStage {
+  attract,
+  intro,
+  picker,
+  guess,
+  analyzing,
+  report,
+  outro,
+  history,
+}
 
 class BoothApp extends StatefulWidget {
   const BoothApp({super.key});
@@ -166,11 +175,16 @@ class _BoothAppState extends State<BoothApp> {
           case_: _picked!,
           guess: _guess,
           onRestart: () => _goTo(BoothStage.picker),
-          // onHistory 는 Task 7 에서 연결한다 (HistoryScreen 이 아직 없다).
+          onHistory: () => _goTo(BoothStage.history),
           onFinish: () => _goTo(BoothStage.outro),
         );
       case BoothStage.outro:
         return OutroScreen(onRestart: _resetSession);
+      case BoothStage.history:
+        return HistoryScreen(
+          session: _session,
+          onBack: () => _goTo(BoothStage.report),
+        );
     }
   }
 }
