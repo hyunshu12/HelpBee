@@ -50,7 +50,9 @@ class _BoothAppState extends State<BoothApp> {
   @override
   void initState() {
     super.initState();
-    loadBoothCases(rootBundle).then((cs) => setState(() => _cases = cs));
+    loadBoothCases(rootBundle).then((cs) {
+      if (mounted) setState(() => _cases = cs);
+    });
   }
 
   @override
@@ -60,11 +62,21 @@ class _BoothAppState extends State<BoothApp> {
     super.dispose();
   }
 
-  /// 관람객이 그냥 가버려도 다음 사람에게 깨끗한 첫 화면이 보이게 한다.
-  void _touched() {
+  /// 무동작 타이머를 새로 건다. 터치뿐 아니라 **화면이 바뀔 때마다** 다시 건다 —
+  /// 인트로처럼 터치 없이 자동으로 넘어가는 구간이 있어서, 터치에만 의존하면
+  /// 타이머가 한 번도 걸리지 않는 경로가 생긴다(관람객이 사진 선택 화면에서 그냥
+  /// 떠나면 부스가 그대로 멈춘다).
+  void _armIdle() {
     _idle?.cancel();
-    if (_stage == BoothStage.attract) return;
+    if (_stage == BoothStage.attract) return; // 어트랙트가 이미 초기 상태다
     _idle = Timer(_idleTimeout, _resetSession);
+  }
+
+  /// 스테이지 전환의 단일 통로. 여기를 거치지 않는 전환을 만들지 말 것 —
+  /// 그 경로만 타이머가 빠진다.
+  void _goTo(BoothStage next) {
+    setState(() => _stage = next);
+    _armIdle();
   }
 
   void _resetSession() {
@@ -88,7 +100,7 @@ class _BoothAppState extends State<BoothApp> {
       theme: boothTheme(),
       home: Listener(
         behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => _touched(),
+        onPointerDown: (_) => _armIdle(),
         child: Stack(
           children: [
             Scaffold(body: _buildStage()),
@@ -117,35 +129,33 @@ class _BoothAppState extends State<BoothApp> {
             (c) => c.id == 'danger-100',
             orElse: () => _cases.first,
           ),
-          onStart: () => setState(() => _stage = BoothStage.intro),
+          onStart: () => _goTo(BoothStage.intro),
         );
       case BoothStage.intro:
-        return IntroScreen(
-          onDone: () => setState(() => _stage = BoothStage.picker),
-        );
+        return IntroScreen(onDone: () => _goTo(BoothStage.picker));
       case BoothStage.picker:
         return PickerScreen(
           cases: _cases,
-          onPick: (c) => setState(() {
+          onPick: (c) {
             _picked = c;
             _guess = null;
-            _stage = BoothStage.guess;
-          }),
+            _goTo(BoothStage.guess);
+          },
         );
       case BoothStage.guess:
         return GuessScreen(
           case_: _picked!,
-          onAnswer: (g) => setState(() {
+          onAnswer: (g) {
             _guess = g;
-            _stage = BoothStage.analyzing;
-          }),
+            _goTo(BoothStage.analyzing);
+          },
         );
       case BoothStage.analyzing:
         return AnalyzingScreen(
           case_: _picked!,
           onDone: () {
             _session.record(_picked!);
-            setState(() => _stage = BoothStage.report);
+            _goTo(BoothStage.report);
           },
         );
       case BoothStage.report:
@@ -155,9 +165,9 @@ class _BoothAppState extends State<BoothApp> {
           key: ValueKey(_picked!.id),
           case_: _picked!,
           guess: _guess,
-          onRestart: () => setState(() => _stage = BoothStage.picker),
+          onRestart: () => _goTo(BoothStage.picker),
           // onHistory 는 Task 7 에서 연결한다 (HistoryScreen 이 아직 없다).
-          onFinish: () => setState(() => _stage = BoothStage.outro),
+          onFinish: () => _goTo(BoothStage.outro),
         );
       case BoothStage.outro:
         return OutroScreen(onRestart: _resetSession);

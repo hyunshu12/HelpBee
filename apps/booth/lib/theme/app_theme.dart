@@ -13,13 +13,9 @@ ThemeData boothTheme() {
   return base.copyWith(
     scaffoldBackgroundColor: const Color(0xFFFFFBF0),
     textTheme: base.textTheme.copyWith(
-      // TextTheme.copyWith replaces each style wholesale rather than merging
-      // fields, so any color left unset here becomes null — not "inherit the
-      // Material3 default". A null color does not paint as black; it renders
-      // essentially invisible against the background. Every override below
-      // must carry an explicit color for that reason (found via manual
-      // simulator run in Task 6 — every headline/body line across the app
-      // was rendering as a near-invisible cream-on-cream ghost).
+      // copyWith replaces each TextStyle wholesale, not merged — a missing
+      // color here becomes null, which renders invisible, not black. Every
+      // override below must set color explicitly.
       displayLarge: const TextStyle(
         fontFamily: 'Jua',
         fontSize: 96,
