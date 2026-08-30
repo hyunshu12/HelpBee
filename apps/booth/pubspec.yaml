@@ -1,0 +1,28 @@
+name: helpbee_booth
+description: HelpBee 부스 체험 앱 — 오프라인 고정 결과 데모
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/cases.json
+    - assets/varroa_closeup.jpg
+    # - assets/qr_mrmr.png  # Task 6에서 추가 — 아직 파일이 없어 flutter pub get 실패 방지 위해 주석 처리
+    - assets/photos/
+  fonts:
+    - family: Jua
+      fonts:
+        - asset: assets/fonts/Jua-Regular.ttf
