@@ -1,122 +1,166 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'data/booth_case.dart';
+import 'data/booth_session.dart';
+import 'data/case_loader.dart';
+import 'data/operator_gesture.dart';
+import 'screens/analyzing_screen.dart';
+import 'screens/attract_screen.dart';
+import 'screens/guess_screen.dart';
+import 'screens/intro_screen.dart';
+import 'screens/outro_screen.dart';
+import 'screens/picker_screen.dart';
+import 'screens/report_screen.dart';
+import 'theme/app_theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // 부스 거치대는 가로다. 세로로 돌아가면 레이아웃이 깨진다.
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.landscapeLeft,
+    DeviceOrientation.landscapeRight,
+  ]);
+  runApp(const BoothApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// history 는 Task 7 에서 추가한다 (HistoryScreen 이 아직 없다).
+enum BoothStage { attract, intro, picker, guess, analyzing, report, outro }
 
-  // This widget is the root of your application.
+class BoothApp extends StatefulWidget {
+  const BoothApp({super.key});
+
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State<BoothApp> createState() => _BoothAppState();
+}
+
+class _BoothAppState extends State<BoothApp> {
+  final BoothSession _session = BoothSession();
+  final OperatorGesture _operator = OperatorGesture();
+  BoothStage _stage = BoothStage.attract;
+  List<BoothCase> _cases = const [];
+  BoothCase? _picked;
+  bool? _guess;
+  Timer? _idle;
+
+  static const Duration _idleTimeout = Duration(seconds: 60);
+
+  @override
+  void initState() {
+    super.initState();
+    loadBoothCases(rootBundle).then((cs) => setState(() => _cases = cs));
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
+  void dispose() {
+    _idle?.cancel();
+    _session.dispose();
+    super.dispose();
+  }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  /// 관람객이 그냥 가버려도 다음 사람에게 깨끗한 첫 화면이 보이게 한다.
+  void _touched() {
+    _idle?.cancel();
+    if (_stage == BoothStage.attract) return;
+    _idle = Timer(_idleTimeout, _resetSession);
+  }
 
-  void _incrementCounter() {
+  void _resetSession() {
+    _idle?.cancel();
+    _session.reset();
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _stage = BoothStage.attract;
+      _picked = null;
+      _guess = null;
     });
   }
 
+  void _operatorTap() {
+    if (_operator.tap(DateTime.now())) _resetSession();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: boothTheme(),
+      home: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _touched(),
+        child: Stack(
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Scaffold(body: _buildStage()),
+            Positioned(
+              left: 0,
+              top: 0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _operatorTap,
+                child: const SizedBox(width: 60, height: 60),
+              ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
     );
+  }
+
+  Widget _buildStage() {
+    if (_cases.isEmpty) return const Center(child: CircularProgressIndicator());
+    switch (_stage) {
+      case BoothStage.attract:
+        return AttractScreen(
+          // 히어로는 danger-100 — 응애 박스가 2개라 애니메이션이 가장 강하다.
+          case_: _cases.firstWhere(
+            (c) => c.id == 'danger-100',
+            orElse: () => _cases.first,
+          ),
+          onStart: () => setState(() => _stage = BoothStage.intro),
+        );
+      case BoothStage.intro:
+        return IntroScreen(
+          onDone: () => setState(() => _stage = BoothStage.picker),
+        );
+      case BoothStage.picker:
+        return PickerScreen(
+          cases: _cases,
+          onPick: (c) => setState(() {
+            _picked = c;
+            _guess = null;
+            _stage = BoothStage.guess;
+          }),
+        );
+      case BoothStage.guess:
+        return GuessScreen(
+          case_: _picked!,
+          onAnswer: (g) => setState(() {
+            _guess = g;
+            _stage = BoothStage.analyzing;
+          }),
+        );
+      case BoothStage.analyzing:
+        return AnalyzingScreen(
+          case_: _picked!,
+          onDone: () {
+            _session.record(_picked!);
+            setState(() => _stage = BoothStage.report);
+          },
+        );
+      case BoothStage.report:
+        return ReportScreen(
+          // 케이스마다 새 State 로 마운트한다 — 앞 관람객이 처방을 펼쳐두거나
+          // 스크롤을 내려둔 상태가 다음 사람에게 남지 않게.
+          key: ValueKey(_picked!.id),
+          case_: _picked!,
+          guess: _guess,
+          onRestart: () => setState(() => _stage = BoothStage.picker),
+          // onHistory 는 Task 7 에서 연결한다 (HistoryScreen 이 아직 없다).
+          onFinish: () => setState(() => _stage = BoothStage.outro),
+        );
+      case BoothStage.outro:
+        return OutroScreen(onRestart: _resetSession);
+    }
   }
 }

@@ -20,7 +20,7 @@ flutter:
   assets:
     - assets/cases.json
     - assets/varroa_closeup.jpg
-    # - assets/qr_mrmr.png  # Task 6에서 추가 — 아직 파일이 없어 flutter pub get 실패 방지 위해 주석 처리
+    - assets/qr_mrmr.png
     - assets/photos/
   fonts:
     - family: Jua
