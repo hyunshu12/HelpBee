@@ -60,8 +60,16 @@ void main() {
       'assets/fonts/NotoSansKR-Bold.ttf',
     ]) {
       final f = File(path);
-      expect(f.existsSync(), isTrue, reason: '$path 가 없다 — tool/build_body_font.py 실행 필요');
-      expect(f.lengthSync(), greaterThan(100 * 1024), reason: '$path 가 비정상적으로 작다');
+      expect(
+        f.existsSync(),
+        isTrue,
+        reason: '$path 가 없다 — tool/build_body_font.py 실행 필요',
+      );
+      expect(
+        f.lengthSync(),
+        greaterThan(100 * 1024),
+        reason: '$path 가 비정상적으로 작다',
+      );
     }
   });
 }

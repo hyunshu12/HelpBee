@@ -248,8 +248,10 @@ class _ReportScreenState extends State<ReportScreen> {
                           children: [
                             Flexible(
                               child: Text(
+                                // 짧게 — '다음 단계로 넘어가기'는 이 폭에서
+                                // '다음 단계로 넘어…' 로 잘렸다(2026-08-31 실측).
                                 widget.onFinish != null
-                                    ? '다음 단계로 넘어가기'
+                                    ? '다음 단계로'
                                     : '다른 사진 해보기',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

@@ -57,11 +57,7 @@ void main() {
     expect(opacityOf(_IntroFacts.all[2]), 0);
 
     await tester.pump(const Duration(seconds: 2));
-    expect(
-      opacityOf(_IntroFacts.all[2]),
-      1,
-      reason: '6초 안에 사실 3줄이 모두 나와야 한다',
-    );
+    expect(opacityOf(_IntroFacts.all[2]), 1, reason: '6초 안에 사실 3줄이 모두 나와야 한다');
 
     await tester.pump(const Duration(seconds: 20)); // 타이머 정리
   });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
@@ -187,7 +188,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('다음 단계로 넘어가기'));
+    await tester.tap(find.text('다음 단계로'));
     expect(finished, 1, reason: '주 버튼이 QR 로 가야 한다');
     expect(restarted, 0);
 
@@ -210,9 +211,37 @@ void main() {
       ),
     );
 
-    expect(find.text('다음 단계로 넘어가기'), findsNothing);
+    expect(find.text('다음 단계로'), findsNothing);
     expect(find.text('다른 사진 해보기'), findsNWidgets(2)); // 보조 + 주 버튼
     await tester.tap(find.text('다른 사진 해보기').last);
     expect(restarted, 1);
+  });
+
+  // 2026-08-31: '다음 단계로 넘어가기' 는 이 폭에서 '다음 단계로 넘어…' 로
+  // 잘렸다. 버튼 라벨이 잘리면 무슨 버튼인지 읽을 수 없으므로, 말줄임이
+  // 실제로 일어나는지를 렌더 결과에서 직접 본다(눈으로만 확인하면 다음에
+  // 문구를 늘렸을 때 조용히 재발한다).
+  testWidgets('주 버튼 라벨이 말줄임 없이 한 줄에 들어간다', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(
+      _wrap(
+        ReportScreen(
+          case_: _danger(),
+          guess: false,
+          onRestart: () {},
+          onHistory: () {},
+          onFinish: () {},
+        ),
+      ),
+    );
+
+    for (final label in ['다음 단계로', '다른 사진 해보기', '기록 보기']) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+      expect(
+        paragraph.didExceedMaxLines,
+        isFalse,
+        reason: '"$label" 이 버튼 안에서 잘린다',
+      );
+    }
   });
 }

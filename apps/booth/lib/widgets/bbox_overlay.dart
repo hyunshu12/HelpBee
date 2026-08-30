@@ -4,8 +4,12 @@ import '../data/booth_case.dart';
 import '../theme/app_colors.dart';
 import 'image_fit.dart';
 
-/// 사진 + 탐지 박스. 박스는 0.4초에 걸쳐 fade + 살짝 축소되며 나타난다
-/// ("AI가 개체를 짚는" 연출).
+/// 사진 + 탐지 박스. 박스가 **하나씩 순서대로** 탁-탁-탁 찍히며 나타난다
+/// ("AI가 개체를 하나하나 짚는" 연출).
+///
+/// 전부 동시에 페이드인하면 "그림 한 장이 밝아진" 것으로 보여서, 탐지가
+/// 일어나고 있다는 인상이 안 난다. 박스마다 [_stagger] 만큼 늦게 시작해
+/// [_window] 동안 조여들며 찍히게 한다.
 ///
 /// cls='varroa' 는 굵은 빨강, 그 외는 얇은 초록. 2026-08-30 bbox 포맷 정정 후
 /// 박스가 벌 한 마리씩 정확히 잡히므로 정상 벌도 함께 그린다 — 정상 사진에
@@ -32,7 +36,7 @@ class _BboxOverlayState extends State<BboxOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 400),
+    duration: Duration(milliseconds: totalMs(widget.boxes.length).round()),
   );
 
   @override
@@ -69,7 +73,7 @@ class _BboxOverlayState extends State<BboxOverlay>
                 painter: _BoxPainter(
                   fit: fit,
                   boxes: widget.boxes,
-                  progress: Curves.easeOut.transform(_c.value),
+                  elapsedMs: _c.value * totalMs(widget.boxes.length),
                 ),
               ),
             ),
@@ -78,6 +82,40 @@ class _BboxOverlayState extends State<BboxOverlay>
       },
     );
   }
+}
+
+/// 박스 하나가 찍히는 데 걸리는 시간.
+const Duration _window = Duration(milliseconds: 240);
+
+/// 박스와 박스 사이 간격 — 이 값이 "탁-탁-탁" 리듬을 만든다.
+const Duration _stagger = Duration(milliseconds: 95);
+
+/// 박스 [count] 개를 다 찍는 데 걸리는 전체 시간(ms).
+@visibleForTesting
+double totalMs(int count) =>
+    (count <= 1 ? 0 : (count - 1) * _stagger.inMilliseconds).toDouble() +
+    _window.inMilliseconds;
+
+/// 그리는 순서 — 정상(초록) 먼저, 감염 의심(빨강)을 **맨 마지막**에.
+///
+/// 데이터 순서 그대로 그리면 빨강이 먼저 찍히고 초록이 뒤따라 연출이
+/// 김빠진다. 초록으로 벌을 하나씩 훑다가 마지막에 빨강이 탁 찍혀야
+/// "찾아냈다"는 인상이 난다. 결과는 같고 **보여주는 순서만** 바꾼다.
+@visibleForTesting
+List<BoothBox> revealOrder(List<BoothBox> boxes) => [
+  ...boxes.where((b) => b.cls != 'varroa'),
+  ...boxes.where((b) => b.cls == 'varroa'),
+];
+
+/// [index] 번째 박스의 진행도(0~1). 아직 차례가 오지 않았으면 0.
+///
+/// 이 함수가 순차 등장의 전부다 — 페인터는 위젯 테스트로 검증할 수 없어서
+/// (박스를 전부 동시에 그려도 통과한다) 타이밍 계산을 순수 함수로 떼어낸다.
+@visibleForTesting
+double boxProgressAt(int index, double elapsedMs) {
+  final start = index * _stagger.inMilliseconds;
+  final t = (elapsedMs - start) / _window.inMilliseconds;
+  return Curves.easeOut.transform(t.clamp(0.0, 1.0));
 }
 
 /// 박스 하나의 그리기 스타일. `cls` 로만 결정된다.
@@ -104,17 +142,23 @@ BoxStyle boxStyleFor(String cls) => cls == 'varroa'
     : const BoxStyle(color: AppColors.tierSafe, strokeWidth: 3, alpha: 0.75);
 
 class _BoxPainter extends CustomPainter {
-  _BoxPainter({required this.fit, required this.boxes, required this.progress});
+  _BoxPainter({
+    required this.fit,
+    required this.boxes,
+    required this.elapsedMs,
+  });
 
   final ImageFit fit;
   final List<BoothBox> boxes;
-  final double progress;
+  final double elapsedMs;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (progress <= 0) return;
-
-    for (final b in boxes) {
+    final ordered = revealOrder(boxes);
+    for (var i = 0; i < ordered.length; i++) {
+      final b = ordered[i];
+      final progress = boxProgressAt(i, elapsedMs);
+      if (progress <= 0) continue; // 아직 차례가 아니다
       final style = boxStyleFor(b.cls);
       final stroke = Paint()
         ..style = PaintingStyle.stroke
@@ -137,5 +181,5 @@ class _BoxPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BoxPainter old) =>
-      old.progress != progress || old.boxes != boxes;
+      old.elapsedMs != elapsedMs || old.boxes != boxes;
 }
