@@ -116,11 +116,34 @@ def _export_photo(rel: str, dest: pathlib.Path, brightness: float, contrast: flo
     img.save(dest, quality=90)
 
 
+def _export_closeup(rel: str, dest: pathlib.Path) -> None:
+    """[1] 인트로용 클로즈업. 전체 프레임으로 내보내면 유충이 8% 크기라 응애가
+    안 보인다 — 관람객이 3초 보고 지나가는 화면이므로 라벨 bbox 기준으로 잘라
+    유충이 화면을 채우게 한다. (진단용 4장은 박스 좌표가 전체 프레임 기준이라
+    절대 크롭하지 않는다.)"""
+    label = _label(rel)
+    img = Image.open(_source(rel)).convert("RGB")
+    W, H = img.width, img.height
+    x1, y1, x2, y2 = (float(v) for v in label["annotations"][0]["bbox"])
+    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+    ch = min(H, (y2 - y1) * 1.35)
+    cw = ch * 16 / 9
+    if cw > W:
+        cw, ch = W, W * 9 / 16
+    left = max(0.0, min(W - cw, cx - cw / 2))
+    top = max(0.0, min(H - ch, cy - ch / 2))
+    crop = img.crop((int(left), int(top), int(left + cw), int(top + ch)))
+    crop = crop.resize((LONG_EDGE, round(LONG_EDGE * ch / cw)), Image.LANCZOS)
+    crop = ImageEnhance.Contrast(crop).enhance(1.12)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    crop.save(dest, quality=92)
+
+
 def main() -> None:
     cases = [build_case(spec) for spec in BOOTH_CASES]
     for spec in BOOTH_CASES:
         _export_photo(spec.rel, BOOTH_ASSETS / "photos" / f"{spec.id}.jpg", spec.brightness, spec.contrast)
-    _export_photo(VARROA_CLOSEUP, BOOTH_ASSETS / "varroa_closeup.jpg", 1.0, 1.1)
+    _export_closeup(VARROA_CLOSEUP, BOOTH_ASSETS / "varroa_closeup.jpg")
 
     out = BOOTH_ASSETS / "cases.json"
     out.parent.mkdir(parents=True, exist_ok=True)
