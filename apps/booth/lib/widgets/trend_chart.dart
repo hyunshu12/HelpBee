@@ -24,20 +24,28 @@ class TrendChart extends StatelessWidget {
           painter: _TrendPainter(scores: scores, seedCount: seedCount),
         ),
       ),
+      // 두 캡션을 좌상단에 함께 쌓는다. seedScores([12, 28, 21, 45])는 항상
+      // 맨 앞(왼쪽) 네 점이라 이 구석은 어떤 기록으로도 채워지지 않는다 —
+      // 반대로 우상단은 관람객이 위험 사진을 고르면 마지막 점(자신의 결과)이
+      // 정확히 그 자리에서 끝나는, 이 그래프의 핵심 지점이라 캡션이 있으면
+      // 안 된다(2026-08-30 실측 — danger 케이스 기록 후 "세로축..." 캡션과
+      // 점이 겹침).
       const Positioned(
         left: 8,
         top: 8,
-        child: Text(
-          '예시 기록',
-          style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
-        ),
-      ),
-      const Positioned(
-        right: 8,
-        top: 8,
-        child: Text(
-          '세로축: 위험도 0(안전)~100(위험)',
-          style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '예시 기록',
+              style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
+            ),
+            SizedBox(height: 4),
+            Text(
+              '세로축: 위험도 0(안전)~100(위험)',
+              style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
+            ),
+          ],
         ),
       ),
     ],

@@ -107,6 +107,15 @@ class _ReportScreenState extends State<ReportScreen> {
                 if (recs.length > 1 && !_expanded)
                   TextButton(
                     onPressed: () => setState(() => _expanded = true),
+                    // 나머지 처방 4개(전체 5개 중)로 가는 유일한 통로다 — 맨 위
+                    // headlineSmall 처방 한 줄만 읽고 지나치면 안 된다. 스타일
+                    // 없는 TextButton은 Material 기본 라벨 크기로 떨어져 바로
+                    // 위 22pt 본문보다도 작아진다(다른 하단 보조 버튼들과 같은
+                    // 결함 — 기록 보기/QR 받기와 동일 기준으로 맞춘다).
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(0, 56),
+                      textStyle: const TextStyle(fontSize: 20),
+                    ),
                     child: const Text('처방 더 보기'),
                   ),
                 if (_expanded)
