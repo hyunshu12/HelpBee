@@ -52,7 +52,10 @@ class RiskGauge extends StatelessWidget {
             children: [
               Text(
                 score?.toString() ?? '—',
-                style: theme.textTheme.displayMedium?.copyWith(
+                // displayLarge — 테마의 96pt 위험도 숫자 스타일(Jua). displayMedium은
+                // app_theme.dart 가 오버라이드하지 않아 기본값(45pt, 시스템 폰트)으로
+                // 떨어지는 채로 남아 있었다 — "위험도 숫자 96pt" 기준을 충족하지 못했다.
+                style: theme.textTheme.displayLarge?.copyWith(
                   color: color,
                   fontWeight: FontWeight.w800,
                   height: 1.0,

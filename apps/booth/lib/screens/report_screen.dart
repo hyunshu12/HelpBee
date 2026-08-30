@@ -122,18 +122,36 @@ class _ReportScreenState extends State<ReportScreen> {
                     if (widget.onHistory != null)
                       TextButton(
                         onPressed: widget.onHistory,
+                        // 서서 쓰는 화면 — 보조 버튼도 56pt 이상 확보 (다른 화면과 동일 기준).
+                        // 너비는 강제하지 않는다 — 508px 우측 컬럼에서 3버튼이 폭까지
+                        // 강제되면 넘친다 (2026-08-30 실측, useBoothSurface 1366x1024).
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 56),
+                          textStyle: const TextStyle(fontSize: 20),
+                        ),
                         child: const Text('기록 보기'),
                       ),
                     const Spacer(),
                     if (widget.onFinish != null)
                       TextButton(
                         onPressed: widget.onFinish,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 56),
+                          textStyle: const TextStyle(fontSize: 20),
+                        ),
                         child: const Text('QR 받기'),
                       ),
                     const SizedBox(width: 12),
                     FilledButton(
                       onPressed: widget.onRestart,
-                      child: const Text('다른 사진 해보기'),
+                      // 주 버튼 — 72pt (guess/outro/history 화면과 동일 기준).
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 72),
+                      ),
+                      child: const Text(
+                        '다른 사진 해보기',
+                        style: TextStyle(fontSize: 22),
+                      ),
                     ),
                   ],
                 ),

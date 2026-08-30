@@ -60,7 +60,8 @@ class _AttractScreenState extends State<AttractScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    flex: 6,
+                    // 부스에서는 사진이 주인공이다 — 게이지 컬럼보다 넓게.
+                    flex: 7,
                     child: BboxOverlay(
                       // key 가 바뀌면 State 가 새로 생겨 애니메이션이 처음부터 돈다.
                       key: ValueKey(_replay),
@@ -74,14 +75,16 @@ class _AttractScreenState extends State<AttractScreen> {
                   ),
                   const SizedBox(width: 32),
                   Expanded(
-                    flex: 4,
+                    flex: 3,
                     child: Center(
+                      // 좁아진 컬럼을 게이지가 채우도록 키운다 — 기존 260 은
+                      // 컬럼 대비 작아 여백이 과했다.
                       child: RiskGauge(
                         score: c.riskScore,
                         tier: c.tier,
                         caption: riskTierLabel(c.tier),
-                        size: 260,
-                        stroke: 22,
+                        size: 320,
+                        stroke: 26,
                       ),
                     ),
                   ),
