@@ -1,0 +1,124 @@
+"""부스 체험 앱(apps/booth)용 고정 결과 데이터 생성기 — 1회성 도구.
+
+모델 추론을 돌리지 않는다. AI Hub 71667 정답 라벨을 3-class로 매핑한 뒤
+프로덕션 코드인 app.services.risk.compute_risk()를 그대로 호출해
+risk / tier / recommendations 를 얻는다. risk.yaml 이 바뀌면 이 스크립트만
+다시 돌리면 되고, 부스 앱 문구가 실제 앱과 어긋나지 않는다.
+
+사진 선정 기준과 근거는 plans/2026-08-30_부스체험앱-설계.md §4·§6.
+
+실행:
+    cd apps/ai && ./.venv/bin/python -m training.data.make_booth_cases
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+from dataclasses import dataclass
+
+from PIL import Image, ImageEnhance
+
+from app.services.risk import compute_risk
+from training.data.aihub_to_yolo import CLASS_MAPPING
+
+SAMPLE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "training/datasets/Sample"
+BOOTH_ASSETS = pathlib.Path(__file__).resolve().parents[3] / "booth/assets"
+
+CLASS_VARROA = 1
+LONG_EDGE = 1600
+
+
+@dataclass(frozen=True)
+class BoothCaseSpec:
+    id: str
+    rel: str          # 01.원천데이터 / 02.라벨링데이터 공통 상대경로 (확장자 없음)
+    brightness: float  # 표시용 보정 — 원본이 어두워 아이패드에서 안 보인다
+    contrast: float
+
+
+# 설계 §4. 5개 기준(응애 박스 1개 · 잘림 없음 · 면적 8~32% · 밝기≥48 · 기타질병 0)을
+# 통과한 24장 중에서 티어별로 골랐다. 교체 시 기준을 반드시 재적용할 것.
+BOOTH_CASES: list[BoothCaseSpec] = [
+    BoothCaseSpec("danger-90", "성충/성충_응애/089/A_001_001_20230822060113_007_001_001_001", 1.25, 1.15),
+    BoothCaseSpec("danger-83", "성충/성충_응애/085/A_001_001_20230822060112_002_001_001_001", 1.25, 1.15),
+    BoothCaseSpec("watch-50", "성충/성충_응애/033/B_001_003_20230824081648_001_003_001_001", 1.55, 1.25),
+    BoothCaseSpec("safe-0", "성충/성충_정상/076/B_001_001_20230822083847_001_003_001_000", 1.60, 1.25),
+]
+
+# [1] "응애가 뭐죠?" 화면 전용. 유충에 붙은 응애 2마리가 육안으로 보이는 유일한 계열.
+# 진단 흐름에는 쓰지 않는다 (벌 1마리 = 저신뢰, 벌통 사진으로 보이지 않음).
+VARROA_CLOSEUP = "유충/유충_응애/046/C_001_001_20230829142857_001_001_000_001"
+
+
+def _label(rel: str) -> dict:
+    return json.loads((SAMPLE_ROOT / "02.라벨링데이터" / f"{rel}.json").read_text(encoding="utf-8"))
+
+
+def _source(rel: str) -> pathlib.Path:
+    return SAMPLE_ROOT / "01.원천데이터" / f"{rel}.jpg"
+
+
+def build_case(spec: BoothCaseSpec) -> dict:
+    """라벨 JSON 1개 → cases.json 의 케이스 1개. 파일을 쓰지 않는다(테스트 가능)."""
+    label = _label(spec.rel)
+    width = int(label["image"]["width"])
+    height = int(label["image"]["height"])
+
+    counts = {0: 0, 1: 0, 2: 0}
+    boxes: list[dict] = []
+    for ann in label["annotations"]:
+        cls = CLASS_MAPPING.get(ann["category_id"])
+        if cls is None:
+            continue
+        counts[cls] += 1
+        if cls != CLASS_VARROA:
+            continue  # 정상 벌 박스는 버린다 — 설계 §6
+        x, y, w, h = (float(v) for v in ann["bbox"])
+        boxes.append({"x": x, "y": y, "w": w, "h": h, "cls": "varroa"})
+
+    risk = compute_risk(counts)
+    return {
+        "id": spec.id,
+        "photo": f"photos/{spec.id}.jpg",
+        "imageWidth": width,
+        "imageHeight": height,
+        "riskScore": risk.risk_score,
+        "tier": risk.tier,
+        "beeTotal": risk.bee_total,
+        "varroaCount": counts[CLASS_VARROA],
+        "recommendations": list(risk.recommendations),
+        "boxes": boxes,
+    }
+
+
+def _export_photo(rel: str, dest: pathlib.Path, brightness: float, contrast: float) -> None:
+    """표시용 밝기·대비 보정 + 긴 변 축소. 좌표는 정규화 전 원본 픽셀 기준이므로
+    cases.json 의 박스 좌표는 imageWidth/imageHeight 에 대해 그대로 유효하다."""
+    img = Image.open(_source(rel)).convert("RGB")
+    img = ImageEnhance.Brightness(img).enhance(brightness)
+    img = ImageEnhance.Contrast(img).enhance(contrast)
+    scale = LONG_EDGE / max(img.width, img.height)
+    if scale < 1.0:
+        img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dest, quality=90)
+
+
+def main() -> None:
+    cases = [build_case(spec) for spec in BOOTH_CASES]
+    for spec in BOOTH_CASES:
+        _export_photo(spec.rel, BOOTH_ASSETS / "photos" / f"{spec.id}.jpg", spec.brightness, spec.contrast)
+    _export_photo(VARROA_CLOSEUP, BOOTH_ASSETS / "varroa_closeup.jpg", 1.0, 1.1)
+
+    out = BOOTH_ASSETS / "cases.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"cases": cases}, ensure_ascii=False, indent=2), encoding="utf-8")
+    for c in cases:
+        print(f"{c['id']:<10} risk {c['riskScore']:>3} / {c['tier']:<6} "
+              f"벌 {c['beeTotal']:>2} · 박스 {len(c['boxes'])} · 처방 {len(c['recommendations'])}")
+    print(f"\n→ {out}")
+
+
+if __name__ == "__main__":
+    main()
