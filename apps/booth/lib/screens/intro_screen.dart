@@ -33,11 +33,15 @@ class _IntroScreenState extends State<IntroScreen>
     with SingleTickerProviderStateMixin {
   static const Duration autoAdvance = Duration(seconds: 25);
 
-  /// 각 줄이 나타나는 시점(전체 25초 대비 비율) = 3초 · 8초 · 13초.
-  static const List<double> _factAt = [0.12, 0.32, 0.52];
+  /// 각 줄이 나타나는 시점(전체 25초 대비 비율) = 1.2초 · 3.2초 · 5.2초.
+  ///
+  /// 2026-08-31 2차: 처음엔 3·8·13초로 잡았는데 **너무 느렸다.** 관람객은 부스
+  /// 앞에 30초~1분 머무는데, 세 번째 줄을 13초나 기다리게 하면 그 전에 화면을
+  /// 떠난다. 글은 빨리 다 띄우고, 남은 시간은 "읽고 소화할 여유"로 쓴다.
+  static const List<double> _factAt = [0.048, 0.128, 0.208];
 
-  /// 마무리 한 줄(18초).
-  static const double _punchAt = 0.72;
+  /// 마무리 한 줄(7.5초).
+  static const double _punchAt = 0.30;
 
   /// 진행 막대 + 순차 등장을 함께 구동하는 **단일** 시간 소스.
   /// 타이머와 애니메이션을 따로 두면 둘이 어긋나 진행 막대가 다 찼는데
@@ -170,11 +174,11 @@ class _Reveal extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AnimatedSlide(
     offset: shown ? Offset.zero : const Offset(0, 0.25),
-    duration: const Duration(milliseconds: 420),
+    duration: const Duration(milliseconds: 260),
     curve: Curves.easeOut,
     child: AnimatedOpacity(
       opacity: shown ? 1 : 0,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 260),
       child: child,
     ),
   );

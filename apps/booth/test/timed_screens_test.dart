@@ -45,19 +45,25 @@ void main() {
       expect(opacityOf(fact), 0, reason: '0초에는 "$fact" 가 보이면 안 된다');
     }
 
-    // 3초 / 8초 / 13초에 한 줄씩.
-    await tester.pump(const Duration(seconds: 4));
+    // 1.2초 / 3.2초 / 5.2초에 한 줄씩. 셋 다 6초 안에 나와야 한다 —
+    // 관람객 체류 시간이 30초~1분이라, 마지막 줄을 10초 넘게 기다리게 하면
+    // 그 전에 화면을 떠난다.
+    await tester.pump(const Duration(seconds: 2));
     expect(opacityOf(_IntroFacts.all[0]), 1);
     expect(opacityOf(_IntroFacts.all[1]), 0);
 
-    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 2));
     expect(opacityOf(_IntroFacts.all[1]), 1);
     expect(opacityOf(_IntroFacts.all[2]), 0);
 
-    await tester.pump(const Duration(seconds: 5));
-    expect(opacityOf(_IntroFacts.all[2]), 1);
+    await tester.pump(const Duration(seconds: 2));
+    expect(
+      opacityOf(_IntroFacts.all[2]),
+      1,
+      reason: '6초 안에 사실 3줄이 모두 나와야 한다',
+    );
 
-    await tester.pump(const Duration(seconds: 12)); // 타이머 정리
+    await tester.pump(const Duration(seconds: 20)); // 타이머 정리
   });
 
   testWidgets('인트로는 터치하면 즉시 넘어간다', (tester) async {

@@ -167,4 +167,52 @@ void main() {
       reason: '액자가 컬럼 높이만큼 늘어나면 사진 위아래가 흰 띠로 남는다',
     );
   });
+
+  // 2026-08-31 설계 결정: 주 버튼(가장 크고 꿀색)은 **QR/마무리로 가는 길**이다.
+  // 예전엔 '다른 사진 해보기'가 주 버튼이라, 관람객이 사진만 계속 돌려보다
+  // 정작 우리 팀을 남기는 QR 을 못 보고 떠났다. 이 배선이 뒤집히면 부스의
+  // 마지막 목적이 통째로 빠지므로 고정한다.
+  testWidgets('주 버튼은 QR(마무리)로 가고, 사진 다시 보기는 보조 버튼이다', (tester) async {
+    await useBoothSurface(tester);
+    var finished = 0;
+    var restarted = 0;
+    await tester.pumpWidget(
+      _wrap(
+        ReportScreen(
+          case_: _danger(),
+          guess: null,
+          onRestart: () => restarted++,
+          onFinish: () => finished++,
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('다음 단계로 넘어가기'));
+    expect(finished, 1, reason: '주 버튼이 QR 로 가야 한다');
+    expect(restarted, 0);
+
+    await tester.tap(find.text('다른 사진 해보기'));
+    expect(restarted, 1);
+    expect(finished, 1);
+  });
+
+  // onFinish 가 없으면 주 버튼이 사라져 화면에서 나갈 길이 없어진다.
+  testWidgets('onFinish 가 없으면 주 버튼이 사진 다시 보기를 대신 맡는다', (tester) async {
+    await useBoothSurface(tester);
+    var restarted = 0;
+    await tester.pumpWidget(
+      _wrap(
+        ReportScreen(
+          case_: _danger(),
+          guess: null,
+          onRestart: () => restarted++,
+        ),
+      ),
+    );
+
+    expect(find.text('다음 단계로 넘어가기'), findsNothing);
+    expect(find.text('다른 사진 해보기'), findsNWidgets(2)); // 보조 + 주 버튼
+    await tester.tap(find.text('다른 사진 해보기').last);
+    expect(restarted, 1);
+  });
 }

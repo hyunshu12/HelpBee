@@ -22,6 +22,10 @@ import 'widgets/brand.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 부스는 키오스크다 — 시계·배터리·홈 인디케이터가 보이면 "남의 아이패드를
+  // 빌려 쓰는 화면"으로 읽힌다. 전체화면으로 감춰 제품처럼 보이게 한다.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
   // 부스 거치대는 가로다. 세로로 돌아가면 레이아웃이 깨진다.
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,

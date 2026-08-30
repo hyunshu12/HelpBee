@@ -213,6 +213,12 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                // 주 버튼은 **QR(마무리)로 가는 길**이다.
+                //
+                // 2026-08-31: 예전엔 '다른 사진 해보기'가 제일 큰 버튼이었는데,
+                // 그러면 관람객이 사진만 계속 돌려보다 QR 을 못 보고 떠난다.
+                // 체험의 마지막 목적은 "저희 팀이 누군지 남기는 것"이므로
+                // 기본 동선이 그쪽으로 흐르게 하고, 사진 다시 보기는 보조로 둔다.
                 Row(
                   children: [
                     if (widget.onHistory != null) ...[
@@ -222,24 +228,40 @@ class _ReportScreenState extends State<ReportScreen> {
                       ),
                       const SizedBox(width: 10),
                     ],
-                    if (widget.onFinish != null) ...[
-                      TextButton(
-                        onPressed: widget.onFinish,
-                        child: const Text('QR 받기'),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
+                    TextButton(
+                      onPressed: widget.onRestart,
+                      child: const Text('다른 사진 해보기'),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: FilledButton(
-                        onPressed: widget.onRestart,
+                        // onFinish 가 없으면(단위 테스트 등) 주 버튼이 사라져
+                        // 화면에서 나갈 길이 없어진다 — 그때는 '다른 사진'이
+                        // 주 버튼 자리를 대신한다.
+                        onPressed: widget.onFinish ?? widget.onRestart,
                         style: FilledButton.styleFrom(
                           minimumSize: const Size(0, 72),
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                         ),
-                        child: const Text(
-                          '다른 사진 해보기',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                widget.onFinish != null
+                                    ? '다음 단계로 넘어가기'
+                                    : '다른 사진 해보기',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 26,
+                              color: AppColors.textPrimary,
+                            ),
+                          ],
                         ),
                       ),
                     ),

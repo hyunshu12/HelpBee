@@ -111,6 +111,10 @@ class _AttractScreenState extends State<AttractScreen>
                   flex: 7,
                   child: PhotoFrame(
                     dark: true,
+                    // 액자가 컬럼 높이만큼 늘어나면 히어로 사진이 가운데
+                    // 조그맣게 뜬다 — 부스에서 사진이 주인공인데 공간을
+                    // 절반 넘게 버리게 된다 (2026-08-31 아이패드 실측).
+                    aspectRatio: c.imageWidth / c.imageHeight,
                     child: BboxOverlay(
                       // key 가 바뀌면 State 가 새로 생겨 애니메이션이 처음부터 돈다.
                       key: ValueKey(_replay),
