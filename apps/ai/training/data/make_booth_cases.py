@@ -37,13 +37,15 @@ class BoothCaseSpec:
     contrast: float
 
 
-# 설계 §4. 5개 기준(응애 박스 1개 · 잘림 없음 · 면적 8~32% · 밝기≥48 · 기타질병 0)을
-# 통과한 24장 중에서 티어별로 골랐다. 교체 시 기준을 반드시 재적용할 것.
+# 2026-08-30 fix round 1: 이전 선정(danger-90/83, safe-0/076)은 bbox 를 [x,y,w,h] 로 잘못
+# 해석해 계산한 면적 기준으로 골랐던 것이라 무효화됐다 — 아래 build_case() 주석 참고.
+# 새 선정: danger-100(082, 응애 박스 2개 겹침 없이 잘 분리됨) · danger-90(089) · watch-50(033) ·
+# safe-0(005, 신규). 교체 시 §4 선정 기준을 xyxy 해석으로 재적용할 것.
 BOOTH_CASES: list[BoothCaseSpec] = [
+    BoothCaseSpec("danger-100", "성충/성충_응애/082/A_001_001_20230822060110_011_001_001_001", 1.25, 1.15),
     BoothCaseSpec("danger-90", "성충/성충_응애/089/A_001_001_20230822060113_007_001_001_001", 1.25, 1.15),
-    BoothCaseSpec("danger-83", "성충/성충_응애/085/A_001_001_20230822060112_002_001_001_001", 1.25, 1.15),
     BoothCaseSpec("watch-50", "성충/성충_응애/033/B_001_003_20230824081648_001_003_001_001", 1.55, 1.25),
-    BoothCaseSpec("safe-0", "성충/성충_정상/076/B_001_001_20230822083847_001_003_001_000", 1.60, 1.25),
+    BoothCaseSpec("safe-0", "성충/성충_정상/005/B_001_001_20230819135627_001_003_001_000", 1.50, 1.25),
 ]
 
 # [1] "응애가 뭐죠?" 화면 전용. 유충에 붙은 응애 2마리가 육안으로 보이는 유일한 계열.
@@ -72,10 +74,19 @@ def build_case(spec: BoothCaseSpec) -> dict:
         if cls is None:
             continue
         counts[cls] += 1
-        if cls != CLASS_VARROA:
-            continue  # 정상 벌 박스는 버린다 — 설계 §6
-        x, y, w, h = (float(v) for v in ann["bbox"])
-        boxes.append({"x": x, "y": y, "w": w, "h": h, "cls": "varroa"})
+        # 2026-08-30 fix round 1: AI Hub 71667 raw bbox 는 실제로 [x1, y1, x2, y2] 다.
+        # AIHUB_71667.md·aihub_to_yolo.py 가 문서화한 "COCO [x, y, w, h]" 가정은 틀렸다 —
+        # Sample 4210개 annotation 중 4208개(100.0%)가 annotation.area 필드와 xyxy 공식으로
+        # 일치했고, xywh 공식과 일치한 건 14개(0.3%)뿐이었다(팀장 재검증 완료). 다시 xywh 로
+        # "고치지" 말 것 — cases.json 에는 계속 x/y/w/h(좌상단+크기) 키로 내보낸다.
+        x1, y1, x2, y2 = (float(v) for v in ann["bbox"])
+        boxes.append({
+            "x": x1,
+            "y": y1,
+            "w": x2 - x1,
+            "h": y2 - y1,
+            "cls": "varroa" if cls == CLASS_VARROA else "normal",
+        })  # 좌표가 정확하면 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)
 
     risk = compute_risk(counts)
     return {

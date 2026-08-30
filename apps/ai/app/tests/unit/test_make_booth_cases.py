@@ -20,26 +20,28 @@ def _case(case_id: str) -> dict:
 
 
 def test_danger_case_matches_verified_label_values():
-    c = _case("danger-90")
-    assert c["riskScore"] == 90
+    c = _case("danger-100")
+    assert c["riskScore"] == 100
     assert c["tier"] == "danger"
-    assert c["beeTotal"] == 6
-    assert c["varroaCount"] == 1
+    assert c["beeTotal"] == 7
+    assert c["varroaCount"] == 2
     assert len(c["recommendations"]) == 5
 
 
-def test_only_varroa_boxes_are_kept():
-    """정상 벌 박스를 함께 그리면 화면이 덮인다 (설계 §6)."""
-    c = _case("danger-90")
-    assert len(c["boxes"]) == 1
-    assert {b["cls"] for b in c["boxes"]} == {"varroa"}
+def test_all_bee_boxes_are_kept():
+    """좌표가 정확하면(2026-08-30 xyxy 수정) 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)."""
+    c = _case("danger-100")
+    assert len(c["boxes"]) == c["beeTotal"]
+    assert sum(1 for b in c["boxes"] if b["cls"] == "varroa") == c["varroaCount"]
 
 
-def test_safe_case_has_no_boxes():
+def test_safe_case_has_no_varroa_boxes():
     c = _case("safe-0")
     assert c["riskScore"] == 0
     assert c["tier"] == "safe"
-    assert c["boxes"] == []
+    assert c["varroaCount"] == 0
+    assert all(b["cls"] != "varroa" for b in c["boxes"])
+    assert len(c["boxes"]) == 6
 
 
 @pytest.mark.parametrize("spec", BOOTH_CASES, ids=lambda s: s.id)
