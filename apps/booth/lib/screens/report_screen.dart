@@ -40,7 +40,13 @@ class _ReportScreenState extends State<ReportScreen> {
     final correct = g == widget.case_.isHealthy;
     return (
       mine: g ? '건강함' : '문제 있음',
-      verdict: correct ? '정확합니다!' : '눈으로는 찾기 어렵습니다 — 전문가도 어렵습니다.',
+      // 스펙 §3 설계 의도: "정상 사진을 골라 '건강함'을 맞히면 '정확합니다!
+      // 이 벌통은 건강합니다'로 기분 좋게 끝낸다" — 이 문구는 정상 벌통을
+      // 맞혔을 때 한정이다. 위험/주의 벌통을 '문제 있음'으로 맞혔을 때 그대로
+      // 붙이면 "이 벌통은 건강합니다"라는 실제와 반대되는 문장이 나간다.
+      verdict: correct
+          ? (widget.case_.isHealthy ? '정확합니다! 이 벌통은 건강합니다' : '정확합니다!')
+          : '눈으로는 찾기 어렵습니다 — 전문가도 어렵습니다.',
     );
   }
 
@@ -71,9 +77,8 @@ class _ReportScreenState extends State<ReportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 2026-08-30 fix-round: 실제 부스 화면(1366x1024)에서는 Spacer() 로
-                // 충분하다 — 오버플로는 테스트 기본 서피스(800x600)에서만 발생했다.
-                // 근거: .superpowers/sdd/2026-08-30_부스체험앱-구현계획/task-4-report.md
-                // 의 "Step 4 — 레이아웃 재검증" 절.
+                // 충분하다 — 스크롤 래퍼를 검토하게 만들었던 오버플로는 테스트 기본
+                // 서피스(800x600)에서만 발생했고, 실제 부스 해상도에서는 재현되지 않는다.
                 RiskGauge(
                   score: c.riskScore,
                   tier: c.tier,

@@ -2,8 +2,6 @@
 
 Sample 데이터셋(gitignored)이 로컬에 있을 때만 실행된다. CI에서는 skip.
 """
-import pathlib
-
 import pytest
 
 from training.data.make_booth_cases import BOOTH_CASES, SAMPLE_ROOT, build_case

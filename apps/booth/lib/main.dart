@@ -15,6 +15,7 @@ import 'screens/intro_screen.dart';
 import 'screens/outro_screen.dart';
 import 'screens/picker_screen.dart';
 import 'screens/report_screen.dart';
+import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -54,14 +55,30 @@ class _BoothAppState extends State<BoothApp> {
   bool? _guess;
   Timer? _idle;
 
+  /// cases.json 로드 실패 원인. null 이면 로딩 중이거나 성공한 것.
+  Object? _loadError;
+
   static const Duration _idleTimeout = Duration(seconds: 60);
 
   @override
   void initState() {
     super.initState();
-    loadBoothCases(rootBundle).then((cs) {
-      if (mounted) setState(() => _cases = cs);
-    });
+    loadBoothCases(rootBundle)
+        .then((cs) {
+          // 매 세션 카드 순서를 섞는다(설계 §3 [2]) — 여기서 한 번, 그리고
+          // _resetSession() 에서 다음 관람객을 위해 다시. build() 안에서 섞으면
+          // 리빌드마다 순서가 바뀌어 관람객이 겨눈 카드와 실제로 탭되는 카드가
+          // 달라질 수 있어 절대 금지.
+          if (mounted) setState(() => _cases = List.of(cs)..shuffle());
+        })
+        .catchError((Object e) {
+          // 에셋이 없거나 cases.json 이 깨졌으면 스피너가 영원히 돈다 — 무동작
+          // 타이머는 attract 단계에서 걸리지 않고(_armIdle 참조), 운영자 5탭
+          // 제스처도 _cases 가 비어 있는 한 화면에 아무 변화가 없어 "느리게
+          // 로딩 중"과 "완전히 죽음"을 구분할 수 없다. 최소한 사람이 읽고
+          // 사진 찍어 보고할 수 있는 문구를 띄운다.
+          if (mounted) setState(() => _loadError = e);
+        });
   }
 
   @override
@@ -95,6 +112,9 @@ class _BoothAppState extends State<BoothApp> {
       _stage = BoothStage.attract;
       _picked = null;
       _guess = null;
+      // 다음 관람객을 위해 다시 섞는다 — 안 그러면 이전 순서가 그대로 남아
+      // 사실상 세션 하나짜리 셔플이 된다.
+      _cases = List.of(_cases)..shuffle();
     });
   }
 
@@ -129,6 +149,7 @@ class _BoothAppState extends State<BoothApp> {
   }
 
   Widget _buildStage() {
+    if (_loadError != null) return _LoadErrorView(error: _loadError!);
     if (_cases.isEmpty) return const Center(child: CircularProgressIndicator());
     switch (_stage) {
       case BoothStage.attract:
@@ -186,5 +207,45 @@ class _BoothAppState extends State<BoothApp> {
           onBack: () => _goTo(BoothStage.report),
         );
     }
+  }
+}
+
+/// Break-glass 화면 — 디자인 대상이 아니다. cases.json 로드가 실패했을 때만
+/// 뜬다. 운영자가 읽고 사진 찍어 보고할 수 있으면 그걸로 충분하다.
+class _LoadErrorView extends StatelessWidget {
+  const _LoadErrorView({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '체험 데이터를 불러오지 못했습니다. 운영자에게 알려주세요.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.error,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

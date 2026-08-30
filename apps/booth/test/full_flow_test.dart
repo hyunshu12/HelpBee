@@ -257,4 +257,52 @@ void main() {
 
     await disposeAll(tester);
   });
+
+  testWidgets('픽커 카드 순서가 매 세션(리셋)마다 섞인다 '
+      '(스펙 §3 [2] "매 세션 순서 셔플" — 회귀: 셔플이 빠지면 danger-100 이 항상 '
+      '첫 카드로 나와 나머지 세 장은 거의 선택되지 않는다)', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(const BoothApp());
+    await _waitForCasesLoaded(tester);
+
+    String firstCardId() =>
+        tester.widget<PickerScreen>(find.byType(PickerScreen)).cases.first.id;
+
+    Future<void> enterPicker() async {
+      await tester.tap(find.byType(AttractScreen));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4)); // intro -> picker
+      expect(find.byType(PickerScreen), findsOneWidget);
+    }
+
+    await enterPicker();
+    final firstIds = <String>{firstCardId()};
+
+    // 카드 4장을 섞으면 "직전과 같은 첫 카드"가 다시 나올 확률이 1/4이다 —
+    // 그래서 "리셋 두 번이면 서로 달라야 한다"는 단순 비교는 그 자체로 약
+    // 25% 확률로 깨지는 flaky assertion이 된다. 대신 서로 다른 첫 카드를
+    // 2개 이상 관찰할 때까지 최대 maxAttempts 번 반복한다. 셔플이 실제로
+    // 동작한다면 모든 시도에서 첫 카드가 계속 같을 확률은
+    // (1/4)^(maxAttempts-1) 로, 20회 기준 약 10^-12 — 사실상 0에 수렴해
+    // 이 테스트는 실질적으로 결정론적이다.
+    const maxAttempts = 20;
+    for (var i = 0; i < maxAttempts && firstIds.length < 2; i++) {
+      // 60초 무동작 → attract 복귀. _resetSession() 이 다음 관람객을 위해
+      // 다시 섞는다.
+      await tester.pump(const Duration(seconds: 65));
+      expect(find.byType(AttractScreen), findsOneWidget);
+      await enterPicker();
+      firstIds.add(firstCardId());
+    }
+
+    expect(
+      firstIds.length,
+      greaterThan(1),
+      reason:
+          '$maxAttempts번 리셋했는데도 픽커 첫 카드가 항상 같다 — 셔플이 '
+          '빠졌거나 매 세션 재적용되지 않는 회귀',
+    );
+
+    await disposeAll(tester);
+  });
 }

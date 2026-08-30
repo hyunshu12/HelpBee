@@ -29,7 +29,7 @@ class TrendChart extends StatelessWidget {
         top: 8,
         child: Text(
           '예시 기록',
-          style: TextStyle(fontSize: 16, color: Colors.black54),
+          style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
         ),
       ),
       const Positioned(
@@ -37,7 +37,7 @@ class TrendChart extends StatelessWidget {
         top: 8,
         child: Text(
           '세로축: 위험도 0(안전)~100(위험)',
-          style: TextStyle(fontSize: 16, color: Colors.black54),
+          style: TextStyle(fontSize: 22, color: AppColors.textSecondary),
         ),
       ),
     ],
@@ -50,10 +50,13 @@ class _TrendPainter extends CustomPainter {
   final List<int> scores;
   final int seedCount;
 
+  /// 점 반지름 중 가장 큰 값(비-seed 점, `paint()` 아래 `isSeed ? 6 : 10`).
+  static const double _maxDotRadius = 10;
+
   @override
   void paint(Canvas canvas, Size size) {
     final axis = Paint()
-      ..color = Colors.black12
+      ..color = AppColors.divider
       ..strokeWidth = 2;
     canvas.drawLine(
       Offset(0, size.height),
@@ -65,10 +68,16 @@ class _TrendPainter extends CustomPainter {
 
     if (scores.isEmpty) return;
 
+    // 마지막 점(관람객 자신의 결과)이 정확히 x=size.width 에 찍히면 반지름
+    // 10짜리 원의 절반이 Stack 의 Clip.hardEdge 에 잘려나간다 — 이 화면
+    // 전체의 핵심인 "내 결과 점"이 우측 캡션 아래로 잘려 보였다(2026-08-30
+    // 실측). 좌우로 최대 반지름만큼 여백을 둬 첫 점과 마지막 점이 항상
+    // 완전히 그려지는 영역 안에 들어오게 한다.
     Offset at(int i) {
+      final usable = size.width - _maxDotRadius * 2;
       final dx = scores.length == 1
           ? size.width / 2
-          : size.width * i / (scores.length - 1);
+          : _maxDotRadius + usable * i / (scores.length - 1);
       return Offset(dx, _yFor(scores[i], size));
     }
 
@@ -125,7 +134,7 @@ class _TrendPainter extends CustomPainter {
     final label = TextPainter(
       text: const TextSpan(
         text: '위험 70+',
-        style: TextStyle(fontSize: 14, color: AppColors.tierDanger),
+        style: TextStyle(fontSize: 22, color: AppColors.tierDanger),
       ),
       textDirection: TextDirection.ltr,
     )..layout();

@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 /// 부스 전용 테마. apps/mobile 의 톤을 유지하되 서서 보는 화면이라
-/// 본문 22sp, 위험도 숫자 96sp 로 키운다. 폰트는 번들 TTF (네트워크 의존 없음).
+/// 본문 22sp, 위험도 숫자 96sp 로 키운다.
+///
+/// 폰트는 두 갈래다 — Jua(display: 헤드라인·위험도 숫자)는 pubspec.yaml 에
+/// TTF 로 번들해 네트워크 의존 없이 뜬다. 본문 한글은 의도적으로 번들하지
+/// 않고 플랫폼 시스템 폰트(iOS: Apple SD Gothic Neo)로 폴백한다 — 본문은
+/// 분량이 많아 커스텀 서체를 번들하면 앱 크기·초기 렌더 비용이 늘고, 부스
+/// 데모에서는 시스템 폰트 가독성으로 충분하기 때문.
 ThemeData boothTheme() {
   final base = ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(seedColor: AppColors.honeyBrand),
-    // 본문 한글은 시스템 폰트(iOS: Apple SD Gothic Neo). 번들하지 않는다 — 위 pubspec 주석 참조.
   );
   return base.copyWith(
     scaffoldBackgroundColor: const Color(0xFFFFFBF0),

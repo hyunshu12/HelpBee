@@ -19,13 +19,12 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageEnhance
 
-from app.services.risk import compute_risk
+from app.services.risk import CLASS_VARROA, compute_risk
 from training.data.aihub_to_yolo import CLASS_MAPPING
 
 SAMPLE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "training/datasets/Sample"
 BOOTH_ASSETS = pathlib.Path(__file__).resolve().parents[3] / "booth/assets"
 
-CLASS_VARROA = 1
 LONG_EDGE = 1600
 
 
@@ -120,11 +119,27 @@ def _export_closeup(rel: str, dest: pathlib.Path) -> None:
     """[1] 인트로용 클로즈업. 전체 프레임으로 내보내면 유충이 8% 크기라 응애가
     안 보인다 — 관람객이 3초 보고 지나가는 화면이므로 라벨 bbox 기준으로 잘라
     유충이 화면을 채우게 한다. (진단용 4장은 박스 좌표가 전체 프레임 기준이라
-    절대 크롭하지 않는다.)"""
+    절대 크롭하지 않는다.)
+
+    `annotations[0]`을 그대로 쓰지 않고 varroa 클래스 annotation을 명시적으로
+    찾는다 — 지금 VARROA_CLOSEUP 라벨은 첫 annotation이 우연히 응애라 맞았지만,
+    라벨을 다른 사진으로 교체하면 첫 annotation이 응애가 아닐 수도 있다. 그러면
+    "응애가 안 보이는" 크롭이 조용히 만들어지고 에러 없이 통과해 버린다.
+    """
     label = _label(rel)
     img = Image.open(_source(rel)).convert("RGB")
     W, H = img.width, img.height
-    x1, y1, x2, y2 = (float(v) for v in label["annotations"][0]["bbox"])
+    varroa_anns = [
+        ann
+        for ann in label["annotations"]
+        if CLASS_MAPPING.get(ann["category_id"]) == CLASS_VARROA
+    ]
+    assert varroa_anns, (
+        f"{rel} 라벨에 응애(bee_with_varroa) annotation이 없다 — 인트로 클로즈업은 "
+        "응애가 보이는 크롭이어야 한다. VARROA_CLOSEUP 을 다른 사진으로 바꿨다면 "
+        "그 라벨에 응애 클래스 annotation이 있는지 확인할 것."
+    )
+    x1, y1, x2, y2 = (float(v) for v in varroa_anns[0]["bbox"])
     cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
     ch = min(H, (y2 - y1) * 1.35)
     cw = ch * 16 / 9

@@ -64,9 +64,14 @@ class RiskGauge extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 caption,
+                // 96pt 숫자는 그 자체로 의미가 없다 — 의미는 이 단어(위험/주의/안전)에
+                // 있다. titleSmall(Material3 기본 14pt)로는 서서, 1m 밖에서 읽는
+                // 부스 환경에서 읽히지 않는다. §9 22pt 바닥보다 크게, 숫자 옆에서도
+                // 눈에 띄도록 28pt + 굵게.
                 style: theme.textTheme.titleSmall?.copyWith(
+                  fontSize: 28,
                   color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
