@@ -70,60 +70,53 @@ class _ReportScreenState extends State<ReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        RiskGauge(
-                          score: c.riskScore,
-                          tier: c.tier,
-                          caption: riskTierLabel(c.tier),
-                          size: 260,
-                          stroke: 22,
-                        ),
-                        if (_comparison != null) ...[
-                          const SizedBox(height: 20),
-                          Text(
-                            '당신: ${_comparison!.mine}',
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _comparison!.verdict,
-                            style: Theme.of(context).textTheme.bodyLarge,
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        if (recs.isNotEmpty)
-                          Text(
-                            recs.first,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                        if (recs.length > 1 && !_expanded)
-                          TextButton(
-                            onPressed: () => setState(() => _expanded = true),
-                            child: const Text('처방 더 보기'),
-                          ),
-                        if (_expanded)
-                          ...recs
-                              .skip(1)
-                              .map(
-                                (r) => Padding(
-                                  padding: const EdgeInsets.only(top: 12),
-                                  child: Text(
-                                    '· $r',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                                ),
-                              ),
-                      ],
-                    ),
-                  ),
+                // 2026-08-30 fix-round: 실제 부스 화면(1366x1024)에서는 Spacer() 로
+                // 충분하다 — 오버플로는 테스트 기본 서피스(800x600)에서만 발생했다.
+                // 근거: .superpowers/sdd/2026-08-30_부스체험앱-구현계획/task-4-report.md
+                // 의 "Step 4 — 레이아웃 재검증" 절.
+                RiskGauge(
+                  score: c.riskScore,
+                  tier: c.tier,
+                  caption: riskTierLabel(c.tier),
+                  size: 260,
+                  stroke: 22,
                 ),
-                const SizedBox(height: 16),
+                if (_comparison != null) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    '당신: ${_comparison!.mine}',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _comparison!.verdict,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                if (recs.isNotEmpty)
+                  Text(
+                    recs.first,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                if (recs.length > 1 && !_expanded)
+                  TextButton(
+                    onPressed: () => setState(() => _expanded = true),
+                    child: const Text('처방 더 보기'),
+                  ),
+                if (_expanded)
+                  ...recs
+                      .skip(1)
+                      .map(
+                        (r) => Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            '· $r',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ),
+                const Spacer(),
                 Row(
                   children: [
                     if (widget.onHistory != null)
