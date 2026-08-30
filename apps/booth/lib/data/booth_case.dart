@@ -1,7 +1,10 @@
 import 'risk_tier.dart';
 
-/// 이미지 원본 픽셀 좌표계의 박스 하나. cls 는 현재 'varroa' 뿐이다
-/// (정상 벌 박스는 생성 단계에서 버린다 — 설계 §6).
+/// 이미지 원본 픽셀 좌표계의 박스 하나.
+///
+/// `cls` 는 `'varroa'`(감염 의심 개체) 또는 `'normal'`(그 외 벌). 두 클래스가 모두
+/// 데이터에 들어 있고, 결과 화면은 varroa 를 굵은 빨강 · normal 을 얇은 초록으로 그린다.
+/// (2026-08-30 bbox 포맷 정정 전에는 varroa 만 담았다 — 설계 §6 참조.)
 class BoothBox {
   const BoothBox({
     required this.x,
