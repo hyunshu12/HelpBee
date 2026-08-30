@@ -50,5 +50,18 @@ void main() {
       expect(fit.offset.dx, closeTo(200, 1e-6));
       expect(fit.offset.dy, closeTo(0, 1e-6));
     });
+
+    test('가로 레터박스에서 offset 은 left 에만 더해진다', () {
+      // 1000x1000 을 800x400 에 contain → scale 0.4, offset (200, 0)
+      const fit = ImageFit(
+        imageSize: Size(1000, 1000),
+        boxSize: Size(800, 400),
+      );
+      final r = fit.toScreen(const Rect.fromLTWH(100, 200, 300, 400));
+      expect(r.left, closeTo(240, 0.01));
+      expect(r.top, closeTo(80, 0.01));
+      expect(r.width, closeTo(120, 0.01)); // offset.dx 가 더해지면 320 이 되어 실패
+      expect(r.height, closeTo(160, 0.01));
+    });
   });
 }
