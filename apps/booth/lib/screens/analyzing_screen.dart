@@ -17,6 +17,11 @@ class AnalyzingScreen extends StatefulWidget {
 }
 
 class _AnalyzingScreenState extends State<AnalyzingScreen> {
+  /// 파이프라인 단계 문구. `{beeTotal}` 은 build 시 실제 마리 수로 치환된다.
+  /// 타이머의 완료 임계값(initState)이 이 목록의 길이를 그대로 참조하므로,
+  /// 단계를 추가/삭제해도 리터럴 상수를 따로 맞출 필요가 없다.
+  static const _stepTemplates = ['사진을 읽는 중', '{beeTotal}마리 탐지', '감염 개체 판별 중'];
+
   Timer? _timer;
   int _step = 0;
 
@@ -26,7 +31,7 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
     _timer = Timer.periodic(const Duration(milliseconds: 500), (t) {
       if (!mounted) return;
       setState(() => _step = t.tick);
-      if (t.tick >= 3) {
+      if (t.tick >= _stepTemplates.length) {
         t.cancel();
         widget.onDone();
       }
@@ -41,7 +46,10 @@ class _AnalyzingScreenState extends State<AnalyzingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final steps = ['사진을 읽는 중', '벌 ${widget.case_.beeTotal}마리 탐지', '감염 개체 판별 중'];
+    final steps = [
+      for (final template in _stepTemplates)
+        template.replaceAll('{beeTotal}', '벌 ${widget.case_.beeTotal}'),
+    ];
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
