@@ -1,0 +1,38 @@
+name: helpbee_booth
+description: HelpBee 부스 체험 앱 — 오프라인 고정 결과 데모
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/cases.json
+    - assets/varroa_closeup.jpg
+    - assets/qr_mrmr.png
+    - assets/photos/
+  fonts:
+    - family: Jua
+      fonts:
+        - asset: assets/fonts/Jua-Regular.ttf
+    # 본문 한글. 번들하지 않으면 Flutter Web(CanvasKit)이 런타임에
+    # fonts.gstatic.com 에서 Noto 조각을 받아오고, 오프라인에서는 전부
+    # 두부(□)로 뜬다 — 웹 백업이 정확히 "인터넷 없는 상황"용이라 치명적이다.
+    # 서브셋 생성: tool/build_body_font.py (OFL, assets/fonts/OFL.txt)
+    - family: NotoSansKR
+      fonts:
+        - asset: assets/fonts/NotoSansKR-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansKR-Bold.ttf
+          weight: 700
