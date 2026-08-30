@@ -36,6 +36,12 @@ class GuessScreen extends StatelessWidget {
               const SizedBox(width: 24),
               TextButton(
                 onPressed: () => onAnswer(null),
+                // 서서 쓰는 화면이라 보조 버튼도 48dp 이상은 확보한다.
+                // 시각적 위계는 유지 — 채우기 버튼이 아니라 텍스트 버튼 그대로.
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(180, 56),
+                  textStyle: const TextStyle(fontSize: 20),
+                ),
                 child: const Text('바로 결과 보기'),
               ),
             ],
