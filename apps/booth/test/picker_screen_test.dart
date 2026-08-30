@@ -69,4 +69,27 @@ void main() {
       expect(find.text(word), findsNothing, reason: '카드에 "$word" 가 보이면 안 된다');
     }
   });
+
+  // 2026-08-31 회귀: 고정 childAspectRatio(16/10) GridView 는 캔버스가 가정보다
+  // 짧으면(웹 백업의 브라우저 크롬, 기기별 세이프에어리어) 아래 줄을 잘라내
+  // 카드 3·4 를 **아예 누를 수 없게** 만든다. 실제 웹 빌드에서 재현됨.
+  testWidgets('캔버스가 짧아도 네 카드 모두 넘침 없이 눌린다', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 720));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final picked = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PickerScreen(cases: _cases, onPick: (c) => picked.add(c.id)),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull, reason: '짧은 캔버스에서 레이아웃이 넘치면 안 된다');
+
+    // 마지막 카드까지 실제로 탭이 닿아야 한다 — 잘린 카드는 히트테스트가 안 된다.
+    await tester.tap(find.byType(InkWell).at(3), warnIfMissed: false);
+    expect(picked, ['safe-0'], reason: '네 번째 카드가 화면 밖으로 잘렸다');
+  });
 }

@@ -61,8 +61,8 @@ void main() {
     await tester.pump();
     expect(find.byType(IntroScreen), findsOneWidget);
 
-    // 인트로는 3초 뒤 "터치 없이" 자동으로 픽커로 넘어간다.
-    await tester.pump(const Duration(seconds: 4));
+    // 인트로는 25초 뒤 "터치 없이" 자동으로 픽커로 넘어간다.
+    await tester.pump(const Duration(seconds: 26));
     expect(find.byType(PickerScreen), findsOneWidget);
 
     // 여기서부터 관람객이 그냥 가버렸다고 가정 — 아무 터치도 없이 60초+.
@@ -88,7 +88,7 @@ void main() {
     await tester.pump();
     expect(find.byType(IntroScreen), findsOneWidget);
 
-    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(seconds: 26));
     expect(find.byType(PickerScreen), findsOneWidget);
 
     await tester.tap(find.byType(InkWell).first);
@@ -113,7 +113,7 @@ void main() {
 
     await tester.tap(find.byType(AttractScreen));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 4)); // intro -> picker
+    await tester.pump(const Duration(seconds: 26)); // intro -> picker
 
     await tester.tap(find.byType(InkWell).first);
     await tester.pump(); // picker -> guess
@@ -154,7 +154,7 @@ void main() {
 
     await tester.tap(find.byType(AttractScreen));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 4)); // intro -> picker
+    await tester.pump(const Duration(seconds: 26)); // intro -> picker
 
     await tester.tap(find.byType(InkWell).first);
     await tester.pump(); // picker -> guess
@@ -200,7 +200,7 @@ void main() {
 
     await tester.tap(find.byType(AttractScreen));
     await tester.pump();
-    await tester.pump(const Duration(seconds: 4)); // intro -> picker
+    await tester.pump(const Duration(seconds: 26)); // intro -> picker
 
     await tester.tap(find.byType(InkWell).first);
     await tester.pump(); // picker -> guess
@@ -271,7 +271,7 @@ void main() {
     Future<void> enterPicker() async {
       await tester.tap(find.byType(AttractScreen));
       await tester.pump();
-      await tester.pump(const Duration(seconds: 4)); // intro -> picker
+      await tester.pump(const Duration(seconds: 26)); // intro -> picker
       expect(find.byType(PickerScreen), findsOneWidget);
     }
 

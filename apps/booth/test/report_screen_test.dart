@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/report_screen.dart';
+import 'package:helpbee_booth/widgets/surfaces.dart';
 
 import 'test_surface.dart';
 
@@ -140,5 +141,30 @@ void main() {
       _wrap(ReportScreen(case_: _danger(), guess: null, onRestart: () {})),
     );
     expect(find.text('기록 보기'), findsNothing);
+  });
+
+  // 2026-08-31 회귀: 결과 화면의 사진 칸은 세로로 긴 컬럼이라, 액자가 사진
+  // 비율을 안 따라가면 사진 위아래로 100px 넘는 흰 띠가 생긴다(웹 실측).
+  // 이 화면의 핵심 연출이 사진 위 박스라 여백이 크면 그만큼 작아진다.
+  testWidgets('사진 액자에 흰 띠가 생기지 않는다 (사진 비율 유지)', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(
+      _wrap(ReportScreen(case_: _danger(), guess: null, onRestart: () {})),
+    );
+
+    final photo = tester.getSize(
+      find
+          .descendant(
+            of: find.byType(PhotoFrame),
+            matching: find.byType(ClipRRect),
+          )
+          .first,
+    );
+
+    expect(
+      photo.width / photo.height,
+      closeTo(1920 / 1080, 0.08),
+      reason: '액자가 컬럼 높이만큼 늘어나면 사진 위아래가 흰 띠로 남는다',
+    );
   });
 }

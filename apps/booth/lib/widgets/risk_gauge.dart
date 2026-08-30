@@ -7,28 +7,38 @@ import '../theme/app_colors.dart';
 
 /// Circular 0–100 risk gauge (Figma 레포트). A light full-circle track with a
 /// tier-colored arc sweeping clockwise from the top, the big score in the
-/// center, and a severity caption beneath it.
+/// center, and an optional severity caption beneath it.
 ///
 /// [score] null → unknown/failed: shows "—" with the unknown color and a full
 /// faint track (no arc).
+///
+/// [onDark] 는 어트랙트/마무리의 검은 배경용이다. 트랙과 캡션 색이 밝은 배경
+/// 기준으로 고정돼 있으면 다크 화면에서 트랙이 사라지거나 캡션이 안 읽힌다.
 class RiskGauge extends StatelessWidget {
   const RiskGauge({
     super.key,
     required this.score,
     required this.tier,
-    required this.caption,
+    this.caption,
     this.size = 200,
     this.stroke = 16,
+    this.onDark = false,
+    this.showScale = true,
   });
 
   /// 0–100, or null when there is no usable result (failed/pending).
   final int? score;
   final RiskTier tier;
 
-  /// Severity text under the number (e.g. 심각 수준).
-  final String caption;
+  /// Severity text under the number (예: 위험). null 이면 캡션을 그리지 않는다 —
+  /// 결과 화면은 캡션 대신 [TierBadge] 를 쓴다.
+  final String? caption;
   final double size;
   final double stroke;
+  final bool onDark;
+
+  /// 숫자 아래 `/100` 눈금 표기. 관람객은 "90"만 보면 무엇에 대한 90인지 모른다.
+  final bool showScale;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +53,7 @@ class RiskGauge extends StatelessWidget {
         painter: _GaugePainter(
           progress: progress,
           arcColor: color,
-          trackColor: AppColors.divider,
+          trackColor: onDark ? AppColors.boothInkLine : AppColors.divider,
           stroke: stroke,
         ),
         child: Center(
@@ -52,28 +62,38 @@ class RiskGauge extends StatelessWidget {
             children: [
               Text(
                 score?.toString() ?? '—',
-                // displayLarge — 테마의 96pt 위험도 숫자 스타일(Jua). displayMedium은
-                // app_theme.dart 가 오버라이드하지 않아 기본값(45pt, 시스템 폰트)으로
-                // 떨어지는 채로 남아 있었다 — "위험도 숫자 96pt" 기준을 충족하지 못했다.
+                // displayLarge — 테마의 104pt 위험도 숫자 스타일(Jua). 게이지
+                // 지름에 맞춰 축소한다 (size 260 기준 100%).
                 style: theme.textTheme.displayLarge?.copyWith(
                   color: color,
-                  fontWeight: FontWeight.w800,
+                  fontSize:
+                      (theme.textTheme.displayLarge?.fontSize ?? 104) *
+                      (size / 280).clamp(0.5, 1.25),
                   height: 1.0,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                caption,
-                // 96pt 숫자는 그 자체로 의미가 없다 — 의미는 이 단어(위험/주의/안전)에
-                // 있다. titleSmall(Material3 기본 14pt)로는 서서, 1m 밖에서 읽는
-                // 부스 환경에서 읽히지 않는다. §9 22pt 바닥보다 크게, 숫자 옆에서도
-                // 눈에 띄도록 28pt + 굵게.
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontSize: 28,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w700,
+              if (showScale)
+                Text(
+                  '/100',
+                  style: TextStyle(
+                    fontSize: (size * 0.075).clamp(13, 26),
+                    height: 1.0,
+                    fontWeight: FontWeight.w700,
+                    color: onDark ? AppColors.onInkSoft : AppColors.hintBorder,
+                  ),
                 ),
-              ),
+              if (caption != null) ...[
+                SizedBox(height: size * 0.035),
+                Text(
+                  caption!,
+                  style: TextStyle(
+                    fontSize: (size * 0.105).clamp(18, 34),
+                    height: 1.0,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -109,14 +129,34 @@ class _GaugePainter extends CustomPainter {
     canvas.drawCircle(center, radius, trackPaint);
 
     if (progress <= 0) return;
-    final arcPaint = Paint()
-      ..color = arcColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
     const startAngle = -math.pi / 2; // 12 o'clock
     final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
-    canvas.drawArc(rect, startAngle, sweepAngle, false, arcPaint);
+
+    // 호 아래에 같은 색 번짐을 한 겹 깔아 게이지가 "빛나 보이게" 한다 —
+    // 단색 스트로크 하나만 그리면 기본 위젯처럼 보인다.
+    canvas.drawArc(
+      rect,
+      startAngle,
+      sweepAngle,
+      false,
+      Paint()
+        ..color = arcColor.withValues(alpha: 0.22)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke * 1.9
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+    canvas.drawArc(
+      rect,
+      startAngle,
+      sweepAngle,
+      false,
+      Paint()
+        ..color = arcColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override

@@ -2,9 +2,18 @@ import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
 import '../data/risk_tier.dart';
+import '../theme/app_colors.dart';
 import '../widgets/bbox_overlay.dart';
+import '../widgets/booth_scaffold.dart';
 import '../widgets/risk_gauge.dart';
+import '../widgets/surfaces.dart';
+import '../widgets/tier_badge.dart';
 
+/// 체험의 결론 화면. 왼쪽은 박스가 그려지는 사진(핵심 연출), 오른쪽은 판정 카드들.
+///
+/// ⚠️ 티어 문구('위험')는 화면에 **한 번만** 나와야 한다 — 게이지 캡션과 [TierBadge]
+/// 를 동시에 쓰면 같은 단어가 둘이 되어 `report_screen_test` 가 깨지고, 무엇보다
+/// 같은 정보가 두 번 나오는 게 디자인상으로도 틀렸다. 여기서는 배지만 쓴다.
 class ReportScreen extends StatefulWidget {
   const ReportScreen({
     super.key,
@@ -34,7 +43,7 @@ class _ReportScreenState extends State<ReportScreen> {
   ///
   /// `mine` 을 반드시 화면에 렌더해야 한다 — "건너뛰면 대조 줄이 안 나온다" 테스트가
   /// 화면 어디에도 '당신' 이 없으면 무엇을 넘겨도 통과하는 공허한 테스트가 된다.
-  ({String mine, String verdict})? get _comparison {
+  ({String mine, String verdict, bool correct})? get _comparison {
     final g = widget.guess;
     if (g == null) return null;
     final correct = g == widget.case_.isHealthy;
@@ -47,124 +56,191 @@ class _ReportScreenState extends State<ReportScreen> {
       verdict: correct
           ? (widget.case_.isHealthy ? '정확합니다! 이 벌통은 건강합니다' : '정확합니다!')
           : '눈으로는 찾기 어렵습니다 — 전문가도 어렵습니다.',
+      correct: correct,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final c = widget.case_;
+    final t = Theme.of(context).textTheme;
     final recs = c.recommendations;
-    return Padding(
-      padding: const EdgeInsets.all(32),
+    final cmp = _comparison;
+
+    return BoothScaffold(
+      eyebrow: '4단계 · 진단 결과',
+      padding: const EdgeInsets.fromLTRB(40, 24, 40, 28),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
             flex: 6,
-            child: BboxOverlay(
-              photoAsset: 'assets/${c.photo}',
-              imageSize: Size(
-                c.imageWidth.toDouble(),
-                c.imageHeight.toDouble(),
-              ),
-              boxes: c.boxes,
+            // stretch — start 면 PhotoFrame 이 사진 크기로 shrink-wrap 해서
+            // 컬럼 폭을 못 채운다(guess 화면과 같은 결함).
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: PhotoFrame(
+                    aspectRatio: c.imageWidth / c.imageHeight,
+                    child: BboxOverlay(
+                      photoAsset: 'assets/${c.photo}',
+                      imageSize: Size(
+                        c.imageWidth.toDouble(),
+                        c.imageHeight.toDouble(),
+                      ),
+                      boxes: c.boxes,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                // 관람객은 색 박스가 뭘 뜻하는지 모른다. 범례가 없으면 이 화면의
+                // 핵심 연출(빨강/초록)이 그냥 "알록달록한 네모"로 끝난다.
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    _Legend(color: AppColors.tierDanger, label: '응애 의심'),
+                    SizedBox(width: 20),
+                    _Legend(color: AppColors.tierSafe, label: '정상 벌'),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 32),
+          const SizedBox(width: 28),
           Expanded(
-            flex: 4,
+            flex: 5,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 2026-08-30 fix-round: 실제 부스 화면(1366x1024)에서는 Spacer() 로
-                // 충분하다 — 스크롤 래퍼를 검토하게 만들었던 오버플로는 테스트 기본
-                // 서피스(800x600)에서만 발생했고, 실제 부스 해상도에서는 재현되지 않는다.
-                RiskGauge(
-                  score: c.riskScore,
-                  tier: c.tier,
-                  caption: riskTierLabel(c.tier),
-                  size: 260,
-                  stroke: 22,
-                ),
-                if (_comparison != null) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    '당신: ${_comparison!.mine}',
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _comparison!.verdict,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                if (recs.isNotEmpty)
-                  Text(
-                    recs.first,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                if (recs.length > 1 && !_expanded)
-                  TextButton(
-                    onPressed: () => setState(() => _expanded = true),
-                    // 나머지 처방 4개(전체 5개 중)로 가는 유일한 통로다 — 맨 위
-                    // headlineSmall 처방 한 줄만 읽고 지나치면 안 된다. 스타일
-                    // 없는 TextButton은 Material 기본 라벨 크기로 떨어져 바로
-                    // 위 22pt 본문보다도 작아진다(다른 하단 보조 버튼들과 같은
-                    // 결함 — 기록 보기/QR 받기와 동일 기준으로 맞춘다).
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(0, 56),
-                      textStyle: const TextStyle(fontSize: 20),
-                    ),
-                    child: const Text('처방 더 보기'),
-                  ),
-                if (_expanded)
-                  ...recs
-                      .skip(1)
-                      .map(
-                        (r) => Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            '· $r',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                // 처방을 모두 펼치면(위험 티어 5줄) 오른쪽 컬럼이 화면보다
+                // 길어질 수 있다. 스크롤 래퍼는 내용이 들어맞을 때는 아무
+                // 차이가 없고, 넘칠 때만 구제한다.
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _ResultCard(case_: c),
+                        if (cmp != null) ...[
+                          const SizedBox(height: 16),
+                          _ComparisonCard(
+                            mine: cmp.mine,
+                            verdict: cmp.verdict,
+                            correct: cmp.correct,
                           ),
-                        ),
-                      ),
-                const Spacer(),
+                        ],
+                        if (recs.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          BoothCard(
+                            padding: const EdgeInsets.all(24),
+                            accent: AppColors.honeyPrimary,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.medical_services_outlined,
+                                      size: 24,
+                                      color: AppColors.amberDeep,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      '권장 조치',
+                                      style: t.bodyMedium?.copyWith(
+                                        color: AppColors.amberDeep,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Text(recs.first, style: t.titleMedium),
+                                if (recs.length > 1 && !_expanded) ...[
+                                  const SizedBox(height: 14),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    // 나머지 처방으로 가는 유일한 통로다 —
+                                    // 테마의 꿀색 알약 스타일을 그대로 쓴다.
+                                    child: TextButton(
+                                      onPressed: () =>
+                                          setState(() => _expanded = true),
+                                      child: const Text('처방 더 보기'),
+                                    ),
+                                  ),
+                                ],
+                                if (_expanded)
+                                  ...recs
+                                      .skip(1)
+                                      .map(
+                                        (r) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Container(
+                                                margin: const EdgeInsets.only(
+                                                  top: 10,
+                                                ),
+                                                width: 8,
+                                                height: 8,
+                                                decoration: const BoxDecoration(
+                                                  color: AppColors.honeyEdge,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  r,
+                                                  style: t.bodyMedium,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Row(
                   children: [
-                    if (widget.onHistory != null)
+                    if (widget.onHistory != null) ...[
                       TextButton(
                         onPressed: widget.onHistory,
-                        // 서서 쓰는 화면 — 보조 버튼도 56pt 이상 확보 (다른 화면과 동일 기준).
-                        // 너비는 강제하지 않는다 — 508px 우측 컬럼에서 3버튼이 폭까지
-                        // 강제되면 넘친다 (2026-08-30 실측, useBoothSurface 1366x1024).
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 56),
-                          textStyle: const TextStyle(fontSize: 20),
-                        ),
                         child: const Text('기록 보기'),
                       ),
-                    const Spacer(),
-                    if (widget.onFinish != null)
+                      const SizedBox(width: 10),
+                    ],
+                    if (widget.onFinish != null) ...[
                       TextButton(
                         onPressed: widget.onFinish,
-                        style: TextButton.styleFrom(
-                          minimumSize: const Size(0, 56),
-                          textStyle: const TextStyle(fontSize: 20),
-                        ),
                         child: const Text('QR 받기'),
                       ),
-                    const SizedBox(width: 12),
-                    FilledButton(
-                      onPressed: widget.onRestart,
-                      // 주 버튼 — 72pt (guess/outro/history 화면과 동일 기준).
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(0, 72),
-                      ),
-                      child: const Text(
-                        '다른 사진 해보기',
-                        style: TextStyle(fontSize: 22),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: widget.onRestart,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 72),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        child: const Text(
+                          '다른 사진 해보기',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ],
@@ -176,4 +252,135 @@ class _ReportScreenState extends State<ReportScreen> {
       ),
     );
   }
+}
+
+/// 게이지 + 티어 배지 + 마리 수. 세로로 쌓지 않고 가로로 붙여 높이를 아낀다 —
+/// 오른쪽 컬럼에는 이 아래로 대조 카드와 처방 카드가 더 들어간다.
+class _ResultCard extends StatelessWidget {
+  const _ResultCard({required this.case_});
+
+  final BoothCase case_;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return BoothCard(
+      padding: const EdgeInsets.all(22),
+      accent: riskTierColor(case_.tier),
+      child: Row(
+        children: [
+          RiskGauge(
+            score: case_.riskScore,
+            tier: case_.tier,
+            size: 190,
+            stroke: 18,
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TierBadge(tier: case_.tier, scale: 0.9),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  case_.varroaCount == 0
+                      ? '감염 의심 개체 없음'
+                      : '벌 ${case_.beeTotal}마리 중\n${case_.varroaCount}마리 감염 의심',
+                  style: t.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "당신: 건강함" 대조 카드. 맞히면 초록, 틀리면 꿀색 톤 — 틀렸다고 빨강으로
+/// 칠하지 않는다. 여기서 관람객을 혼내는 게 아니라 "원래 어렵다"고 말해줘야 한다.
+class _ComparisonCard extends StatelessWidget {
+  const _ComparisonCard({
+    required this.mine,
+    required this.verdict,
+    required this.correct,
+  });
+
+  final String mine;
+  final String verdict;
+  final bool correct;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final tone = correct ? AppColors.tierSafe : AppColors.amberDeep;
+    return BoothCard(
+      padding: const EdgeInsets.all(22),
+      accent: tone,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            correct
+                ? Icons.check_circle_outline_rounded
+                : Icons.visibility_off_outlined,
+            size: 30,
+            color: tone,
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ⚠️ 이 문자열은 정확히 '당신: {mine}' 이어야 한다 (테스트 계약).
+                Text(
+                  '당신: $mine',
+                  style: t.titleMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(verdict, style: t.titleMedium?.copyWith(color: tone)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 26,
+        height: 18,
+        decoration: BoxDecoration(
+          border: Border.all(color: color, width: 3),
+          borderRadius: BorderRadius.circular(5),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 19,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+        ),
+      ),
+    ],
+  );
 }

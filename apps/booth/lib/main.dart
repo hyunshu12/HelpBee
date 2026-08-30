@@ -17,6 +17,8 @@ import 'screens/picker_screen.dart';
 import 'screens/report_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
+import 'widgets/booth_scaffold.dart';
+import 'widgets/brand.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -150,7 +152,7 @@ class _BoothAppState extends State<BoothApp> {
 
   Widget _buildStage() {
     if (_loadError != null) return _LoadErrorView(error: _loadError!);
-    if (_cases.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (_cases.isEmpty) return const _BootView();
     switch (_stage) {
       case BoothStage.attract:
         return AttractScreen(
@@ -208,6 +210,42 @@ class _BoothAppState extends State<BoothApp> {
         );
     }
   }
+}
+
+/// 부팅 화면. cases.json 을 읽는 짧은 순간 보인다. 크림 배경 위 맨 스피너
+/// 하나만 두면 "앱이 켜졌는지 죽었는지" 알 수 없다 — 어트랙트와 같은 다크
+/// 스테이지에 워드마크를 띄워, 이 순간에도 브랜드가 보이게 한다.
+class _BootView extends StatelessWidget {
+  const _BootView();
+
+  @override
+  Widget build(BuildContext context) => BoothScaffold(
+    dark: true,
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Wordmark(onDark: true, size: 56),
+          const SizedBox(height: 36),
+          const SizedBox(
+            width: 44,
+            height: 44,
+            child: CircularProgressIndicator(
+              strokeWidth: 4,
+              color: AppColors.honeyBrand,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '체험 데이터를 불러오는 중',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.onInkSoft),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /// Break-glass 화면 — 디자인 대상이 아니다. cases.json 로드가 실패했을 때만

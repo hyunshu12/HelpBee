@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../data/booth_session.dart';
+import '../theme/app_colors.dart';
+import '../widgets/booth_scaffold.dart';
+import '../widgets/surfaces.dart';
 import '../widgets/trend_chart.dart';
 
 /// 결과 화면의 [기록 보기]에서 들어오는 곁가지 화면. 부스 체험자는 실제로 벌통을
@@ -16,31 +19,43 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(40),
+    final t = Theme.of(context).textTheme;
+    return BoothScaffold(
+      eyebrow: '곁가지 · 위험도 추이',
+      footer: Row(
+        children: [
+          FilledButton.icon(
+            onPressed: onBack,
+            icon: const Icon(Icons.arrow_back_rounded, size: 28),
+            label: const Text('돌아가기'),
+            style: FilledButton.styleFrom(minimumSize: const Size(240, 72)),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Text(
+              '실제 앱에서는 벌통마다 진단할 때마다 이렇게 쌓입니다',
+              style: t.bodyMedium?.copyWith(color: AppColors.hintBorder),
+            ),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('나의 위험도 추이', style: Theme.of(context).textTheme.headlineLarge),
-          const SizedBox(height: 12),
+          Text('나의 위험도 추이', style: t.headlineLarge),
+          const SizedBox(height: 4),
           Text(
             '최근 4주 예시 기록에 이번 진단 결과를 더했어요',
-            style: Theme.of(context).textTheme.bodyLarge,
+            style: t.bodyLarge?.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
           Expanded(
-            child: TrendChart(
-              scores: session.chartScores,
-              seedCount: BoothSession.seedScores.length,
-            ),
-          ),
-          const SizedBox(height: 32),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton(
-              onPressed: onBack,
-              style: FilledButton.styleFrom(minimumSize: const Size(220, 72)),
-              child: const Text('돌아가기', style: TextStyle(fontSize: 26)),
+            child: BoothCard(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+              child: TrendChart(
+                scores: session.chartScores,
+                seedCount: BoothSession.seedScores.length,
+              ),
             ),
           ),
         ],

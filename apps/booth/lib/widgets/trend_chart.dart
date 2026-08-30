@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/risk_tier.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_fonts.dart';
 
 /// 위험도 추이 꺾은선. y축은 0~100 고정(자동 스케일 금지 — 점이 1~2개일 때
 /// 축이 요동쳐 아무 의미 없는 그래프가 된다). seedCount 이전은 예시 기록이라
@@ -51,6 +52,19 @@ class TrendChart extends StatelessWidget {
     ],
   );
 }
+
+/// 캔버스에 직접 그리는 기준선 라벨의 스타일.
+///
+/// ⚠️ `fontFamily` 를 반드시 명시해야 한다 — `TextPainter` 는 위젯 트리 밖이라
+/// 테마의 서체를 물려받지 못하고, 웹에서 한글이 두부(□)로 그려진다.
+@visibleForTesting
+const TextStyle dangerLabelStyle = TextStyle(
+  fontFamily: kBodyFont,
+  fontFamilyFallback: kFontFallback,
+  fontSize: 22,
+  fontWeight: FontWeight.w700,
+  color: AppColors.tierDanger,
+);
 
 class _TrendPainter extends CustomPainter {
   _TrendPainter({required this.scores, required this.seedCount});
@@ -140,10 +154,7 @@ class _TrendPainter extends CustomPainter {
     }
 
     final label = TextPainter(
-      text: const TextSpan(
-        text: '위험 70+',
-        style: TextStyle(fontSize: 22, color: AppColors.tierDanger),
-      ),
+      text: const TextSpan(text: '위험 70+', style: dangerLabelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     label.paint(
