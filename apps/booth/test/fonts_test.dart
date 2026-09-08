@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/theme/app_fonts.dart';
 import 'package:helpbee_booth/theme/app_theme.dart';
+import 'package:helpbee_booth/widgets/bbox_overlay.dart';
 
 /// 2026-08-31 회귀 묶음.
 ///
@@ -41,8 +42,12 @@ void main() {
     }
   });
 
-  // 캔버스 직접 그리기(TextPainter) 서체 테스트는 추이 그래프와 함께 사라졌다.
-  // Task 7 이 박스 라벨 태그(같은 함정)로 되살린다.
+  test('캔버스에 직접 그리는 박스 태그도 번들 서체를 명시한다', () {
+    // TextPainter 는 위젯 트리 밖이라 테마를 상속하지 않는다 — 서체를 안 박으면
+    // 웹에서 '응애'/'질병' 태그가 두부(□)가 된다.
+    expect(boxTagStyle.fontFamily, kBodyFont);
+    expect(boxTagStyle.fontFamilyFallback, contains(kDisplayFont));
+  });
 
   test('서브셋 폰트가 화면에 쓰는 한글을 실제로 담고 있다', () {
     // 서브셋 스크립트(tool/build_body_font.py)가 커버리지를 좁히다 글자를

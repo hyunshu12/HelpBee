@@ -61,13 +61,11 @@ void main() {
   test('세션마다 조합이 달라진다', () {
     final combos = <String>{};
     for (var seed = 0; seed < 40; seed++) {
-      combos.add(assignRounds(_pool(), Random(seed)).map((c) => c.id).join(','));
+      combos.add(
+        assignRounds(_pool(), Random(seed)).map((c) => c.id).join(','),
+      );
     }
-    expect(
-      combos.length,
-      greaterThan(5),
-      reason: '매번 같은 3장이면 반복 관람객이 지루하다',
-    );
+    expect(combos.length, greaterThan(5), reason: '매번 같은 3장이면 반복 관람객이 지루하다');
   });
 
   test('R3 의 함정(정상)이 가끔 나온다', () {

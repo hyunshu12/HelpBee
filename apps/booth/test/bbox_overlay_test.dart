@@ -42,91 +42,87 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  group('boxStyleFor', () {
-    test('varroa 는 굵은 빨강, 정상 벌은 얇은 초록', () {
+  group('boxStyleFor — 검출기 스타일', () {
+    test('세 클래스가 색·라벨로 구분된다', () {
       final v = boxStyleFor('varroa');
       expect(v.color, AppColors.tierDanger);
-      expect(v.strokeWidth, 6);
-      expect(v.alpha, 1.0);
+      expect(v.tag, '응애');
+
+      final d = boxStyleFor('disease');
+      expect(d.color, AppColors.boxDisease);
+      expect(d.tag, '질병');
 
       final n = boxStyleFor('normal');
       expect(n.color, AppColors.tierSafe);
-      expect(n.strokeWidth, 3);
-      expect(n.alpha, 0.75);
+      expect(n.tag, isNull, reason: '정상 벌마다 태그를 달면 화면이 글자로 덮인다');
     });
 
     test('모르는 cls 는 정상 벌로 취급한다', () {
       expect(boxStyleFor('nonsense').color, AppColors.tierSafe);
       expect(boxStyleFor('').color, AppColors.tierSafe);
     });
+
+    test('선이 얇다 — 실제 검출기 출력처럼', () {
+      // 굵은 선 + 둥근 모서리는 일러스트 스티커처럼 보인다 (2026-09-08 피드백).
+      expect(boxStyleFor('varroa').strokeWidth, lessThanOrEqualTo(3));
+      expect(boxStyleFor('disease').strokeWidth, lessThanOrEqualTo(3));
+      expect(boxStyleFor('normal').strokeWidth, lessThanOrEqualTo(3));
+    });
   });
 
-  // 2026-08-31: 박스를 전부 동시에 페이드인하면 "그림 한 장이 밝아진" 것으로
-  // 보여서 탐지가 일어나는 인상이 안 난다. 하나씩 탁-탁-탁 찍혀야 한다.
-  // 페인터는 위젯 테스트로 못 잡으므로(동시에 그려도 통과) 타이밍 계산을
-  // 순수 함수로 떼어 검증한다.
-  group('boxProgressAt — 순차 등장', () {
-    test('첫 박스가 다 찍히기 전에 마지막 박스는 시작도 안 한다', () {
-      // 첫 박스는 240ms 에 완성. 그 시점에 5번째 박스는 아직 0 이어야 한다.
-      expect(boxProgressAt(0, 240), 1.0);
-      expect(boxProgressAt(4, 240), 0.0, reason: '동시에 나타나면 순차 등장이 아니다');
+  group('감속', () {
+    test('박스 하나가 그려지는 데 0.3초 이상 걸린다', () {
+      // 240ms 는 "한 번에 다 뜬" 것처럼 보였다.
+      expect(boxProgressAt(0, 200), lessThan(1.0));
+      expect(boxProgressAt(0, 360), 1.0);
     });
 
-    test('박스마다 시작 시점이 뒤로 밀린다', () {
-      // 같은 시각에 앞 박스가 뒤 박스보다 항상 더 진행돼 있어야 한다.
-      const t = 400.0;
-      final p = [for (var i = 0; i < 5; i++) boxProgressAt(i, t)];
-      for (var i = 0; i < p.length - 1; i++) {
-        expect(
-          p[i],
-          greaterThanOrEqualTo(p[i + 1]),
-          reason: '$i 번 박스가 ${i + 1} 번보다 늦게 그려진다',
-        );
+    test('박스 사이가 충분히 벌어진다', () {
+      // 첫 박스가 다 그려진 시점(360ms)에 두 번째는 아직 절반도 안 됐어야
+      // "하나씩" 으로 보인다.
+      expect(boxProgressAt(1, 360, count: 3), lessThan(0.5));
+    });
+
+    test('박스가 많아도 총 시간이 4.5초를 넘지 않는다', () {
+      // 어트랙트가 8초마다 반복하고, 관람객이 결과를 기다리는 시간도 한계가 있다.
+      for (final n in [1, 7, 14, 18, 40]) {
+        expect(totalMs(n), lessThanOrEqualTo(4500), reason: '박스 $n개');
       }
-      expect(p.first, 1.0);
-      expect(p.last, lessThan(1.0), reason: '400ms 에 5번째까지 끝나면 너무 빠르다');
-    });
-
-    test('전체 시간이 박스 수에 따라 늘어난다', () {
-      expect(totalMs(1), 240);
-      expect(totalMs(2), greaterThan(totalMs(1)));
-      expect(totalMs(10), greaterThan(totalMs(2)));
-      // 어트랙트는 4초마다 반복하므로 그 안에 끝나야 한다.
-      expect(
-        totalMs(16),
-        lessThan(4000),
-        reason: '박스가 많아도 어트랙트 반복 주기(4초) 안에 끝나야 한다',
-      );
+      expect(totalMs(14), greaterThan(2500), reason: '너무 빨리 끝나도 안 된다');
     });
 
     test('시간이 지나면 모든 박스가 완성된다', () {
-      for (var i = 0; i < 16; i++) {
-        expect(boxProgressAt(i, totalMs(16)), 1.0);
+      for (final n in [3, 7, 18, 40]) {
+        for (var i = 0; i < n; i++) {
+          expect(
+            boxProgressAt(i, totalMs(n), count: n),
+            1.0,
+            reason: '박스 $n개 중 $i번이 안 끝났다',
+          );
+        }
       }
     });
   });
 
-  group('revealOrder — 빨강이 마지막', () {
-    test('정상 벌을 먼저 훑고 감염 의심을 맨 나중에 찍는다', () {
+  group('revealOrder — 정상 → 다른 병 → 응애', () {
+    test('응애가 맨 마지막에 찍힌다', () {
       const boxes = [
         BoothBox(x: 0, y: 0, w: 1, h: 1, cls: 'varroa'),
         BoothBox(x: 1, y: 0, w: 1, h: 1, cls: 'normal'),
-        BoothBox(x: 2, y: 0, w: 1, h: 1, cls: 'normal'),
-        BoothBox(x: 3, y: 0, w: 1, h: 1, cls: 'varroa'),
+        BoothBox(x: 2, y: 0, w: 1, h: 1, cls: 'disease'),
+        BoothBox(x: 3, y: 0, w: 1, h: 1, cls: 'normal'),
       ];
-      final order = revealOrder(boxes).map((b) => b.cls).toList();
-      expect(order, [
-        'normal',
-        'normal',
-        'varroa',
-        'varroa',
-      ], reason: '빨강이 먼저 찍히면 "찾아냈다" 는 연출이 김빠진다');
+      expect(
+        revealOrder(boxes).map((b) => b.cls).toList(),
+        ['normal', 'normal', 'disease', 'varroa'],
+        reason: '빨강이 먼저 찍히면 "찾아냈다" 는 연출이 김빠진다',
+      );
     });
 
     test('박스를 하나도 잃거나 더하지 않는다', () {
       const boxes = [
         BoothBox(x: 0, y: 0, w: 1, h: 1, cls: 'varroa'),
-        BoothBox(x: 1, y: 0, w: 1, h: 1, cls: 'normal'),
+        BoothBox(x: 1, y: 0, w: 1, h: 1, cls: 'disease'),
         BoothBox(x: 2, y: 0, w: 1, h: 1, cls: 'nonsense'),
       ];
       expect(revealOrder(boxes).length, boxes.length);
