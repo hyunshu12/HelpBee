@@ -60,7 +60,7 @@ class TrendChart extends StatelessWidget {
 @visibleForTesting
 const TextStyle dangerLabelStyle = TextStyle(
   fontFamily: kBodyFont,
-  fontFamilyFallback: kFontFallback,
+  fontFamilyFallback: kBodyFallback,
   fontSize: 22,
   fontWeight: FontWeight.w700,
   color: AppColors.tierDanger,

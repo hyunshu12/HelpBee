@@ -21,12 +21,21 @@ class BboxOverlay extends StatefulWidget {
     required this.imageSize,
     required this.boxes,
     this.animate = true,
+    this.replay = 0,
   });
 
   final String photoAsset;
   final Size imageSize;
   final List<BoothBox> boxes;
   final bool animate;
+
+  /// 이 값이 바뀔 때마다 박스 등장 애니메이션을 처음부터 다시 돌린다.
+  ///
+  /// 예전에는 호출부가 `key: ValueKey(replay)` 로 위젯을 통째로 **다시 만들어**
+  /// 재생했다. 그러면 State·AnimationController 가 매번 새로 생기고 `Image` 도
+  /// 다시 해석된다 — 어트랙트가 4초마다 재생하므로 8시간 부스에서 7,200번이다.
+  /// 프로퍼티로 바꾸면 위젯은 그대로 두고 컨트롤러만 되감는다.
+  final int replay;
 
   @override
   State<BboxOverlay> createState() => _BboxOverlayState();
@@ -50,6 +59,14 @@ class _BboxOverlayState extends State<BboxOverlay>
   }
 
   @override
+  void didUpdateWidget(BboxOverlay old) {
+    super.didUpdateWidget(old);
+    if (widget.replay != old.replay && widget.animate) {
+      _c.forward(from: 0);
+    }
+  }
+
+  @override
   void dispose() {
     _c.dispose();
     super.dispose();
@@ -63,21 +80,26 @@ class _BboxOverlayState extends State<BboxOverlay>
           imageSize: widget.imageSize,
           boxSize: Size(constraints.maxWidth, constraints.maxHeight),
         );
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            Image.asset(widget.photoAsset, fit: BoxFit.contain),
-            AnimatedBuilder(
-              animation: _c,
-              builder: (context, _) => CustomPaint(
-                painter: _BoxPainter(
-                  fit: fit,
-                  boxes: widget.boxes,
-                  elapsedMs: _c.value * totalMs(widget.boxes.length),
+        // RepaintBoundary — 이 안의 사진·박스를 별도 레이어로 떼어낸다.
+        // 없으면 화면 어딘가(어트랙트의 펄스 칩 등)가 애니메이션할 때마다
+        // 사진까지 매 프레임 다시 래스터화된다.
+        return RepaintBoundary(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(widget.photoAsset, fit: BoxFit.contain),
+              AnimatedBuilder(
+                animation: _c,
+                builder: (context, _) => CustomPaint(
+                  painter: _BoxPainter(
+                    fit: fit,
+                    boxes: widget.boxes,
+                    elapsedMs: _c.value * totalMs(widget.boxes.length),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

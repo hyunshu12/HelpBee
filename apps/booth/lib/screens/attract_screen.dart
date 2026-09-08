@@ -34,17 +34,35 @@ class _AttractScreenState extends State<AttractScreen>
   Timer? _timer;
   int _replay = 0;
 
+  /// 안내 칩의 맥박. **계속 돌리지 않는다.**
+  ///
+  /// 예전에는 `repeat(reverse: true)` 로 하루 종일 60fps 프레임을 요구했다.
+  /// 어트랙트는 관람객이 없는 대부분의 시간을 차지하는 화면이라, 이게 부스
+  /// 배터리를 가장 많이 먹는 단일 원인이었다. 이제 4초 주기마다 1.2초만
+  /// 뛰고 멈춘다 — 나머지 2.8초는 **프레임을 아예 요청하지 않는다.**
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  /// 0.45 → 1.0 → 0.45 한 번 뛰고 끝난다.
+  late final Animation<double> _pulseOpacity = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 0.45, end: 1.0), weight: 1),
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.45), weight: 1),
+  ]).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(replayEvery, (_) {
-      if (mounted) setState(() => _replay++);
-    });
+    _beat();
+    _timer = Timer.periodic(replayEvery, (_) => _beat());
+  }
+
+  /// 한 주기: 박스를 다시 그리고, 칩을 한 번 뛰게 한다.
+  void _beat() {
+    if (!mounted) return;
+    setState(() => _replay++);
+    _pulse.forward(from: 0);
   }
 
   @override
@@ -65,7 +83,7 @@ class _AttractScreenState extends State<AttractScreen>
       onTap: widget.onStart,
       footer: Center(
         child: FadeTransition(
-          opacity: Tween<double>(begin: 0.45, end: 1.0).animate(_pulse),
+          opacity: _pulseOpacity,
           child: HoneyChip(
             dark: true,
             padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -116,8 +134,9 @@ class _AttractScreenState extends State<AttractScreen>
                     // 절반 넘게 버리게 된다 (2026-08-31 아이패드 실측).
                     aspectRatio: c.imageWidth / c.imageHeight,
                     child: BboxOverlay(
-                      // key 가 바뀌면 State 가 새로 생겨 애니메이션이 처음부터 돈다.
-                      key: ValueKey(_replay),
+                      // 위젯을 다시 만들지 않고 프로퍼티로 재생만 시킨다 —
+                      // key 를 바꾸면 State·컨트롤러·이미지가 매번 새로 생긴다.
+                      replay: _replay,
                       photoAsset: 'assets/${c.photo}',
                       imageSize: Size(
                         c.imageWidth.toDouble(),
@@ -135,29 +154,33 @@ class _AttractScreenState extends State<AttractScreen>
                   // 창)에서는 61px 넘쳐 잘렸다. scaleDown 은 공간이 있으면
                   // 원래 크기 그대로, 모자라면 비율을 유지한 채 줄인다.
                   child: Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          RiskGauge(
-                            score: c.riskScore,
-                            tier: c.tier,
-                            size: 300,
-                            stroke: 24,
-                            onDark: true,
-                          ),
-                          const SizedBox(height: 22),
-                          TierBadge(tier: c.tier, scale: 1.15),
-                          const SizedBox(height: 18),
-                          Text(
-                            '${c.varroaCount}마리에게서 응애 감염 의심',
-                            textAlign: TextAlign.center,
-                            style: t.bodyLarge?.copyWith(
-                              color: AppColors.onInkSoft,
+                    // RepaintBoundary — 게이지의 MaskFilter.blur 는 이 화면에서
+                    // 가장 비싼 페인트다. 한 번 래스터화해두고 재사용한다.
+                    child: RepaintBoundary(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            RiskGauge(
+                              score: c.riskScore,
+                              tier: c.tier,
+                              size: 300,
+                              stroke: 24,
+                              onDark: true,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 22),
+                            TierBadge(tier: c.tier, scale: 1.15),
+                            const SizedBox(height: 18),
+                            Text(
+                              '${c.varroaCount}마리에게서 응애 감염 의심',
+                              textAlign: TextAlign.center,
+                              style: t.bodyLarge?.copyWith(
+                                color: AppColors.onInkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

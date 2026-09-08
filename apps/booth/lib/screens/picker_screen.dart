@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_fonts.dart';
 import '../theme/app_radius.dart';
 import '../widgets/booth_scaffold.dart';
 
@@ -133,7 +134,8 @@ class _PhotoCardButton extends StatelessWidget {
                     child: Text(
                       '$index',
                       style: const TextStyle(
-                        fontFamily: 'Jua',
+                        fontFamily: kDisplayFont,
+                        fontFamilyFallback: kDisplayFallback,
                         fontSize: 28,
                         height: 1.0,
                         color: AppColors.textPrimary,

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_fonts.dart';
 
 /// HelpBee 워드마크 — 육각(벌집) 마크 + Jua 로고 타입.
 ///
@@ -33,7 +34,8 @@ class Wordmark extends StatelessWidget {
         Text(
           'HelpBee',
           style: TextStyle(
-            fontFamily: 'Jua',
+            fontFamily: kDisplayFont,
+            fontFamilyFallback: kDisplayFallback,
             fontSize: size,
             height: 1.0,
             letterSpacing: 0.2,
