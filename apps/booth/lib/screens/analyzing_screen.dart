@@ -70,7 +70,6 @@ class _AnalyzingScreenState extends State<AnalyzingScreen>
     ];
 
     return BoothScaffold(
-      eyebrow: '3단계 · AI 분석',
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

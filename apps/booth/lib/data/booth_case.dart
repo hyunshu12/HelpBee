@@ -77,6 +77,23 @@ class BoothCase {
   /// '건강함' 추측이 정답이 된다.
   bool get isHealthy => kind == CaseKind.healthy;
 
+  /// 화면에 보여줄 순서로 정렬한 처방.
+  ///
+  /// 문구 자체는 제품 코드(risk.yaml)에서 그대로 온다 — 부스에서 지어내지
+  /// 않는다. 다만 다른 병 케이스는 응애가 0이라 "응애 감염률이 안전 범위"가
+  /// 첫 줄로 나오는데(2026-09-08 웹 실측), 화면 제목이 '날개불구 바이러스'인
+  /// 상태에서 그 문장이 첫 줄이면 관람객에게 모순으로 읽힌다. 그래서 다른 병
+  /// 케이스에 한해 '다른 질병' 문구를 맨 앞으로 올린다.
+  List<String> get orderedRecommendations {
+    if (kind != CaseKind.visible) return recommendations;
+    // risk.yaml 은 다른 질병 문구를 목록 뒤쪽에 통째로 덧붙인다 — 그 지점부터
+    // 끝까지를 앞으로 옮긴다. 문구를 골라 재배열하면 이어지는 문장("DWV /
+    // 부저병 가능성...")이 앞 문장과 떨어져 뜻이 끊긴다.
+    final at = recommendations.indexWhere((r) => r.contains('다른 질병'));
+    if (at <= 0) return recommendations;
+    return [...recommendations.skip(at), ...recommendations.take(at)];
+  }
+
   factory BoothCase.fromJson(Map<String, dynamic> json) => BoothCase(
     id: json['id'] as String,
     photo: json['photo'] as String,

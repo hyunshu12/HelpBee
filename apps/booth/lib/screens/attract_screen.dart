@@ -29,7 +29,9 @@ class AttractScreen extends StatefulWidget {
 
 class _AttractScreenState extends State<AttractScreen>
     with SingleTickerProviderStateMixin {
-  static const Duration replayEvery = Duration(seconds: 4);
+  /// 8초 — 박스 연출 약 3초 + 완성된 화면 5초 유지. 4초는 박스가 다 찍히자마자
+  /// 다시 시작해 어수선했다.
+  static const Duration replayEvery = Duration(seconds: 8);
 
   Timer? _timer;
   int _replay = 0;
@@ -78,7 +80,6 @@ class _AttractScreenState extends State<AttractScreen>
 
     return BoothScaffold(
       dark: true,
-      eyebrow: 'AI 벌통 진단',
       onTap: widget.onStart,
       footer: Center(
         child: RepaintBoundary(
@@ -90,12 +91,6 @@ class _AttractScreenState extends State<AttractScreen>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.touch_app_outlined,
-                    color: AppColors.honeyBrand,
-                    size: 34,
-                  ),
-                  const SizedBox(width: 14),
                   Text(
                     '화면을 터치해 시작하세요',
                     style: t.headlineMedium?.copyWith(

@@ -33,23 +33,14 @@ class GuessScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     return BoothScaffold(
-      eyebrow: '2단계 · 직접 맞혀보기',
       footer: Row(
         children: [
           Expanded(
-            child: _Choice(
-              icon: Icons.sentiment_satisfied_alt_rounded,
-              label: '건강함',
-              onTap: () => onAnswer(true),
-            ),
+            child: _Choice(label: '건강함', onTap: () => onAnswer(true)),
           ),
           const SizedBox(width: 20),
           Expanded(
-            child: _Choice(
-              icon: Icons.report_problem_outlined,
-              label: '문제 있음',
-              onTap: () => onAnswer(false),
-            ),
+            child: _Choice(label: '문제 있음', onTap: () => onAnswer(false)),
           ),
           const SizedBox(width: 20),
           TextButton(
@@ -95,9 +86,8 @@ class GuessScreen extends StatelessWidget {
 }
 
 class _Choice extends StatelessWidget {
-  const _Choice({required this.icon, required this.label, required this.onTap});
+  const _Choice({required this.label, required this.onTap});
 
-  final IconData icon;
   final String label;
   final VoidCallback onTap;
 
@@ -105,13 +95,6 @@ class _Choice extends StatelessWidget {
   Widget build(BuildContext context) => FilledButton(
     onPressed: onTap,
     style: FilledButton.styleFrom(minimumSize: const Size(0, 76)),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(icon, size: 32, color: AppColors.textPrimary),
-        const SizedBox(width: 14),
-        Text(label, style: const TextStyle(fontSize: 28)),
-      ],
-    ),
+    child: Text(label, style: const TextStyle(fontSize: 28)),
   );
 }

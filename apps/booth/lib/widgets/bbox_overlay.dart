@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
@@ -23,6 +25,7 @@ class BboxOverlay extends StatefulWidget {
     required this.boxes,
     this.animate = true,
     this.replay = 0,
+    this.startDelay = Duration.zero,
   });
 
   final String photoAsset;
@@ -38,6 +41,12 @@ class BboxOverlay extends StatefulWidget {
   /// 프로퍼티로 바꾸면 위젯은 그대로 두고 컨트롤러만 되감는다.
   final int replay;
 
+  /// 박스가 찍히기 전 사진만 보여 주는 시간.
+  ///
+  /// 결과 화면이 뜨자마자 박스가 나오면 관람객이 원본 사진을 볼 틈이 없다 —
+  /// "AI가 무엇을 보고 찾았는지"가 이 앱의 핵심인데 비교 대상이 사라진다.
+  final Duration startDelay;
+
   @override
   State<BboxOverlay> createState() => _BboxOverlayState();
 }
@@ -52,12 +61,20 @@ class _BboxOverlayState extends State<BboxOverlay>
   @override
   void initState() {
     super.initState();
-    if (widget.animate) {
+    if (!widget.animate) {
+      _c.value = 1.0;
+      return;
+    }
+    if (widget.startDelay == Duration.zero) {
       _c.forward();
     } else {
-      _c.value = 1.0;
+      _delay = Timer(widget.startDelay, () {
+        if (mounted) _c.forward();
+      });
     }
   }
+
+  Timer? _delay;
 
   @override
   void didUpdateWidget(BboxOverlay old) {
@@ -69,6 +86,7 @@ class _BboxOverlayState extends State<BboxOverlay>
 
   @override
   void dispose() {
+    _delay?.cancel();
     _c.dispose();
     super.dispose();
   }

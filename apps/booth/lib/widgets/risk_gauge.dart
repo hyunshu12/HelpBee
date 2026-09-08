@@ -132,20 +132,6 @@ class _GaugePainter extends CustomPainter {
     const startAngle = -math.pi / 2; // 12 o'clock
     final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
 
-    // 호 아래에 같은 색 번짐을 한 겹 깔아 게이지가 "빛나 보이게" 한다 —
-    // 단색 스트로크 하나만 그리면 기본 위젯처럼 보인다.
-    canvas.drawArc(
-      rect,
-      startAngle,
-      sweepAngle,
-      false,
-      Paint()
-        ..color = arcColor.withValues(alpha: 0.22)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke * 1.9
-        ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
-    );
     canvas.drawArc(
       rect,
       startAngle,

@@ -49,7 +49,6 @@ class _OutroScreenState extends State<OutroScreen>
     final t = Theme.of(context).textTheme;
     return BoothScaffold(
       dark: true,
-      eyebrow: '체험 완료',
       footer: AnimatedBuilder(
         animation: _c,
         builder: (context, _) => ClipRRect(
@@ -82,13 +81,12 @@ class _OutroScreenState extends State<OutroScreen>
                     style: t.bodyLarge?.copyWith(color: AppColors.onInkSoft),
                   ),
                   const SizedBox(height: 32),
-                  FilledButton.icon(
+                  FilledButton(
                     onPressed: widget.onRestart,
-                    icon: const Icon(Icons.refresh_rounded, size: 28),
-                    label: const Text('처음으로'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(260, 72),
                     ),
+                    child: const Text('처음으로'),
                   ),
                 ],
               ),

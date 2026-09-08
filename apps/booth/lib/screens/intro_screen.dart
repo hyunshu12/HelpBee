@@ -71,7 +71,6 @@ class _IntroScreenState extends State<IntroScreen>
     final t = Theme.of(context).textTheme;
 
     return BoothScaffold(
-      eyebrow: '먼저, 응애가 뭘까요?',
       onTap: widget.onDone,
       footer: AnimatedBuilder(
         animation: _c,

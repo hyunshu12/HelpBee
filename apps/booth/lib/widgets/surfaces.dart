@@ -5,76 +5,41 @@ import '../theme/app_radius.dart';
 
 /// 흰 카드 면. 부스 화면이 "PPT 슬라이드"처럼 보이던 가장 큰 이유가 모든
 /// 요소가 배경 위에 그냥 얹혀 있었기 때문이다 — 카드로 묶어 층을 만든다.
-///
-/// 그림자는 중성 회색이 아니라 따뜻한 갈색([AppColors.shadowWarm])이다.
-/// 크림 배경 위의 회색 그림자는 화면 전체를 탁하게 만든다.
 class BoothCard extends StatelessWidget {
   const BoothCard({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(28),
     this.dark = false,
-    this.accent,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final bool dark;
 
-  /// 지정하면 카드 왼쪽에 6px 세로 악센트 바를 그린다 (티어 색 등).
-  final Color? accent;
-
   @override
-  Widget build(BuildContext context) {
-    final content = Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: dark ? AppColors.boothInkSoft : AppColors.surface,
-        borderRadius: AppRadius.cardRadius,
-        border: Border.all(
-          color: dark ? AppColors.boothInkLine : AppColors.divider,
-        ),
-        boxShadow: dark
-            ? null
-            : const [
-                BoxShadow(
-                  color: AppColors.shadowWarm,
-                  blurRadius: 32,
-                  offset: Offset(0, 12),
-                ),
-              ],
+  Widget build(BuildContext context) => Container(
+    padding: padding,
+    decoration: BoxDecoration(
+      color: dark ? AppColors.boothInkSoft : AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: dark ? AppColors.boothInkLine : AppColors.divider,
       ),
-      child: child,
-    );
-
-    if (accent == null) return content;
-    return Stack(
-      children: [
-        content,
-        Positioned(
-          left: 0,
-          top: 18,
-          bottom: 18,
-          child: Container(
-            width: 6,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(3),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+      // 그림자 없음 — 카드마다 그림자를 깔면 화면이 슬라이드처럼 보인다.
+      // 구분은 가는 선 하나로 충분하다.
+    ),
+    child: child,
+  );
 }
 
-/// 사진 액자. 둥근 클립 + 흰 매트 + 그림자. 맨 `Image.asset` 을 그대로 두면
+/// 사진 액자. 얇은 매트 + 가는 테두리. 맨 `Image.asset` 을 그대로 두면
 /// 사진이 배경에 붙어 버려 "붙여넣은 이미지"로 보인다.
 class PhotoFrame extends StatelessWidget {
   const PhotoFrame({
     super.key,
     required this.child,
-    this.matte = 10,
+    this.matte = 6,
     this.dark = false,
     this.aspectRatio,
   });
@@ -106,22 +71,12 @@ class PhotoFrame extends StatelessWidget {
     padding: EdgeInsets.all(matte),
     decoration: BoxDecoration(
       color: dark ? AppColors.boothInkSoft : AppColors.surface,
-      borderRadius: AppRadius.cardRadius,
+      borderRadius: BorderRadius.circular(12),
       border: Border.all(
         color: dark ? AppColors.boothInkLine : AppColors.divider,
       ),
-      boxShadow: [
-        BoxShadow(
-          color: dark ? AppColors.shadowWarmStrong : AppColors.shadowWarm,
-          blurRadius: dark ? 48 : 36,
-          offset: const Offset(0, 14),
-        ),
-      ],
     ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.card - 8),
-      child: child,
-    ),
+    child: ClipRRect(borderRadius: BorderRadius.circular(6), child: child),
   );
 }
 

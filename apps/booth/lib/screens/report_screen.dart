@@ -64,11 +64,10 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget build(BuildContext context) {
     final c = widget.case_;
     final t = Theme.of(context).textTheme;
-    final recs = c.recommendations;
+    final recs = c.orderedRecommendations;
     final cmp = _comparison;
 
     return BoothScaffold(
-      eyebrow: '4단계 · 진단 결과',
       padding: const EdgeInsets.fromLTRB(40, 24, 40, 28),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,6 +89,7 @@ class _ReportScreenState extends State<ReportScreen> {
                         c.imageHeight.toDouble(),
                       ),
                       boxes: c.boxes,
+                      startDelay: const Duration(milliseconds: 500),
                     ),
                   ),
                 ),
