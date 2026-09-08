@@ -174,7 +174,7 @@ class _AttractScreenState extends State<AttractScreen>
                             TierBadge(tier: c.tier, scale: 1.15),
                             const SizedBox(height: 18),
                             Text(
-                              '${c.varroaCount}마리에게서 응애 감염 의심',
+                              '${c.sickCount}마리에게서 응애 감염 의심',
                               textAlign: TextAlign.center,
                               style: t.bodyLarge?.copyWith(
                                 color: AppColors.onInkSoft,

@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
+import 'dart:math';
+
 import 'package:helpbee_booth/data/booth_session.dart';
+import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/analyzing_screen.dart';
 import 'package:helpbee_booth/screens/attract_screen.dart';
 import 'package:helpbee_booth/screens/guess_screen.dart';
-import 'package:helpbee_booth/screens/history_screen.dart';
 import 'package:helpbee_booth/screens/intro_screen.dart';
 import 'package:helpbee_booth/screens/outro_screen.dart';
 import 'package:helpbee_booth/screens/picker_screen.dart';
+import 'package:helpbee_booth/screens/summary_screen.dart';
+import 'package:helpbee_booth/screens/tour_start_screen.dart';
 import 'package:helpbee_booth/screens/report_screen.dart';
 import 'package:helpbee_booth/theme/app_theme.dart';
 
@@ -27,7 +31,11 @@ import 'test_surface.dart';
 /// 아이패드보다 세로가 짧고, 기기별 세이프에어리어도 다르다.
 const _surfaces = [kBoothSurface, Size(1280, 720)];
 
-BoothCase _case({RiskTier tier = RiskTier.danger, int recs = 5}) => BoothCase(
+BoothCase _case({
+  RiskTier tier = RiskTier.danger,
+  int recs = 5,
+  CaseKind kind = CaseKind.varroa,
+}) => BoothCase(
   id: 'danger-100',
   photo: 'photos/danger-100.jpg',
   imageWidth: 1920,
@@ -35,7 +43,10 @@ BoothCase _case({RiskTier tier = RiskTier.danger, int recs = 5}) => BoothCase(
   riskScore: 100,
   tier: tier,
   beeTotal: 14,
-  varroaCount: 2,
+  kind: kind,
+  disease: kind == CaseKind.healthy ? null : 'varroa',
+  diseaseLabel: kind == CaseKind.healthy ? null : '날개불구 바이러스',
+  sickCount: 2,
   // 최악 케이스(위험 티어 처방 5줄)로 돈다 — 가장 길어지는 조합.
   recommendations: [
     for (var i = 0; i < recs; i++) '처방 문구 $i 입니다. 조금 긴 문장으로 둡니다.',
@@ -51,22 +62,46 @@ void main() {
     '어트랙트': () => AttractScreen(case_: _case(), onStart: () {}),
     '인트로': () => IntroScreen(onDone: () {}),
     '사진 고르기': () => PickerScreen(
-      cases: [for (var i = 0; i < 4; i++) _case()],
+      cases: [for (var i = 0; i < 10; i++) _case()],
       onPick: (_) {},
     ),
+    '투어 시작': () => TourStartScreen(onStart: () {}),
     '추측': () => GuessScreen(case_: _case(), onAnswer: (_) {}),
     '분석중': () => AnalyzingScreen(case_: _case(), onDone: () {}),
-    '결과(추측 있음)': () => ReportScreen(
+    '결과(응애)': () => ReportScreen(
       case_: _case(),
       guess: false,
-      onRestart: () {},
-      onHistory: () {},
+      isLastRound: false,
+      isBonus: false,
+      onNext: () {},
+    ),
+    '결과(다른 병)': () => ReportScreen(
+      case_: _case(kind: CaseKind.visible),
+      guess: false,
+      isLastRound: true,
+      isBonus: false,
+      onNext: () {},
+    ),
+    '결과(추측 없음)': () => ReportScreen(
+      case_: _case(),
+      guess: null,
+      isLastRound: false,
+      isBonus: false,
+      onNext: () {},
+    ),
+    '요약': () => SummaryScreen(
+      session: BoothSession()
+        ..startTour([
+          _case(kind: CaseKind.visible),
+          _case(),
+          _case(kind: CaseKind.healthy, tier: RiskTier.safe),
+        ], rng: Random(0))
+        ..recordGuess(false)
+        ..recordGuess(true)
+        ..recordGuess(null),
+      onMore: () {},
       onFinish: () {},
     ),
-    '결과(추측 없음)': () =>
-        ReportScreen(case_: _case(), guess: null, onRestart: () {}),
-    '기록': () =>
-        HistoryScreen(session: BoothSession()..record(_case()), onBack: () {}),
     '마무리': () => OutroScreen(onRestart: () {}),
   };
 

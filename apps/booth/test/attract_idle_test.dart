@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
+import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/attract_screen.dart';
 import 'package:helpbee_booth/screens/report_screen.dart';
@@ -18,12 +19,15 @@ import 'test_surface.dart';
 const _case = BoothCase(
   id: 'danger-100',
   photo: 'photos/danger-100.jpg',
+  kind: CaseKind.varroa,
+  disease: 'varroa',
+  diseaseLabel: '응애',
   imageWidth: 1920,
   imageHeight: 1080,
   riskScore: 100,
   tier: RiskTier.danger,
   beeTotal: 7,
-  varroaCount: 2,
+  sickCount: 2,
   recommendations: ['처방'],
   boxes: [
     BoothBox(x: 100, y: 100, w: 300, h: 200, cls: 'varroa'),
@@ -94,9 +98,9 @@ void main() {
           body: ReportScreen(
             case_: _case,
             guess: false,
-            onRestart: () {},
-            onHistory: () {},
-            onFinish: () {},
+            isLastRound: false,
+            isBonus: false,
+            onNext: () {},
           ),
         ),
       ),

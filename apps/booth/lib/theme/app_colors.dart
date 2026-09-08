@@ -44,6 +44,10 @@ abstract final class AppColors {
   static const Color tierDanger = Color(0xFFD7443E);
   static const Color tierUnknown = Color(0xFFB9B9B9);
 
+  /// 응애가 아닌 다른 병(석고병·날개불구) 의심 박스. 응애 빨강과 정상 초록
+  /// 사이에서 구분되어야 하므로 주황을 쓴다.
+  static const Color boxDisease = Color(0xFFE07B22);
+
   // ── Semantic ─────────────────────────────────────────────────────────────
   static const Color error = Color(0xFFD32F2F);
   static const Color divider = Color(0xFFEAE6DD);

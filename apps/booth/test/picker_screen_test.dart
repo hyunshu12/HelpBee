@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
+import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/picker_screen.dart';
 
@@ -9,12 +10,15 @@ import 'test_surface.dart';
 BoothCase _case(String id, RiskTier tier, int risk) => BoothCase(
   id: id,
   photo: 'photos/$id.jpg',
+  kind: CaseKind.varroa,
+  disease: 'varroa',
+  diseaseLabel: '응애',
   imageWidth: 1920,
   imageHeight: 1080,
   riskScore: risk,
   tier: tier,
   beeTotal: 6,
-  varroaCount: tier == RiskTier.safe ? 0 : 1,
+  sickCount: tier == RiskTier.safe ? 0 : 1,
   recommendations: const [],
   boxes: const [],
 );

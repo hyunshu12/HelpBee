@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
-import '../data/risk_tier.dart';
+import '../data/case_kind.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bbox_overlay.dart';
 import '../widgets/booth_scaffold.dart';
@@ -19,18 +19,23 @@ class ReportScreen extends StatefulWidget {
     super.key,
     required this.case_,
     required this.guess,
-    required this.onRestart,
-    this.onHistory,
-    this.onFinish,
+    required this.isLastRound,
+    required this.isBonus,
+    required this.onNext,
   });
 
   final BoothCase case_;
 
   /// 관람객의 추측. true=건강함, false=문제 있음, null=건너뜀.
   final bool? guess;
-  final VoidCallback onRestart;
-  final VoidCallback? onHistory;
-  final VoidCallback? onFinish;
+
+  /// 투어의 마지막 라운드인가 — 주 버튼 문구가 달라진다.
+  final bool isLastRound;
+
+  /// 요약 뒤 자유 선택으로 들어온 보너스 경로인가.
+  final bool isBonus;
+
+  final VoidCallback onNext;
 
   @override
   State<ReportScreen> createState() => _ReportScreenState();
@@ -46,17 +51,12 @@ class _ReportScreenState extends State<ReportScreen> {
   ({String mine, String verdict, bool correct})? get _comparison {
     final g = widget.guess;
     if (g == null) return null;
-    final correct = g == widget.case_.isHealthy;
+    final verdict = verdictFor(widget.case_.kind, g, widget.case_.isHealthy);
+    if (verdict == null) return null;
     return (
       mine: g ? '건강함' : '문제 있음',
-      // 스펙 §3 설계 의도: "정상 사진을 골라 '건강함'을 맞히면 '정확합니다!
-      // 이 벌통은 건강합니다'로 기분 좋게 끝낸다" — 이 문구는 정상 벌통을
-      // 맞혔을 때 한정이다. 위험/주의 벌통을 '문제 있음'으로 맞혔을 때 그대로
-      // 붙이면 "이 벌통은 건강합니다"라는 실제와 반대되는 문장이 나간다.
-      verdict: correct
-          ? (widget.case_.isHealthy ? '정확합니다! 이 벌통은 건강합니다' : '정확합니다!')
-          : '눈으로는 찾기 어렵습니다 — 전문가도 어렵습니다.',
-      correct: correct,
+      verdict: verdict,
+      correct: g == widget.case_.isHealthy,
     );
   }
 
@@ -100,7 +100,9 @@ class _ReportScreenState extends State<ReportScreen> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     _Legend(color: AppColors.tierDanger, label: '응애 의심'),
-                    SizedBox(width: 20),
+                    SizedBox(width: 18),
+                    _Legend(color: AppColors.boxDisease, label: '다른 병 의심'),
+                    SizedBox(width: 18),
                     _Legend(color: AppColors.tierSafe, label: '정상 벌'),
                   ],
                 ),
@@ -134,7 +136,6 @@ class _ReportScreenState extends State<ReportScreen> {
                           const SizedBox(height: 16),
                           BoothCard(
                             padding: const EdgeInsets.all(24),
-                            accent: AppColors.honeyPrimary,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -213,58 +214,20 @@ class _ReportScreenState extends State<ReportScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // 주 버튼은 **QR(마무리)로 가는 길**이다.
-                //
-                // 2026-08-31: 예전엔 '다른 사진 해보기'가 제일 큰 버튼이었는데,
-                // 그러면 관람객이 사진만 계속 돌려보다 QR 을 못 보고 떠난다.
-                // 체험의 마지막 목적은 "저희 팀이 누군지 남기는 것"이므로
-                // 기본 동선이 그쪽으로 흐르게 하고, 사진 다시 보기는 보조로 둔다.
+                // 투어 중에는 옆길이 없다 — 흐름이 끊기면 3라운드가 만드는
+                // 대비(보이는 병 → 안 보이는 병)가 살지 않는다.
                 Row(
                   children: [
-                    if (widget.onHistory != null) ...[
-                      TextButton(
-                        onPressed: widget.onHistory,
-                        child: const Text('기록 보기'),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: widget.onNext,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(300, 76),
                       ),
-                      const SizedBox(width: 10),
-                    ],
-                    TextButton(
-                      onPressed: widget.onRestart,
-                      child: const Text('다른 사진 해보기'),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton(
-                        // onFinish 가 없으면(단위 테스트 등) 주 버튼이 사라져
-                        // 화면에서 나갈 길이 없어진다 — 그때는 '다른 사진'이
-                        // 주 버튼 자리를 대신한다.
-                        onPressed: widget.onFinish ?? widget.onRestart,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 72),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                // 짧게 — '다음 단계로 넘어가기'는 이 폭에서
-                                // '다음 단계로 넘어…' 로 잘렸다(2026-08-31 실측).
-                                widget.onFinish != null
-                                    ? '다음 단계로'
-                                    : '다른 사진 해보기',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 26,
-                              color: AppColors.textPrimary,
-                            ),
-                          ],
-                        ),
+                      child: Text(
+                        widget.isBonus
+                            ? '마치기 →'
+                            : (widget.isLastRound ? '결과 보기 →' : '다음 사진 →'),
                       ),
                     ),
                   ],
@@ -288,9 +251,33 @@ class _ResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+
+    // 다른 병: 게이지도 티어 배지도 없다. 티어는 *응애* 감염률 개념이라
+    // 다른 병에는 safe 가 나오고(2026-09-08 실측), 그러면 병든 벌통에 초록
+    // '안전' 배지가 붙는다.
+    if (case_.kind == CaseKind.visible) {
+      return BoothCard(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              case_.diseaseLabel ?? '질병 의심',
+              style: t.headlineMedium?.copyWith(color: AppColors.boxDisease),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '의심 ${case_.sickCount} / 전체 ${case_.beeTotal}',
+              style: t.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      );
+    }
+
     return BoothCard(
       padding: const EdgeInsets.all(22),
-      accent: riskTierColor(case_.tier),
       child: Row(
         children: [
           RiskGauge(
@@ -311,9 +298,9 @@ class _ResultCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  case_.varroaCount == 0
+                  case_.sickCount == 0
                       ? '감염 의심 개체 없음'
-                      : '벌 ${case_.beeTotal}마리 중\n${case_.varroaCount}마리 감염 의심',
+                      : '벌 ${case_.beeTotal}마리 중\n${case_.sickCount}마리 감염 의심',
                   style: t.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
@@ -323,6 +310,25 @@ class _ResultCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 관람객 추측과 케이스 성격에 맞는 한 줄. 건너뛰면 null.
+///
+/// 라운드마다 성격이 달라서 문구도 달라야 한다 — R1 은 "보이는 걸 봤다",
+/// R2 는 "못 보는 게 정상이다", R3 는 "함정이었다" 가 핵심이다. 한 문구로
+/// 통일하면 3라운드가 같은 말을 세 번 하는 화면이 된다.
+@visibleForTesting
+String? verdictFor(CaseKind kind, bool? guess, bool isHealthy) {
+  if (guess == null) return null;
+  final correct = guess == isHealthy;
+  return switch ((kind, correct)) {
+    (CaseKind.visible, true) => '잘 보셨어요. 이건 눈에 보이는 병입니다.',
+    (CaseKind.visible, false) => '놓치셨네요 — 날개와 유충 색을 다시 보세요.',
+    (CaseKind.varroa, true) => '맞히셨네요! 그런데 어디가 문제인지 보이셨나요?',
+    (CaseKind.varroa, false) => '못 찾는 게 정상입니다. 응애는 2mm예요.',
+    (CaseKind.healthy, true) => '의심하지 않고 잘 보셨네요. 정말 건강합니다.',
+    (CaseKind.healthy, false) => '함정이었습니다 — 이 벌통은 건강합니다.',
+  };
 }
 
 /// "당신: 건강함" 대조 카드. 맞히면 초록, 틀리면 꿀색 톤 — 틀렸다고 빨강으로
@@ -344,7 +350,6 @@ class _ComparisonCard extends StatelessWidget {
     final tone = correct ? AppColors.tierSafe : AppColors.amberDeep;
     return BoothCard(
       padding: const EdgeInsets.all(22),
-      accent: tone,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -42,7 +42,9 @@ class _AnalyzingScreenState extends State<AnalyzingScreen>
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(milliseconds: 500), (t) {
+    // 1.5초는 관람객이 단계를 읽기도 전에 지나갔다 (2026-09-08 피드백).
+    // 1.3초 x 3단계 = 약 4초.
+    _timer = Timer.periodic(const Duration(milliseconds: 1300), (t) {
       if (!mounted) return;
       setState(() => _step = t.tick);
       if (t.tick >= _stepTemplates.length) {

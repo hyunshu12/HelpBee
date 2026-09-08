@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/booth_case.dart';
 import '../theme/app_colors.dart';
 import '../widgets/booth_scaffold.dart';
+import '../widgets/round_indicator.dart';
 import '../widgets/surfaces.dart';
 
 /// 관람객이 눈으로 먼저 판단하게 하는 화면. 여기서 박스를 보여주면
@@ -11,12 +12,22 @@ import '../widgets/surfaces.dart';
 /// 두 선택지는 **시각적으로 동등**해야 한다 — '건강함'만 초록으로 칠하는 식의
 /// 힌트를 주면 추측이 아니라 유도가 된다.
 class GuessScreen extends StatelessWidget {
-  const GuessScreen({super.key, required this.case_, required this.onAnswer});
+  const GuessScreen({
+    super.key,
+    required this.case_,
+    required this.onAnswer,
+    this.roundIndex,
+    this.roundTotal = 3,
+  });
 
   final BoothCase case_;
 
   /// true=건강함 · false=문제 있음 · null=건너뜀
   final ValueChanged<bool?> onAnswer;
+
+  /// 투어 라운드 (0-based). 보너스 경로면 null — 표시하지 않는다.
+  final int? roundIndex;
+  final int roundTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -56,7 +67,15 @@ class GuessScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('이 벌통, 건강해 보이나요?', style: t.headlineLarge),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(child: Text('이 벌통, 건강해 보이나요?', style: t.headlineLarge)),
+              if (roundIndex != null)
+                RoundIndicator(index: roundIndex!, total: roundTotal),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             '정답은 바로 다음 화면에서 알려드려요',

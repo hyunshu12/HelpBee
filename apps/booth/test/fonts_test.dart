@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/theme/app_fonts.dart';
 import 'package:helpbee_booth/theme/app_theme.dart';
-import 'package:helpbee_booth/widgets/trend_chart.dart';
 
 /// 2026-08-31 회귀 묶음.
 ///
@@ -42,15 +41,8 @@ void main() {
     }
   });
 
-  test('캔버스에 직접 그리는 라벨도 번들 서체를 명시한다', () {
-    // TextPainter 는 위젯 트리 밖이라 테마를 상속하지 않는다.
-    expect(
-      dangerLabelStyle.fontFamily,
-      kBodyFont,
-      reason: 'TextPainter 스타일에 서체가 없으면 웹에서 한글이 두부(□)가 된다',
-    );
-    expect(dangerLabelStyle.fontFamilyFallback, contains(kDisplayFont));
-  });
+  // 캔버스 직접 그리기(TextPainter) 서체 테스트는 추이 그래프와 함께 사라졌다.
+  // Task 7 이 박스 라벨 태그(같은 함정)로 되살린다.
 
   test('서브셋 폰트가 화면에 쓰는 한글을 실제로 담고 있다', () {
     // 서브셋 스크립트(tool/build_body_font.py)가 커버리지를 좁히다 글자를
