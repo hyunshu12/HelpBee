@@ -34,22 +34,22 @@ class _AttractScreenState extends State<AttractScreen>
   Timer? _timer;
   int _replay = 0;
 
-  /// 안내 칩의 맥박. **계속 돌리지 않는다.**
+  /// 안내 칩의 맥박. **계속 뛴다.**
   ///
-  /// 예전에는 `repeat(reverse: true)` 로 하루 종일 60fps 프레임을 요구했다.
-  /// 어트랙트는 관람객이 없는 대부분의 시간을 차지하는 화면이라, 이게 부스
-  /// 배터리를 가장 많이 먹는 단일 원인이었다. 이제 4초 주기마다 1.2초만
-  /// 뛰고 멈춘다 — 나머지 2.8초는 **프레임을 아예 요청하지 않는다.**
+  /// 2026-09-08 한때 4초 주기마다 1.2초만 뛰고 쉬게 했었다(배터리). 실기기로
+  /// 보니 쉬는 2.8초 동안 화면이 죽어 보여 시선을 못 끌었다 — 어트랙트의
+  /// 유일한 목적이 "지나가는 사람 멈춰 세우기"라 배터리보다 이게 우선이다.
+  /// 대신 칩을 RepaintBoundary 로 격리해, 맥박이 매 프레임 다시 그리는 건
+  /// 이 작은 칩 하나뿐이다(사진·게이지는 안 건드린다).
   late final AnimationController _pulse = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1200),
-  );
+    duration: const Duration(milliseconds: 1100),
+  )..repeat(reverse: true);
 
-  /// 0.45 → 1.0 → 0.45 한 번 뛰고 끝난다.
-  late final Animation<double> _pulseOpacity = TweenSequence<double>([
-    TweenSequenceItem(tween: Tween(begin: 0.45, end: 1.0), weight: 1),
-    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.45), weight: 1),
-  ]).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+  late final Animation<double> _pulseOpacity = Tween<double>(
+    begin: 0.45,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
 
   @override
   void initState() {
@@ -58,11 +58,10 @@ class _AttractScreenState extends State<AttractScreen>
     _timer = Timer.periodic(replayEvery, (_) => _beat());
   }
 
-  /// 한 주기: 박스를 다시 그리고, 칩을 한 번 뛰게 한다.
+  /// 한 주기: 박스 등장 연출을 처음부터 다시 돌린다.
   void _beat() {
     if (!mounted) return;
     setState(() => _replay++);
-    _pulse.forward(from: 0);
   }
 
   @override
@@ -82,27 +81,29 @@ class _AttractScreenState extends State<AttractScreen>
       eyebrow: 'AI 벌통 진단',
       onTap: widget.onStart,
       footer: Center(
-        child: FadeTransition(
-          opacity: _pulseOpacity,
-          child: HoneyChip(
-            dark: true,
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.touch_app_outlined,
-                  color: AppColors.honeyBrand,
-                  size: 34,
-                ),
-                const SizedBox(width: 14),
-                Text(
-                  '화면을 터치해 시작하세요',
-                  style: t.headlineMedium?.copyWith(
+        child: RepaintBoundary(
+          child: FadeTransition(
+            opacity: _pulseOpacity,
+            child: HoneyChip(
+              dark: true,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.touch_app_outlined,
                     color: AppColors.honeyBrand,
+                    size: 34,
                   ),
-                ),
-              ],
+                  const SizedBox(width: 14),
+                  Text(
+                    '화면을 터치해 시작하세요',
+                    style: t.headlineMedium?.copyWith(
+                      color: AppColors.honeyBrand,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

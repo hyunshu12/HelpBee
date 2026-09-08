@@ -44,31 +44,10 @@ Future<void> _pumpAttract(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('어트랙트는 한 주기 안에서 애니메이션이 완전히 멈춘다', (tester) async {
-    await _pumpAttract(tester);
-
-    // 주기 시작 직후에는 박스 등장 + 칩 맥박이 돌고 있어야 한다.
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      tester.binding.hasScheduledFrame,
-      isTrue,
-      reason: '주기 시작 직후에는 애니메이션이 돌아야 시선을 끈다',
-    );
-
-    // 애니메이션이 끝날 때까지 프레임을 흘린다(박스 0.8초 + 맥박 1.2초).
-    for (var i = 0; i < 180 && tester.binding.hasScheduledFrame; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-
-    // 다음 주기 전까지는 **프레임을 아예 요청하지 않아야** 한다.
-    expect(
-      tester.binding.hasScheduledFrame,
-      isFalse,
-      reason: '4초 주기 사이에 쉬지 않으면 부스 아이패드가 하루 종일 60fps 를 그린다',
-    );
-
-    await tester.pumpWidget(const SizedBox()); // 타이머 정리
-  });
+  // 어트랙트의 안내 칩 맥박은 **일부러** 계속 뛴다 — 2026-09-08 실기기에서
+  // 쉬는 구간을 넣어 봤더니 화면이 죽어 보여 시선을 못 끌었다. 그래서 여기서는
+  // "멈추는가"가 아니라 "계속 뛰더라도 사진·게이지까지 다시 그리지는 않는가"를
+  // 본다(아래 독립 레이어 테스트).
 
   testWidgets('재생할 때 사진 위젯을 다시 만들지 않는다', (tester) async {
     await _pumpAttract(tester);
