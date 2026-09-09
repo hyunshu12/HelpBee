@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
+import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/guess_screen.dart';
 import 'package:helpbee_booth/widgets/surfaces.dart';
@@ -11,12 +12,15 @@ import 'test_surface.dart';
 const _c = BoothCase(
   id: 'watch-50',
   photo: 'photos/watch-50.jpg',
+  kind: CaseKind.varroa,
+  disease: 'varroa',
+  diseaseLabel: '응애',
   imageWidth: 1920,
   imageHeight: 1080,
   riskScore: 50,
   tier: RiskTier.watch,
   beeTotal: 14,
-  varroaCount: 1,
+  sickCount: 1,
   recommendations: ['처치를 검토하세요.'],
   boxes: [BoothBox(x: 10, y: 10, w: 100, h: 100, cls: 'varroa')],
 );

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageEnhance
 
-from app.services.risk import CLASS_VARROA, compute_risk
+from app.services.risk import CLASS_OTHER, CLASS_VARROA, compute_risk
 from training.data.aihub_to_yolo import CLASS_MAPPING
 
 SAMPLE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "training/datasets/Sample"
@@ -34,6 +34,9 @@ class BoothCaseSpec:
     rel: str          # 01.원천데이터 / 02.라벨링데이터 공통 상대경로 (확장자 없음)
     brightness: float  # 표시용 보정 — 원본이 어두워 아이패드에서 안 보인다
     contrast: float
+    kind: str          # "visible" | "varroa" | "healthy" — 라운드 배정 키
+    disease: str | None       # "dwv" | "chalkbrood" | "varroa" | None
+    disease_label: str | None  # 화면 표시명
 
 
 # 2026-08-30 fix round 1: 이전 선정(danger-90/83, safe-0/076)은 bbox 를 [x,y,w,h] 로 잘못
@@ -41,10 +44,30 @@ class BoothCaseSpec:
 # 새 선정: danger-100(082, 응애 박스 2개 겹침 없이 잘 분리됨) · danger-90(089) · watch-50(033) ·
 # safe-0(005, 신규). 교체 시 §4 선정 기준을 xyxy 해석으로 재적용할 것.
 BOOTH_CASES: list[BoothCaseSpec] = [
-    BoothCaseSpec("danger-100", "성충/성충_응애/082/A_001_001_20230822060110_011_001_001_001", 1.25, 1.15),
-    BoothCaseSpec("danger-90", "성충/성충_응애/089/A_001_001_20230822060113_007_001_001_001", 1.25, 1.15),
-    BoothCaseSpec("watch-50", "성충/성충_응애/033/B_001_003_20230824081648_001_003_001_001", 1.55, 1.25),
-    BoothCaseSpec("safe-0", "성충/성충_정상/005/B_001_001_20230819135627_001_003_001_000", 1.50, 1.25),
+    # ── R1 후보: 눈에 보이는 병 (하얗게 굳은 애벌레는 누가 봐도 이상하다)
+    BoothCaseSpec("chalk-1", "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002",
+                  1.35, 1.20, "visible", "chalkbrood", "석고병"),
+    BoothCaseSpec("chalk-2", "유충/유충_석고병/032/B_001_001_20230819135415_001_004_000_002",
+                  1.35, 1.20, "visible", "chalkbrood", "석고병"),
+    BoothCaseSpec("dwv-1", "성충/성충_날개불구바이러스감염증/015/B_001_001_20230824130702_001_004_001_002",
+                  1.25, 1.15, "visible", "dwv", "날개불구 바이러스"),
+    # ── R2 후보: 응애 위험
+    BoothCaseSpec("danger-100", "성충/성충_응애/082/A_001_001_20230822060110_011_001_001_001",
+                  1.25, 1.15, "varroa", "varroa", "응애"),
+    BoothCaseSpec("danger-90", "성충/성충_응애/089/A_001_001_20230822060113_007_001_001_001",
+                  1.25, 1.15, "varroa", "varroa", "응애"),
+    BoothCaseSpec("danger-2", "성충/성충_응애/057/B_001_006_20230820112138_001_003_001_001",
+                  1.25, 1.15, "varroa", "varroa", "응애"),
+    # ── R3 후보: 응애 주의 (16마리 중 1마리급 — R2보다 더 미세하다)
+    BoothCaseSpec("watch-50", "성충/성충_응애/033/B_001_003_20230824081648_001_003_001_001",
+                  1.55, 1.25, "varroa", "varroa", "응애"),
+    BoothCaseSpec("watch-2", "성충/성충_응애/007/B_001_001_20230822083841_001_002_001_001",
+                  1.55, 1.25, "varroa", "varroa", "응애"),
+    # ── R3 후보: 정상(함정) — 응애 0 · 다른 병 0 인 것만
+    BoothCaseSpec("safe-0", "성충/성충_정상/005/B_001_001_20230819135627_001_003_001_000",
+                  1.50, 1.25, "healthy", None, None),
+    BoothCaseSpec("safe-2", "성충/성충_정상/057/B_001_001_20230822083827_001_004_001_000",
+                  1.50, 1.25, "healthy", None, None),
 ]
 
 # [1] "응애가 뭐죠?" 화면 전용. 유충에 붙은 응애 2마리가 육안으로 보이는 유일한 계열.
@@ -84,19 +107,28 @@ def build_case(spec: BoothCaseSpec) -> dict:
             "y": y1,
             "w": x2 - x1,
             "h": y2 - y1,
-            "cls": "varroa" if cls == CLASS_VARROA else "normal",
+            # 3-class → 화면 색. varroa=빨강 / disease=주황 / normal=초록
+            "cls": {CLASS_VARROA: "varroa", CLASS_OTHER: "disease"}.get(cls, "normal"),
         })  # 좌표가 정확하면 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)
 
     risk = compute_risk(counts)
+    # 응애든 다른 병이든 "이상 개체 수" 하나로 셈한다 — 화면 문구가 하나면 된다.
+    sick = counts[CLASS_VARROA] + counts[CLASS_OTHER]
     return {
         "id": spec.id,
         "photo": f"photos/{spec.id}.jpg",
+        "kind": spec.kind,
+        "disease": spec.disease,
+        "diseaseLabel": spec.disease_label,
         "imageWidth": width,
         "imageHeight": height,
         "riskScore": risk.risk_score,
         "tier": risk.tier,
         "beeTotal": risk.bee_total,
-        "varroaCount": counts[CLASS_VARROA],
+        "sickCount": sick,
+        # 처방은 제품 코드(compute_risk → risk.yaml)에서 온다. 다른 병 케이스는
+        # CLASS_OTHER 카운트 때문에 other_disease 문구가 자동으로 붙는다 —
+        # 부스에서 문구를 지어내지 않는다.
         "recommendations": list(risk.recommendations),
         "boxes": boxes,
     }

@@ -35,7 +35,7 @@ ThemeData boothTheme() {
   // 본문이 전부 두부(□)가 된다(2026-08-31 실측). fallback 의 Jua 는 서브셋에
   // 없는 글자가 나와도 최소한 읽히게 하는 안전망이다.
   const body = kBodyFont;
-  const fallback = kFontFallback;
+  const fallback = kBodyFallback;
 
   final base = ThemeData(
     useMaterial3: true,
@@ -51,7 +51,7 @@ ThemeData boothTheme() {
     // ── Jua (display) — 헤드라인과 숫자 전용. 본문에는 쓰지 않는다.
     displayLarge: const TextStyle(
       fontFamily: kDisplayFont,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: 104,
       height: 1.0,
       letterSpacing: -2,
@@ -59,28 +59,28 @@ ThemeData boothTheme() {
     ),
     displayMedium: const TextStyle(
       fontFamily: kDisplayFont,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: 64,
       height: 1.05,
       color: AppColors.textPrimary,
     ),
     headlineLarge: const TextStyle(
       fontFamily: kDisplayFont,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: 46,
       height: 1.22,
       color: AppColors.textPrimary,
     ),
     headlineMedium: const TextStyle(
       fontFamily: kDisplayFont,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: 34,
       height: 1.28,
       color: AppColors.textPrimary,
     ),
     headlineSmall: const TextStyle(
       fontFamily: kDisplayFont,
-      fontFamilyFallback: fallback,
+      fontFamilyFallback: kDisplayFallback,
       fontSize: 27,
       height: 1.3,
       color: AppColors.textPrimary,

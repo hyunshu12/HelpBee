@@ -10,10 +10,11 @@ import 'data/operator_gesture.dart';
 import 'screens/analyzing_screen.dart';
 import 'screens/attract_screen.dart';
 import 'screens/guess_screen.dart';
-import 'screens/history_screen.dart';
 import 'screens/intro_screen.dart';
 import 'screens/outro_screen.dart';
 import 'screens/picker_screen.dart';
+import 'screens/summary_screen.dart';
+import 'screens/tour_start_screen.dart';
 import 'screens/report_screen.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_theme.dart';
@@ -37,12 +38,13 @@ Future<void> main() async {
 enum BoothStage {
   attract,
   intro,
-  picker,
+  tourStart,
   guess,
   analyzing,
   report,
+  summary,
+  picker, // 요약 뒤 보너스 경로에서만
   outro,
-  history,
 }
 
 class BoothApp extends StatefulWidget {
@@ -57,8 +59,11 @@ class _BoothAppState extends State<BoothApp> {
   final OperatorGesture _operator = OperatorGesture();
   BoothStage _stage = BoothStage.attract;
   List<BoothCase> _cases = const [];
-  BoothCase? _picked;
-  bool? _guess;
+
+  /// 보너스(자유 선택) 경로에서 고른 케이스. 투어 중에는 `_session` 이 진실의
+  /// 원천이고 이 값은 null 이다.
+  BoothCase? _bonusCase;
+  bool? _bonusGuess;
   Timer? _idle;
 
   /// cases.json 로드 실패 원인. null 이면 로딩 중이거나 성공한 것.
@@ -116,13 +121,27 @@ class _BoothAppState extends State<BoothApp> {
     _session.reset();
     setState(() {
       _stage = BoothStage.attract;
-      _picked = null;
-      _guess = null;
+      _bonusCase = null;
+      _bonusGuess = null;
       // 다음 관람객을 위해 다시 섞는다 — 안 그러면 이전 순서가 그대로 남아
       // 사실상 세션 하나짜리 셔플이 된다.
       _cases = List.of(_cases)..shuffle();
     });
   }
+
+  /// 추측 화면이 그릴 케이스 — 투어 중이면 세션이, 보너스면 `_bonusCase` 가 준다.
+  BoothCase? get _activeCase => _bonusCase ?? _session.currentCase;
+
+  /// 분석·결과 화면이 그릴 케이스 — **방금 답한** 라운드다.
+  /// (`recordGuess` 후 `currentCase` 는 다음 라운드를 가리킨다.)
+  BoothCase? get _reportCase =>
+      _bonusCase ??
+      (_session.results.isEmpty ? null : _session.results.last.case_);
+
+  /// 결과 화면에 보여줄 추측.
+  bool? get _activeGuess => _bonusCase != null
+      ? _bonusGuess
+      : (_session.results.isEmpty ? null : _session.results.last.guess);
 
   void _operatorTap() {
     if (_operator.tap(DateTime.now())) _resetSession();
@@ -138,7 +157,17 @@ class _BoothAppState extends State<BoothApp> {
         onPointerDown: (_) => _armIdle(),
         child: Stack(
           children: [
-            Scaffold(body: _buildStage()),
+            Scaffold(
+              body: AnimatedSwitcher(
+                // 컷 전환은 "슬라이드 넘김" 느낌을 준다. 350ms 크로스페이드가
+                // 화면들을 한 앱으로 묶는다.
+                duration: const Duration(milliseconds: 350),
+                child: KeyedSubtree(
+                  key: ValueKey(_stage),
+                  child: _buildStage(),
+                ),
+              ),
+            ),
             Positioned(
               left: 0,
               top: 0,
@@ -168,50 +197,73 @@ class _BoothAppState extends State<BoothApp> {
           onStart: () => _goTo(BoothStage.intro),
         );
       case BoothStage.intro:
-        return IntroScreen(onDone: () => _goTo(BoothStage.picker));
-      case BoothStage.picker:
-        return PickerScreen(
-          cases: _cases,
-          onPick: (c) {
-            _picked = c;
-            _guess = null;
+        return IntroScreen(onDone: () => _goTo(BoothStage.tourStart));
+      case BoothStage.tourStart:
+        return TourStartScreen(
+          onStart: () {
+            _session.startTour(_cases);
+            _bonusCase = null;
+            _bonusGuess = null;
             _goTo(BoothStage.guess);
           },
         );
       case BoothStage.guess:
         return GuessScreen(
-          case_: _picked!,
+          key: ValueKey(_activeCase!.id),
+          case_: _activeCase!,
+          roundIndex: _bonusCase != null ? null : _session.roundIndex,
+          roundTotal: BoothSession.roundCount,
           onAnswer: (g) {
-            _guess = g;
+            if (_bonusCase != null) {
+              _bonusGuess = g;
+            } else {
+              _session.recordGuess(g);
+            }
             _goTo(BoothStage.analyzing);
           },
         );
       case BoothStage.analyzing:
         return AnalyzingScreen(
-          case_: _picked!,
-          onDone: () {
-            _session.record(_picked!);
-            _goTo(BoothStage.report);
-          },
+          case_: _reportCase!,
+          onDone: () => _goTo(BoothStage.report),
         );
       case BoothStage.report:
         return ReportScreen(
-          // 케이스마다 새 State 로 마운트한다 — 앞 관람객이 처방을 펼쳐두거나
-          // 스크롤을 내려둔 상태가 다음 사람에게 남지 않게.
-          key: ValueKey(_picked!.id),
-          case_: _picked!,
-          guess: _guess,
-          onRestart: () => _goTo(BoothStage.picker),
-          onHistory: () => _goTo(BoothStage.history),
+          // 케이스마다 새 State 로 마운트한다 — 앞 라운드에서 처방을 펼쳐둔
+          // 상태가 다음 라운드에 남지 않게.
+          key: ValueKey(_reportCase!.id),
+          case_: _reportCase!,
+          guess: _activeGuess,
+          isLastRound: _bonusCase != null || _session.currentCase == null,
+          isBonus: _bonusCase != null,
+          // 보너스면 마무리로, 투어면 **다음 라운드**로 — 마지막 라운드에서만
+          // 요약으로 간다. (`recordGuess` 가 이미 인덱스를 밀었으므로
+          // `currentCase == null` 이 곧 "3장 다 봤다" 다.)
+          onNext: () => _goTo(
+            _bonusCase != null
+                ? BoothStage.outro
+                : (_session.currentCase == null
+                      ? BoothStage.summary
+                      : BoothStage.guess),
+          ),
+        );
+      case BoothStage.summary:
+        return SummaryScreen(
+          session: _session,
+          onMore: () => _goTo(BoothStage.picker),
           onFinish: () => _goTo(BoothStage.outro),
+        );
+      case BoothStage.picker:
+        return PickerScreen(
+          cases: _cases,
+          onPick: (c) {
+            _bonusCase = c;
+            _bonusGuess = null;
+            _goTo(BoothStage.guess);
+          },
         );
       case BoothStage.outro:
         return OutroScreen(onRestart: _resetSession);
-      case BoothStage.history:
-        return HistoryScreen(
-          session: _session,
-          onBack: () => _goTo(BoothStage.report),
-        );
     }
   }
 }

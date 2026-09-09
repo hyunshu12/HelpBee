@@ -6,11 +6,21 @@
 /// 그려진다 (2026-08-31 실측: 추이 그래프의 '위험 70+' 라벨).
 library;
 
-/// 본문 한글 서체. pubspec.yaml 의 `fonts:` 선언과 반드시 같아야 한다.
+/// 본문 한글 서체. **넓은 커버리지**(앱이 쓰는 글자 + 상용 한글 2,367자).
 const String kBodyFont = 'NotoSansKR';
 
-/// 표시용(헤드라인·숫자) 서체.
+/// 표시용(헤드라인·숫자·워드마크) 서체. **좁은 커버리지** — 지금 화면에 있는
+/// 글자만 담는다(2.0MB → 0.3MB). 헤드라인은 문구가 짧고 수가 적어서
+/// 상용 한글을 통째로 실을 이유가 없다.
 const String kDisplayFont = 'Jua';
 
-/// 서브셋에 없는 글자를 위한 폴백. 두부 대신 최소한 읽히게 한다.
-const List<String> kFontFallback = [kDisplayFont];
+/// 표시용 서체의 폴백 → 본문 서체.
+///
+/// Jua 서브셋에 없는 글자(원본에 없는 `·` `—` `→` 등, 또는 나중에 추가되는
+/// 새 문구)가 헤드라인에 들어와도 **두부가 아니라 Noto 로** 그려진다.
+/// 서체는 달라지지만 읽을 수는 있다 — 부스에서 글자가 안 보이는 것보다 낫다.
+const List<String> kDisplayFallback = [kBodyFont];
+
+/// 본문 서체의 폴백. Noto 쪽이 이미 가장 넓어서 실제로 탈 일은 드물지만,
+/// 만일을 대비해 남겨 둔다.
+const List<String> kBodyFallback = [kDisplayFont];

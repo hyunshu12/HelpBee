@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_fonts.dart';
 
 /// HelpBee 워드마크 — 육각(벌집) 마크 + Jua 로고 타입.
 ///
@@ -33,7 +34,8 @@ class Wordmark extends StatelessWidget {
         Text(
           'HelpBee',
           style: TextStyle(
-            fontFamily: 'Jua',
+            fontFamily: kDisplayFont,
+            fontFamilyFallback: kDisplayFallback,
             fontSize: size,
             height: 1.0,
             letterSpacing: 0.2,
@@ -78,26 +80,4 @@ class _HexMarkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HexMarkPainter old) => old.onDark != onDark;
-}
-
-/// 화면 상단의 작은 안내 라벨("STEP 2 · 사진 고르기" 같은 것).
-/// 헤드라인 위에 얹어 위계를 만든다 — 전부 같은 크기 텍스트만 쌓으면
-/// 슬라이드처럼 보인다.
-class Eyebrow extends StatelessWidget {
-  const Eyebrow(this.text, {super.key, this.onDark = false});
-
-  final String text;
-  final bool onDark;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 20,
-      height: 1.2,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 2.4,
-      color: onDark ? AppColors.honeyBrand : AppColors.amberDeep,
-    ),
-  );
 }

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/theme/app_fonts.dart';
 import 'package:helpbee_booth/theme/app_theme.dart';
-import 'package:helpbee_booth/widgets/trend_chart.dart';
+import 'package:helpbee_booth/widgets/bbox_overlay.dart';
 
 /// 2026-08-31 회귀 묶음.
 ///
@@ -42,14 +42,11 @@ void main() {
     }
   });
 
-  test('캔버스에 직접 그리는 라벨도 번들 서체를 명시한다', () {
-    // TextPainter 는 위젯 트리 밖이라 테마를 상속하지 않는다.
-    expect(
-      dangerLabelStyle.fontFamily,
-      kBodyFont,
-      reason: 'TextPainter 스타일에 서체가 없으면 웹에서 한글이 두부(□)가 된다',
-    );
-    expect(dangerLabelStyle.fontFamilyFallback, contains(kDisplayFont));
+  test('캔버스에 직접 그리는 박스 태그도 번들 서체를 명시한다', () {
+    // TextPainter 는 위젯 트리 밖이라 테마를 상속하지 않는다 — 서체를 안 박으면
+    // 웹에서 '응애'/'질병' 태그가 두부(□)가 된다.
+    expect(boxTagStyle.fontFamily, kBodyFont);
+    expect(boxTagStyle.fontFamilyFallback, contains(kDisplayFont));
   });
 
   test('서브셋 폰트가 화면에 쓰는 한글을 실제로 담고 있다', () {

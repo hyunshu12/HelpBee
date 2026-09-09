@@ -29,22 +29,41 @@ class AttractScreen extends StatefulWidget {
 
 class _AttractScreenState extends State<AttractScreen>
     with SingleTickerProviderStateMixin {
-  static const Duration replayEvery = Duration(seconds: 4);
+  /// 8초 — 박스 연출 약 3초 + 완성된 화면 5초 유지. 4초는 박스가 다 찍히자마자
+  /// 다시 시작해 어수선했다.
+  static const Duration replayEvery = Duration(seconds: 8);
 
   Timer? _timer;
   int _replay = 0;
 
+  /// 안내 칩의 맥박. **계속 뛴다.**
+  ///
+  /// 2026-09-08 한때 4초 주기마다 1.2초만 뛰고 쉬게 했었다(배터리). 실기기로
+  /// 보니 쉬는 2.8초 동안 화면이 죽어 보여 시선을 못 끌었다 — 어트랙트의
+  /// 유일한 목적이 "지나가는 사람 멈춰 세우기"라 배터리보다 이게 우선이다.
+  /// 대신 칩을 RepaintBoundary 로 격리해, 맥박이 매 프레임 다시 그리는 건
+  /// 이 작은 칩 하나뿐이다(사진·게이지는 안 건드린다).
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   )..repeat(reverse: true);
 
+  late final Animation<double> _pulseOpacity = Tween<double>(
+    begin: 0.45,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut));
+
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(replayEvery, (_) {
-      if (mounted) setState(() => _replay++);
-    });
+    _beat();
+    _timer = Timer.periodic(replayEvery, (_) => _beat());
+  }
+
+  /// 한 주기: 박스 등장 연출을 처음부터 다시 돌린다.
+  void _beat() {
+    if (!mounted) return;
+    setState(() => _replay++);
   }
 
   @override
@@ -61,30 +80,25 @@ class _AttractScreenState extends State<AttractScreen>
 
     return BoothScaffold(
       dark: true,
-      eyebrow: 'AI 벌통 진단',
       onTap: widget.onStart,
       footer: Center(
-        child: FadeTransition(
-          opacity: Tween<double>(begin: 0.45, end: 1.0).animate(_pulse),
-          child: HoneyChip(
-            dark: true,
-            padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.touch_app_outlined,
-                  color: AppColors.honeyBrand,
-                  size: 34,
-                ),
-                const SizedBox(width: 14),
-                Text(
-                  '화면을 터치해 시작하세요',
-                  style: t.headlineMedium?.copyWith(
-                    color: AppColors.honeyBrand,
+        child: RepaintBoundary(
+          child: FadeTransition(
+            opacity: _pulseOpacity,
+            child: HoneyChip(
+              dark: true,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '화면을 터치해 시작하세요',
+                    style: t.headlineMedium?.copyWith(
+                      color: AppColors.honeyBrand,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -116,8 +130,9 @@ class _AttractScreenState extends State<AttractScreen>
                     // 절반 넘게 버리게 된다 (2026-08-31 아이패드 실측).
                     aspectRatio: c.imageWidth / c.imageHeight,
                     child: BboxOverlay(
-                      // key 가 바뀌면 State 가 새로 생겨 애니메이션이 처음부터 돈다.
-                      key: ValueKey(_replay),
+                      // 위젯을 다시 만들지 않고 프로퍼티로 재생만 시킨다 —
+                      // key 를 바꾸면 State·컨트롤러·이미지가 매번 새로 생긴다.
+                      replay: _replay,
                       photoAsset: 'assets/${c.photo}',
                       imageSize: Size(
                         c.imageWidth.toDouble(),
@@ -135,29 +150,33 @@ class _AttractScreenState extends State<AttractScreen>
                   // 창)에서는 61px 넘쳐 잘렸다. scaleDown 은 공간이 있으면
                   // 원래 크기 그대로, 모자라면 비율을 유지한 채 줄인다.
                   child: Center(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          RiskGauge(
-                            score: c.riskScore,
-                            tier: c.tier,
-                            size: 300,
-                            stroke: 24,
-                            onDark: true,
-                          ),
-                          const SizedBox(height: 22),
-                          TierBadge(tier: c.tier, scale: 1.15),
-                          const SizedBox(height: 18),
-                          Text(
-                            '${c.varroaCount}마리에게서 응애 감염 의심',
-                            textAlign: TextAlign.center,
-                            style: t.bodyLarge?.copyWith(
-                              color: AppColors.onInkSoft,
+                    // RepaintBoundary — 게이지의 MaskFilter.blur 는 이 화면에서
+                    // 가장 비싼 페인트다. 한 번 래스터화해두고 재사용한다.
+                    child: RepaintBoundary(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            RiskGauge(
+                              score: c.riskScore,
+                              tier: c.tier,
+                              size: 300,
+                              stroke: 24,
+                              onDark: true,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 22),
+                            TierBadge(tier: c.tier, scale: 1.15),
+                            const SizedBox(height: 18),
+                            Text(
+                              '${c.sickCount}마리에게서 응애 감염 의심',
+                              textAlign: TextAlign.center,
+                              style: t.bodyLarge?.copyWith(
+                                color: AppColors.onInkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

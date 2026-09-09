@@ -1,30 +1,52 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import 'booth_case.dart';
+import 'tour.dart';
 
-/// 관람객 한 명의 체험 상태. 앱이 초기화되면 history 만 비우고
-/// 예시 4점은 그대로 둔다 (설계 §3 [5-a]).
+/// 관람객 한 명의 투어 상태 (설계 §2).
+///
+/// 2026-09-08: 추이 그래프(seedScores/chartScores)는 제거됐다 — 요약 화면이
+/// "이번 체험 3장"을 보여주므로 역할이 겹쳤다.
 class BoothSession extends ChangeNotifier {
-  /// 그래프가 1점짜리로 밋밋해지지 않도록 미리 심어두는 과거 4주치.
-  /// 실제 데이터가 아니므로 화면에 "예시 기록"이라고 표기한다.
-  static const List<int> seedScores = [12, 28, 21, 45];
+  static const int roundCount = 3;
 
-  final List<BoothCase> _history = [];
+  List<BoothCase> _rounds = const [];
+  final List<TourResult> _results = [];
 
-  List<BoothCase> get history => List.unmodifiable(_history);
+  List<BoothCase> get rounds => List.unmodifiable(_rounds);
+  List<TourResult> get results => List.unmodifiable(_results);
 
-  List<int> get chartScores => [
-    ...seedScores,
-    ..._history.map((c) => c.riskScore),
-  ];
+  /// 지금 몇 번째 라운드인가 (0-based). 아직 답하지 않은 라운드를 가리킨다.
+  int get roundIndex => _results.length;
 
-  void record(BoothCase c) {
-    _history.add(c);
+  bool get isLastRound => roundIndex == roundCount - 1;
+
+  BoothCase? get currentCase =>
+      roundIndex < _rounds.length ? _rounds[roundIndex] : null;
+
+  int get correctCount => _results.where((r) => r.correct).length;
+
+  /// 풀에서 3장을 뽑아 새 투어를 시작한다.
+  void startTour(List<BoothCase> pool, {Random? rng}) {
+    _rounds = assignRounds(pool, rng ?? Random());
+    _results.clear();
+    notifyListeners();
+  }
+
+  /// 현재 라운드에 대한 관람객 추측을 기록한다.
+  /// 3장이 끝난 뒤 더 부르면 아무 일도 하지 않는다.
+  void recordGuess(bool? guess) {
+    final c = currentCase;
+    if (c == null) return;
+    _results.add(TourResult(case_: c, guess: guess));
     notifyListeners();
   }
 
   void reset() {
-    _history.clear();
+    _rounds = const [];
+    _results.clear();
     notifyListeners();
   }
 }
