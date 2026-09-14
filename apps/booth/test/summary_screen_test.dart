@@ -90,7 +90,7 @@ void main() {
     expect(find.text('함정'), findsOneWidget);
     expect(find.text('✓'), findsNWidgets(2));
     expect(find.text('✗'), findsOneWidget);
-    expect(find.textContaining('HelpBee 는 3장 다 찾았습니다'), findsOneWidget);
+    expect(find.textContaining('HelpBee 는 3장 모두 정확히 판정했습니다'), findsOneWidget);
   });
 
   testWidgets('건너뛴 라운드는 — 로 표시한다', (tester) async {

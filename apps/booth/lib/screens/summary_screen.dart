@@ -61,8 +61,10 @@ class SummaryScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
+            // 정상 벌통이 섞여 나오므로(2026-09-14 찍기 방지) "다 찾았다"가 아니라
+            // "다 맞혔다"로 쓴다 — 찾을 게 없는 사진도 있다.
             '눈에 보이는 병은 찾으셨을 겁니다. 응애는 사람 눈으로는 어렵습니다.\n'
-            'HelpBee 는 3장 다 찾았습니다.',
+            'HelpBee 는 3장 모두 정확히 판정했습니다.',
             style: t.bodyLarge?.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),

@@ -55,8 +55,12 @@ void main() {
 
   test('맞힌 수를 센다 — 건너뛴 라운드는 세지 않는다', () {
     final s = BoothSession()..startTour(_pool(), rng: Random(1));
-    s.recordGuess(false); // R1 visible(병듦) 에 '문제 있음' → 정답
-    s.recordGuess(true); // R2 varroa(병듦) 에 '건강함' → 오답
+    // R1 은 항상 눈에 보이는 병 → '문제 있음' 이 정답.
+    s.recordGuess(false);
+    // R2 는 시드에 따라 응애일 수도 정상일 수도 있으므로(2026-09-14 찍기 방지),
+    // **정답의 반대**로 답해 확실히 틀린다. 시드 번호에 기대는 단언은 배정
+    // 규칙을 바꿀 때마다 조용히 깨진다.
+    s.recordGuess(!s.currentCase!.isHealthy);
     s.recordGuess(null); // R3 건너뜀 → 오답 처리
     expect(s.correctCount, 1);
   });

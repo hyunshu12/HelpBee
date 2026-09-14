@@ -42,8 +42,12 @@ void main() {
       final r = assignRounds(_pool(), Random(seed));
       expect(r, hasLength(3));
       expect(r[0].kind, CaseKind.visible, reason: 'R1 은 눈에 보이는 병 (seed $seed)');
-      expect(r[1].kind, CaseKind.varroa, reason: 'R2 는 응애 (seed $seed)');
-      expect(r[1].tier, RiskTier.danger, reason: 'R2 는 위험 등급 (seed $seed)');
+      expect(
+        r[1].kind == CaseKind.healthy ||
+            (r[1].kind == CaseKind.varroa && r[1].tier == RiskTier.danger),
+        isTrue,
+        reason: 'R2 는 응애 위험 또는 정상(함정) (seed $seed)',
+      );
       expect(
         r[2].kind == CaseKind.healthy ||
             (r[2].kind == CaseKind.varroa && r[2].tier == RiskTier.watch),
@@ -66,6 +70,35 @@ void main() {
       );
     }
     expect(combos.length, greaterThan(5), reason: '매번 같은 3장이면 반복 관람객이 지루하다');
+  });
+
+  test('사진을 안 보고 한쪽으로만 찍으면 다 맞힐 수 없다', () {
+    // 2026-09-14 실측 피드백: R1·R2 가 둘 다 확정으로 병든 벌통이라 "문제 있음"만
+    // 세 번 눌러도 최소 2장을 맞혔다. 눈이 아니라 확률로 맞히는 체험은 이 부스가
+    // 하려는 말과 정반대다.
+    var alwaysSick = 0; // "문제 있음"만 누르는 관람객의 총 정답 수
+    var alwaysHealthy = 0;
+    const seeds = 200;
+    for (var seed = 0; seed < seeds; seed++) {
+      for (final c in assignRounds(_pool(), Random(seed))) {
+        if (c.isHealthy) {
+          alwaysHealthy++;
+        } else {
+          alwaysSick++;
+        }
+      }
+    }
+    final sickAvg = alwaysSick / seeds;
+    expect(
+      sickAvg,
+      lessThan(2.4),
+      reason: '"문제 있음"만 눌러 평균 ${sickAvg.toStringAsFixed(2)}장 — 찍기가 통한다',
+    );
+    expect(
+      alwaysHealthy / seeds,
+      lessThan(2.0),
+      reason: '"건강함"만 눌러도 다 맞으면 반대쪽으로 찍기가 통한다',
+    );
   });
 
   test('R3 의 함정(정상)이 가끔 나온다', () {
