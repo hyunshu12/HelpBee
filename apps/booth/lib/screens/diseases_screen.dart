@@ -149,7 +149,17 @@ class _DiseaseCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Text(name, style: t.headlineMedium),
+          // 이름만 가운데 — 카드 세 장의 제목 줄이 한 줄로 맞아 훑기 쉽다.
+          // 설명은 줄바꿈되므로 왼쪽 정렬을 유지한다(가운데 정렬하면 두 줄짜리
+          // 설명의 두 번째 줄이 들쭉날쭉해진다).
+          SizedBox(
+            width: double.infinity,
+            child: Text(
+              name,
+              textAlign: TextAlign.center,
+              style: t.headlineMedium,
+            ),
+          ),
           const SizedBox(height: 6),
           Text(
             detail,
