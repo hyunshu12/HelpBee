@@ -38,12 +38,14 @@ Future<void> _waitForCasesLoaded(WidgetTester tester) async {
   fail('assets/cases.json 로드가 끝나지 않았다 (20회 폴링 초과)');
 }
 
-/// 어트랙트 → 인트로 → 투어 시작 → 1라운드 추측 화면까지.
+/// 어트랙트 → 인트로 → 병 소개 → 투어 시작 → 1라운드 추측 화면까지.
 Future<void> _enterFirstRound(WidgetTester tester) async {
   await tester.tap(find.byType(AttractScreen));
   await tester.pump();
   await tester.pump(const Duration(seconds: 26)); // intro 자동 진행(25초)
   await tester.pump(const Duration(milliseconds: 400)); // 전환 크로스페이드
+  await tester.pump(const Duration(seconds: 19)); // 병 소개 자동 진행(18초)
+  await tester.pump(const Duration(milliseconds: 400));
   expect(find.byType(TourStartScreen), findsOneWidget);
   await tester.tap(find.text('시작하기'));
   await tester.pump();
@@ -74,8 +76,10 @@ void main() {
     await tester.pump();
     expect(find.byType(IntroScreen), findsOneWidget);
 
-    // 인트로는 25초 뒤 "터치 없이" 자동으로 투어 시작 화면으로 넘어간다.
+    // 인트로(25초) → 병 소개(18초) 둘 다 "터치 없이" 자동으로 넘어간다.
     await tester.pump(const Duration(seconds: 26));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 19));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(TourStartScreen), findsOneWidget);
 

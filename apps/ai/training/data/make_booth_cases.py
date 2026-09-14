@@ -52,16 +52,21 @@ BOOTH_CASES: list[BoothCaseSpec] = [
     BoothCaseSpec("dwv-1", "성충/성충_날개불구바이러스감염증/015/B_001_001_20230824130702_001_004_001_002",
                   1.25, 1.15, "visible", "dwv", "날개불구 바이러스"),
     # ── R2 후보: 응애 위험
-    BoothCaseSpec("danger-100", "성충/성충_응애/082/A_001_001_20230822060110_011_001_001_001",
+    #
+    # 2026-09-14 교체: 이전 선정(082/089/057)은 벌 한두 마리를 꽉 채운 클로즈업이라
+    # 관람객이 응애를 그냥 찾아냈다(아이패드 실측). 부스의 요지는 "육안으로는
+    # 어렵다"이므로, 벌이 화면에서 작게 잡힌 프레임으로 바꾼다 — 박스 중앙값
+    # 면적이 이미지의 3~4%(이전 12~30%) 수준이다.
+    BoothCaseSpec("danger-100", "성충/성충_응애/024/B_001_003_20230820110731_001_002_001_001",
                   1.25, 1.15, "varroa", "varroa", "응애"),
-    BoothCaseSpec("danger-90", "성충/성충_응애/089/A_001_001_20230822060113_007_001_001_001",
+    BoothCaseSpec("danger-90", "성충/성충_응애/021/B_001_002_20230827131140_001_001_001_001",
                   1.25, 1.15, "varroa", "varroa", "응애"),
-    BoothCaseSpec("danger-2", "성충/성충_응애/057/B_001_006_20230820112138_001_003_001_001",
+    BoothCaseSpec("danger-78", "성충/성충_응애/029/B_001_003_20230822084843_001_004_001_001",
                   1.25, 1.15, "varroa", "varroa", "응애"),
-    # ── R3 후보: 응애 주의 (16마리 중 1마리급 — R2보다 더 미세하다)
-    BoothCaseSpec("watch-50", "성충/성충_응애/033/B_001_003_20230824081648_001_003_001_001",
+    # ── R3 후보: 응애 주의 (33마리 중 1마리급 — R2보다 더 미세하다)
+    BoothCaseSpec("watch-58", "성충/성충_응애/074/B_001_008_20230825084547_001_004_001_001",
                   1.55, 1.25, "varroa", "varroa", "응애"),
-    BoothCaseSpec("watch-2", "성충/성충_응애/007/B_001_001_20230822083841_001_002_001_001",
+    BoothCaseSpec("watch-21", "성충/성충_응애/068/B_001_007_20230827133939_001_001_001_001",
                   1.55, 1.25, "varroa", "varroa", "응애"),
     # ── R3 후보: 정상(함정) — 응애 0 · 다른 병 0 인 것만
     BoothCaseSpec("safe-0", "성충/성충_정상/005/B_001_001_20230819135627_001_003_001_000",
@@ -73,6 +78,12 @@ BOOTH_CASES: list[BoothCaseSpec] = [
 # [1] "응애가 뭐죠?" 화면 전용. 유충에 붙은 응애 2마리가 육안으로 보이는 유일한 계열.
 # 진단 흐름에는 쓰지 않는다 (벌 1마리 = 저신뢰, 벌통 사진으로 보이지 않음).
 VARROA_CLOSEUP = "유충/유충_응애/046/C_001_001_20230829142857_001_001_000_001"
+
+# [2] "이런 병들을 찾습니다" 화면 전용 클로즈업 2장 (2026-09-14 추가).
+# 1라운드에 석고병이 나오는데 인트로가 응애만 설명해서, 관람객이 처음 보는 병을
+# 아무 맥락 없이 맞닥뜨렸다(아이패드 실측 피드백). 진단 흐름에는 쓰지 않는다.
+CHALK_CLOSEUP = "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002"
+DWV_CLOSEUP = "성충/성충_날개불구바이러스감염증/015/B_001_001_20230824130702_001_004_001_002"
 
 
 def _label(rel: str) -> dict:
@@ -147,7 +158,7 @@ def _export_photo(rel: str, dest: pathlib.Path, brightness: float, contrast: flo
     img.save(dest, quality=90)
 
 
-def _export_closeup(rel: str, dest: pathlib.Path) -> None:
+def _export_closeup(rel: str, dest: pathlib.Path, cls: int = CLASS_VARROA) -> None:
     """[1] 인트로용 클로즈업. 전체 프레임으로 내보내면 유충이 8% 크기라 응애가
     안 보인다 — 관람객이 3초 보고 지나가는 화면이므로 라벨 bbox 기준으로 잘라
     유충이 화면을 채우게 한다. (진단용 4장은 박스 좌표가 전체 프레임 기준이라
@@ -164,14 +175,21 @@ def _export_closeup(rel: str, dest: pathlib.Path) -> None:
     varroa_anns = [
         ann
         for ann in label["annotations"]
-        if CLASS_MAPPING.get(ann["category_id"]) == CLASS_VARROA
+        if CLASS_MAPPING.get(ann["category_id"]) == cls
     ]
     assert varroa_anns, (
-        f"{rel} 라벨에 응애(bee_with_varroa) annotation이 없다 — 인트로 클로즈업은 "
-        "응애가 보이는 크롭이어야 한다. VARROA_CLOSEUP 을 다른 사진으로 바꿨다면 "
-        "그 라벨에 응애 클래스 annotation이 있는지 확인할 것."
+        f"{rel} 라벨에 클래스 {cls} annotation이 없다 — 인트로 클로즈업은 그 병이 "
+        "보이는 크롭이어야 한다. 사진을 교체했다면 그 라벨에 해당 클래스 "
+        "annotation이 있는지 확인할 것."
     )
-    x1, y1, x2, y2 = (float(v) for v in varroa_anns[0]["bbox"])
+    # 가장 큰 박스를 고른다 — 같은 병이라도 라벨에는 소방 한 칸짜리 작은 영역이
+    # 섞여 있어서, 첫 번째를 집으면 병든 개체가 안 보이는 크롭이 나온다
+    # (2026-09-14 날개불구 크롭이 빈 소방 구멍만 담겼다).
+    def _area(ann: dict) -> float:
+        a, b, c, d = (float(v) for v in ann["bbox"])
+        return abs((c - a) * (d - b))
+
+    x1, y1, x2, y2 = (float(v) for v in max(varroa_anns, key=_area)["bbox"])
     cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
     ch = min(H, (y2 - y1) * 1.35)
     cw = ch * 16 / 9
@@ -191,6 +209,8 @@ def main() -> None:
     for spec in BOOTH_CASES:
         _export_photo(spec.rel, BOOTH_ASSETS / "photos" / f"{spec.id}.jpg", spec.brightness, spec.contrast)
     _export_closeup(VARROA_CLOSEUP, BOOTH_ASSETS / "varroa_closeup.jpg")
+    _export_closeup(CHALK_CLOSEUP, BOOTH_ASSETS / "chalk_closeup.jpg", CLASS_OTHER)
+    _export_closeup(DWV_CLOSEUP, BOOTH_ASSETS / "dwv_closeup.jpg", CLASS_OTHER)
 
     out = BOOTH_ASSETS / "cases.json"
     out.parent.mkdir(parents=True, exist_ok=True)

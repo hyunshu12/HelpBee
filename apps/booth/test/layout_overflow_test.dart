@@ -8,6 +8,7 @@ import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 import 'package:helpbee_booth/screens/analyzing_screen.dart';
 import 'package:helpbee_booth/screens/attract_screen.dart';
+import 'package:helpbee_booth/screens/diseases_screen.dart';
 import 'package:helpbee_booth/screens/guess_screen.dart';
 import 'package:helpbee_booth/screens/intro_screen.dart';
 import 'package:helpbee_booth/screens/outro_screen.dart';
@@ -61,6 +62,7 @@ void main() {
   final screens = <String, Widget Function()>{
     '어트랙트': () => AttractScreen(case_: _case(), onStart: () {}),
     '인트로': () => IntroScreen(onDone: () {}),
+    '병 소개': () => DiseasesScreen(onDone: () {}),
     '사진 고르기': () => PickerScreen(
       cases: [for (var i = 0; i < 10; i++) _case()],
       onPick: (_) {},

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:helpbee_booth/screens/diseases_screen.dart';
 import 'package:helpbee_booth/screens/intro_screen.dart';
 import 'package:helpbee_booth/screens/outro_screen.dart';
 
@@ -87,6 +88,47 @@ void main() {
     expect(reset, isFalse);
     await tester.pump(const Duration(seconds: 2));
     expect(reset, isTrue);
+  });
+
+  testWidgets('병 소개 화면은 18초 뒤 자동 진행하고, 탭하면 즉시 넘어간다', (tester) async {
+    // 관람객이 아무것도 안 해도 투어로 흘러가야 한다 — 부스는 사람이 지키고
+    // 있지 않은 순간이 대부분이다.
+    var done = 0;
+    await useBoothSurface(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: DiseasesScreen(onDone: () => done++)),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 17));
+    expect(done, 0, reason: '18초 전에 넘어가면 읽을 시간이 없다');
+    await tester.pump(const Duration(seconds: 2));
+    expect(done, 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: DiseasesScreen(onDone: () => done++)),
+      ),
+    );
+    await tester.tap(find.byType(DiseasesScreen));
+    expect(done, 2);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('세 병을 모두 보여주고, 응애가 마지막이다', (tester) async {
+    // 순서가 메시지다 — 보이는 병 둘을 먼저 보여야 "그런데 응애는 안 보인다"가
+    // 대비로 선다.
+    await useBoothSurface(tester);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: DiseasesScreen(onDone: () {})),
+      ),
+    );
+    for (final name in ['석고병', '날개불구 바이러스', '바로아 응애']) {
+      expect(find.text(name), findsOneWidget);
+    }
+    expect(DiseasesScreen.diseases.last.$2, '바로아 응애');
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

@@ -10,6 +10,7 @@ import 'data/operator_gesture.dart';
 import 'screens/analyzing_screen.dart';
 import 'screens/attract_screen.dart';
 import 'screens/guess_screen.dart';
+import 'screens/diseases_screen.dart';
 import 'screens/intro_screen.dart';
 import 'screens/outro_screen.dart';
 import 'screens/picker_screen.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
 enum BoothStage {
   attract,
   intro,
+  diseases,
   tourStart,
   guess,
   analyzing,
@@ -197,7 +199,9 @@ class _BoothAppState extends State<BoothApp> {
           onStart: () => _goTo(BoothStage.intro),
         );
       case BoothStage.intro:
-        return IntroScreen(onDone: () => _goTo(BoothStage.tourStart));
+        return IntroScreen(onDone: () => _goTo(BoothStage.diseases));
+      case BoothStage.diseases:
+        return DiseasesScreen(onDone: () => _goTo(BoothStage.tourStart));
       case BoothStage.tourStart:
         return TourStartScreen(
           onStart: () {
