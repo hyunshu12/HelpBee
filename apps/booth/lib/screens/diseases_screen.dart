@@ -23,9 +23,19 @@ class DiseasesScreen extends StatefulWidget {
   static const List<(String, String, String, String)> diseases = [
     // ⚠️ 폴더명이 "석고병"이라 처음엔 석고병으로 적었는데, 이 사진의 실제 라벨은
     // **부저병**이다(2026-09-14). 부스에서 틀린 병명을 말하지 않도록 맞춘다.
-    ('assets/foul_closeup.jpg', '부저병', '애벌레가 죽어 색이 변하고 녹아내립니다', '눈에 잘 띕니다'),
-    ('assets/dwv_closeup.jpg', '날개불구 바이러스', '날개가 쪼그라들어 날지 못합니다', '자세히 보면 보입니다'),
-    ('assets/varroa_closeup.jpg', '바로아 응애', '벌 몸에 붙는 2mm 진드기입니다', '거의 안 보입니다'),
+    ('assets/foul_closeup.jpg', '부저병', '애벌레가 죽어 색이 변하고 녹아내리는 병', '눈에 잘 띕니다'),
+    (
+      'assets/dwv_closeup.jpg',
+      '날개불구 바이러스',
+      '날개가 쪼그라들어 날지 못하게 되는 병',
+      '자세히 보면 보입니다',
+    ),
+    (
+      'assets/varroa_closeup.jpg',
+      '바로아 응애',
+      '벌 몸에 붙어 체액을 빨아먹는 2mm 진드기',
+      '거의 안 보입니다',
+    ),
   ];
 
   @override
