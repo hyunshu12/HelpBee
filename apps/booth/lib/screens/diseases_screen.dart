@@ -179,66 +179,70 @@ class _DiseaseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 사진 비율을 4:3 으로 고정한다. 원본 비율대로 두면 세로 사진 한 장
-          // 때문에 카드 세 장의 제목 줄이 제각각 다른 높이에 놓인다
-          // (2026-09-14 웹 실측 — 제목이 32px씩 어긋났다).
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-            child: AspectRatio(
-              aspectRatio: 4 / 3,
-              child: Image.asset(data.photo, fit: BoxFit.cover),
+          // 사진이 **남는 높이를 전부** 가져간다(비율 고정 아님). 원본 비율대로
+          // 두면 세로 사진 한 장 때문에 카드 셋의 제목 줄이 32px씩 어긋나고,
+          // 4:3 으로 고정하면 짧은 캔버스(1280x720 웹 백업)에서 글이 61px 잘린다
+          // — 둘 다 2026-09-14 실측. 글이 필요한 만큼 먼저 자리잡고 사진이
+          // 나머지를 채우면 캔버스 높이가 얼마든 정렬도 맞고 잘리지도 않는다.
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(11),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Image.asset(data.photo, fit: BoxFit.cover),
+              ),
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    data.name,
-                    textAlign: TextAlign.center,
-                    style: t.headlineMedium,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  data.name,
+                  textAlign: TextAlign.center,
+                  style: t.headlineMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  data.detail,
+                  textAlign: TextAlign.center,
+                  style: t.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    data.detail,
-                    textAlign: TextAlign.center,
-                    style: t.bodyLarge?.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.45,
-                    ),
-                  ),
-                  const Spacer(),
-                  const Divider(height: 24, color: AppColors.divider),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (var i = 0; i < 3; i++) ...[
-                        if (i > 0) const SizedBox(width: 5),
-                        Container(
-                          width: 22,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: i < data.visibleSteps
-                                ? _stepColor
-                                : AppColors.divider,
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(width: 12),
-                      Text(
-                        data.visibility,
-                        style: t.bodyMedium?.copyWith(
-                          color: _stepColor,
-                          fontWeight: FontWeight.w700,
+                ),
+                const Divider(height: 24, color: AppColors.divider),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < 3; i++) ...[
+                      if (i > 0) const SizedBox(width: 5),
+                      Container(
+                        width: 22,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: i < data.visibleSteps
+                              ? _stepColor
+                              : AppColors.divider,
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ],
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 12),
+                    Text(
+                      data.visibility,
+                      style: t.bodyMedium?.copyWith(
+                        color: _stepColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
