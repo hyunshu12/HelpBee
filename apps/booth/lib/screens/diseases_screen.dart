@@ -16,25 +16,33 @@ class DiseasesScreen extends StatefulWidget {
 
   final VoidCallback onDone;
 
-  /// (사진, 병명, 설명, 눈에 띄는 정도) — 화면에 나오는 순서.
+  /// 화면에 나오는 순서대로의 병 세 가지.
   ///
   /// 응애를 맨 뒤에 둔다. 앞의 둘을 보고 "아 이런 게 병이구나" 한 다음 마지막에
   /// "그런데 이건 안 보입니다"가 와야 남는다.
-  static const List<(String, String, String, String)> diseases = [
+  static const List<Disease> diseases = [
     // ⚠️ 폴더명이 "석고병"이라 처음엔 석고병으로 적었는데, 이 사진의 실제 라벨은
     // **부저병**이다(2026-09-14). 부스에서 틀린 병명을 말하지 않도록 맞춘다.
-    ('assets/foul_closeup.jpg', '부저병', '애벌레가 죽어 색이 변하고 녹아내리는 병', '눈에 잘 띕니다'),
-    (
-      'assets/dwv_closeup.jpg',
-      '날개불구 바이러스',
-      '날개가 쪼그라들어 날지 못하게 되는 병',
-      '자세히 보면 보입니다',
+    Disease(
+      photo: 'assets/foul_closeup.jpg',
+      name: '부저병',
+      detail: '애벌레가 죽어 색이 변하고 녹아내리는 병',
+      visibility: '눈으로 찾기 쉬움',
+      visibleSteps: 3,
     ),
-    (
-      'assets/varroa_closeup.jpg',
-      '바로아 응애',
-      '벌 몸에 붙어 체액을 빨아먹는 2mm 진드기',
-      '거의 안 보입니다',
+    Disease(
+      photo: 'assets/dwv_closeup.jpg',
+      name: '날개불구 바이러스',
+      detail: '날개가 쪼그라들어 날지 못하게 되는 병',
+      visibility: '자세히 보면 보임',
+      visibleSteps: 2,
+    ),
+    Disease(
+      photo: 'assets/varroa_closeup.jpg',
+      name: '바로아 응애',
+      detail: '벌 몸에 붙어 체액을 빨아먹는 2mm 진드기',
+      visibility: '눈으로는 거의 못 찾음',
+      visibleSteps: 1,
     ),
   ];
 
@@ -125,54 +133,111 @@ class _DiseasesScreenState extends State<DiseasesScreen>
   }
 }
 
+/// 병 하나의 소개 데이터.
+///
+/// 레코드 튜플이 아니라 이름 있는 필드로 둔다 — `.$3` 이 무엇인지 호출부에서
+/// 알 수 없고, 항목이 하나 늘 때마다 조용히 어긋난다.
+class Disease {
+  const Disease({
+    required this.photo,
+    required this.name,
+    required this.detail,
+    required this.visibility,
+    required this.visibleSteps,
+  });
+
+  final String photo;
+  final String name;
+  final String detail;
+
+  /// 사람 눈에 얼마나 띄는지 — 화면 아래 눈금과 문구로 나간다.
+  final String visibility;
+
+  /// 1~3. 이 화면이 하려는 말이 여기 다 들어 있다: 3 → 2 → 1 로 내려가고,
+  /// 마지막(응애)이 1이라서 "그래서 AI가 필요하다"가 성립한다.
+  final int visibleSteps;
+}
+
 class _DiseaseCard extends StatelessWidget {
   const _DiseaseCard(this.data);
 
-  final (String, String, String, String) data;
+  final Disease data;
+
+  /// 눈금 색 — 잘 보이는 병은 초록, 안 보이는 응애는 빨강. 관람객이 글을 안
+  /// 읽고 색만 훑어도 "아래로 갈수록 어려워진다"가 읽힌다.
+  Color get _stepColor => switch (data.visibleSteps) {
+    3 => AppColors.tierSafe,
+    2 => AppColors.tierWatch,
+    _ => AppColors.tierDanger,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final (photo, name, detail, visibility) = data;
     final t = Theme.of(context).textTheme;
     return BoothCard(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 사진 비율을 4:3 으로 고정한다. 원본 비율대로 두면 세로 사진 한 장
+          // 때문에 카드 세 장의 제목 줄이 제각각 다른 높이에 놓인다
+          // (2026-09-14 웹 실측 — 제목이 32px씩 어긋났다).
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            child: AspectRatio(
+              aspectRatio: 4 / 3,
+              child: Image.asset(data.photo, fit: BoxFit.cover),
+            ),
+          ),
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: double.infinity,
-                child: Image.asset(photo, fit: BoxFit.cover),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // 이름만 가운데 — 카드 세 장의 제목 줄이 한 줄로 맞아 훑기 쉽다.
-          // 설명은 줄바꿈되므로 왼쪽 정렬을 유지한다(가운데 정렬하면 두 줄짜리
-          // 설명의 두 번째 줄이 들쭉날쭉해진다).
-          SizedBox(
-            width: double.infinity,
-            child: Text(
-              name,
-              textAlign: TextAlign.center,
-              style: t.headlineMedium,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            detail,
-            style: t.bodyLarge?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 12),
-          HoneyChip(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Text(
-              visibility,
-              style: t.bodyMedium?.copyWith(
-                color: AppColors.amberDeep,
-                fontWeight: FontWeight.w700,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    data.name,
+                    textAlign: TextAlign.center,
+                    style: t.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    data.detail,
+                    textAlign: TextAlign.center,
+                    style: t.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Divider(height: 24, color: AppColors.divider),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < 3; i++) ...[
+                        if (i > 0) const SizedBox(width: 5),
+                        Container(
+                          width: 22,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: i < data.visibleSteps
+                                ? _stepColor
+                                : AppColors.divider,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 12),
+                      Text(
+                        data.visibility,
+                        style: t.bodyMedium?.copyWith(
+                          color: _stepColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),

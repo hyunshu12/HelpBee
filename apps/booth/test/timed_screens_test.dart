@@ -127,7 +127,12 @@ void main() {
     for (final name in ['부저병', '날개불구 바이러스', '바로아 응애']) {
       expect(find.text(name), findsOneWidget);
     }
-    expect(DiseasesScreen.diseases.last.$2, '바로아 응애');
+    expect(DiseasesScreen.diseases.last.name, '바로아 응애');
+    // 눈에 띄는 정도가 3 → 2 → 1 로 내려가야 "그래서 AI가 필요하다"가 성립한다.
+    expect(
+      [for (final d in DiseasesScreen.diseases) d.visibleSteps],
+      [3, 2, 1],
+    );
     await tester.pumpWidget(const SizedBox());
   });
 }
