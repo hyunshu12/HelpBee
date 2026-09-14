@@ -54,7 +54,28 @@ void main() {
 
       final n = boxStyleFor('normal');
       expect(n.color, AppColors.tierSafe);
-      expect(n.tag, isNull, reason: '정상 벌마다 태그를 달면 화면이 글자로 덮인다');
+      expect(n.tag, '정상 벌', reason: '초록 박스에 글자가 없으면 저게 뭔지 알 수 없다');
+    });
+
+    test('라벨이 오면 그 이름을 그대로 태그로 쓴다', () {
+      // 3-class 는 색만 정한다 — 초록 박스에도 성충과 유충(애벌레)이 섞여 있어서
+      // 원본 라벨의 구분을 살려야 한다 (2026-09-14 피드백).
+      expect(boxStyleFor('normal', label: '유충').tag, '유충');
+      expect(boxStyleFor('disease', label: '부저병').tag, '부저병');
+      expect(boxStyleFor('varroa', label: '응애').color, AppColors.tierDanger);
+    });
+
+    test('작은 박스는 화면에서 최소 크기까지 키워 그린다', () {
+      // 부저병 박스는 소방 한 칸이라 화면에서 20px 남짓 — 태그보다도 작아
+      // "검출됐다"는 인상이 안 난다. 중심은 그대로 둔다.
+      final small = inflateToMinimum(const Rect.fromLTWH(100, 100, 20, 20));
+      expect(small.width, kMinBoxSide);
+      expect(small.height, kMinBoxSide);
+      expect(small.center, const Offset(110, 110));
+
+      // 충분히 큰 박스는 건드리지 않는다 — 키우면 좌표가 거짓말이 된다.
+      const big = Rect.fromLTWH(0, 0, 300, 200);
+      expect(inflateToMinimum(big), big);
     });
 
     test('모르는 cls 는 정상 벌로 취급한다', () {

@@ -12,6 +12,7 @@ class BoothBox {
     required this.w,
     required this.h,
     required this.cls,
+    this.label,
   });
 
   final double x;
@@ -20,12 +21,19 @@ class BoothBox {
   final double h;
   final String cls;
 
+  /// 박스 위에 찍을 한국어 이름 — '응애' · '부저병' · '유충' · '정상 벌' 등.
+  ///
+  /// [cls] 는 색만 정한다(3-class). 초록 박스가 전부 "정상 벌"로 보이는데 실제로는
+  /// 성충과 유충(애벌레)이 섞여 있어서, 원본 라벨의 구분을 그대로 내보낸다.
+  final String? label;
+
   factory BoothBox.fromJson(Map<String, dynamic> json) => BoothBox(
     x: (json['x'] as num).toDouble(),
     y: (json['y'] as num).toDouble(),
     w: (json['w'] as num).toDouble(),
     h: (json['h'] as num).toDouble(),
     cls: json['cls'] as String? ?? 'normal',
+    label: json['label'] as String?,
   );
 }
 
@@ -57,7 +65,7 @@ class BoothCase {
   /// 라운드 배정 키이자 결과 화면 분기 기준.
   final CaseKind kind;
 
-  /// `'varroa'` | `'dwv'` | `'chalkbrood'` | null(정상)
+  /// `'varroa'` | `'dwv'` | `'foulbrood'` | null(정상)
   final String? disease;
 
   /// 화면 표시명 (`'석고병'` 등). 정상이면 null.

@@ -24,8 +24,8 @@ BoothCase _c(String id, CaseKind kind, RiskTier tier) => BoothCase(
 
 /// 실제 풀과 같은 구성 (visible 3 · varroa danger 3 · varroa watch 2 · healthy 2).
 List<BoothCase> _pool() => [
-  _c('chalk-1', CaseKind.visible, RiskTier.safe),
-  _c('chalk-2', CaseKind.visible, RiskTier.safe),
+  _c('foul-1', CaseKind.visible, RiskTier.safe),
+  _c('foul-2', CaseKind.visible, RiskTier.safe),
   _c('dwv-1', CaseKind.visible, RiskTier.safe),
   _c('danger-100', CaseKind.varroa, RiskTier.danger),
   _c('danger-90', CaseKind.varroa, RiskTier.danger),

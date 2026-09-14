@@ -6,7 +6,7 @@
 /// - [healthy]  정상 — R3 의 함정
 ///
 /// tier 로 대신할 수 없다: 다른 병 케이스는 응애가 0이라 `compute_risk` 가
-/// tier=safe 를 준다(2026-09-08 실측 — chalk-1/chalk-2/dwv-1 모두 safe).
+/// tier=safe 를 준다(2026-09-08 실측 — foul-1/foul-2/dwv-1 모두 safe).
 /// tier 는 *응애* 위험도라 병 종류를 구분하지 못한다.
 enum CaseKind { visible, varroa, healthy }
 

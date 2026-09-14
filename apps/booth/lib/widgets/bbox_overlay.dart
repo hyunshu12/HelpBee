@@ -208,24 +208,52 @@ class BoxStyle {
 /// 2026-09-08: 둥근 모서리(반경 8)에 굵은 선(6)은 일러스트 스티커처럼 보였다.
 /// 진짜 검출기는 직각에 가는 선으로 그린다.
 ///
-/// 정상 벌에는 태그를 달지 않는다 — 6~18개에 전부 '정상' 이 붙으면 화면이
-/// 글자로 덮인다. 색만으로 충분하다.
+/// 태그는 **모든 박스**에 붙인다. 초록 박스에 아무 글자가 없으면 관람객이
+/// "저 초록은 뭐냐"고 묻고, 그게 애벌레인지 성충인지도 알 수 없다
+/// (2026-09-14 피드백). 이름은 [BoothBox.label] 이 데이터에서 실어 오고,
+/// 여기서는 그게 없을 때 쓸 폴백만 정한다.
 @visibleForTesting
-BoxStyle boxStyleFor(String cls) => switch (cls) {
-  'varroa' => const BoxStyle(
+BoxStyle boxStyleFor(String cls, {String? label}) => switch (cls) {
+  'varroa' => BoxStyle(
     color: AppColors.tierDanger,
     strokeWidth: 3,
     alpha: 1.0,
-    tag: '응애',
+    tag: label ?? '응애',
   ),
-  'disease' => const BoxStyle(
+  'disease' => BoxStyle(
     color: AppColors.boxDisease,
     strokeWidth: 3,
     alpha: 1.0,
-    tag: '질병',
+    tag: label ?? '질병',
   ),
-  _ => const BoxStyle(color: AppColors.tierSafe, strokeWidth: 2, alpha: 0.7),
+  _ => BoxStyle(
+    color: AppColors.tierSafe,
+    strokeWidth: 2,
+    alpha: 0.7,
+    tag: label ?? '정상 벌',
+  ),
 };
+
+/// 화면에 그릴 때 보장하는 박스 최소 크기(논리 픽셀).
+///
+/// 부저병 사진의 박스는 소방 한 칸이라 화면에서 20px 남짓이다 — 태그보다 작아
+/// "검출됐다"는 인상이 안 나고, 아이패드를 멀리서 보는 관람객에게는 점으로만
+/// 보인다. 중심을 유지한 채 이 크기까지 키운다. 좌표 자체는 건드리지 않는다.
+@visibleForTesting
+const double kMinBoxSide = 64;
+
+/// 너무 작은 박스를 중심 기준으로 [kMinBoxSide] 까지 키운다.
+@visibleForTesting
+Rect inflateToMinimum(Rect r) {
+  final dw = (kMinBoxSide - r.width) / 2;
+  final dh = (kMinBoxSide - r.height) / 2;
+  return Rect.fromLTRB(
+    r.left - (dw > 0 ? dw : 0),
+    r.top - (dh > 0 ? dh : 0),
+    r.right + (dw > 0 ? dw : 0),
+    r.bottom + (dh > 0 ? dh : 0),
+  );
+}
 
 /// 박스 라벨 태그의 글자 스타일.
 ///
@@ -259,8 +287,10 @@ class _BoxPainter extends CustomPainter {
       final b = ordered[i];
       final progress = boxProgressAt(i, elapsedMs, count: ordered.length);
       if (progress <= 0) continue; // 아직 차례가 아니다
-      final style = boxStyleFor(b.cls);
-      final r = fit.toScreen(Rect.fromLTWH(b.x, b.y, b.w, b.h));
+      final style = boxStyleFor(b.cls, label: b.label);
+      final r = inflateToMinimum(
+        fit.toScreen(Rect.fromLTWH(b.x, b.y, b.w, b.h)),
+      );
 
       // 테두리가 좌상단에서 시계방향으로 그려진다 — 검출기가 찾아서 표시하는
       // 동작 그대로. 페이드·축소는 "그림이 밝아진" 느낌이라 쓰지 않는다.
@@ -303,10 +333,9 @@ class _BoxPainter extends CustomPainter {
 
   /// 박스 좌상단 바깥에 채운 라벨. 위쪽 공간이 없으면 안쪽으로 넣는다.
   void _drawTag(Canvas canvas, Rect r, BoxStyle style) {
-    // 박스가 너무 좁으면 태그가 박스보다 넓어져 지저분해진다 (석고병은
-    // 박스가 소방 1칸 크기다) — 생략한다.
-    if (r.width < 60) return;
-
+    // 좁은 박스에서는 태그가 박스보다 넓어지지만 그래도 그린다 — 이름 없는
+    // 네모는 관람객에게 아무 말도 하지 않는다(2026-09-14 피드백). 대신 박스를
+    // [kMinBoxSide] 까지 키워 두어 태그와 크기 차이가 덜 나게 했다.
     final tp = TextPainter(
       text: TextSpan(text: style.tag, style: boxTagStyle),
       textDirection: TextDirection.ltr,

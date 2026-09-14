@@ -20,7 +20,7 @@ flutter:
   assets:
     - assets/cases.json
     - assets/varroa_closeup.jpg
-    - assets/chalk_closeup.jpg
+    - assets/foul_closeup.jpg
     - assets/dwv_closeup.jpg
     - assets/qr_mrmr.png
     - assets/photos/

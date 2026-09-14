@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from collections import Counter
 from dataclasses import dataclass
 
 from PIL import Image, ImageEnhance
@@ -26,6 +27,22 @@ SAMPLE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "training/datasets/S
 BOOTH_ASSETS = pathlib.Path(__file__).resolve().parents[3] / "booth/assets"
 
 LONG_EDGE = 1600
+
+# 71667 7-class → 박스 위에 찍을 한국어 태그.
+#
+# 3-class(varroa/disease/normal)는 색을 정하는 데만 쓴다. 관람객에게는 초록 박스가
+# 전부 "정상 벌"로 보이는데, 실제로는 성충과 유충(애벌레)이 섞여 있어서 "이게 왜
+# 벌이냐"는 질문이 나온다(2026-09-14 피드백). 원본 라벨이 이미 구분하고 있으니
+# 그대로 내보낸다.
+BOX_LABELS = {
+    0: "유충",
+    1: "응애",
+    2: "석고병",
+    3: "부저병",
+    4: "정상 벌",
+    5: "응애",
+    6: "날개불구",
+}
 
 
 @dataclass(frozen=True)
@@ -45,10 +62,14 @@ class BoothCaseSpec:
 # safe-0(005, 신규). 교체 시 §4 선정 기준을 xyxy 해석으로 재적용할 것.
 BOOTH_CASES: list[BoothCaseSpec] = [
     # ── R1 후보: 눈에 보이는 병 (하얗게 굳은 애벌레는 누가 봐도 이상하다)
-    BoothCaseSpec("chalk-1", "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002",
-                  1.35, 1.20, "visible", "chalkbrood", "석고병"),
-    BoothCaseSpec("chalk-2", "유충/유충_석고병/032/B_001_001_20230819135415_001_004_000_002",
-                  1.35, 1.20, "visible", "chalkbrood", "석고병"),
+    # ⚠️ 폴더명은 "석고병"이지만 실제 라벨은 **부저병**이 다수다(044: 부저병 14 / 석고병 1,
+    # 032: 부저병 12). AIHUB_71667.md §3 "폴더명 ≠ 라벨" 그대로다. 2026-09-14 박스 태그를
+    # 붙이면서 드러났고, 화면 병명은 아래 build_case() 가 라벨 최빈값에서 유도한다 —
+    # 여기 disease_label 은 병든 박스가 하나도 없을 때의 폴백일 뿐이다.
+    BoothCaseSpec("foul-1", "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002",
+                  1.35, 1.20, "visible", "foulbrood", "부저병"),
+    BoothCaseSpec("foul-2", "유충/유충_석고병/032/B_001_001_20230819135415_001_004_000_002",
+                  1.35, 1.20, "visible", "foulbrood", "부저병"),
     BoothCaseSpec("dwv-1", "성충/성충_날개불구바이러스감염증/015/B_001_001_20230824130702_001_004_001_002",
                   1.25, 1.15, "visible", "dwv", "날개불구 바이러스"),
     # ── R2 후보: 응애 위험
@@ -82,7 +103,7 @@ VARROA_CLOSEUP = "유충/유충_응애/046/C_001_001_20230829142857_001_001_000_
 # [2] "이런 병들을 찾습니다" 화면 전용 클로즈업 2장 (2026-09-14 추가).
 # 1라운드에 석고병이 나오는데 인트로가 응애만 설명해서, 관람객이 처음 보는 병을
 # 아무 맥락 없이 맞닥뜨렸다(아이패드 실측 피드백). 진단 흐름에는 쓰지 않는다.
-CHALK_CLOSEUP = "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002"
+FOUL_CLOSEUP = "유충/유충_석고병/044/B_001_001_20230819135429_001_004_000_002"
 DWV_CLOSEUP = "성충/성충_날개불구바이러스감염증/015/B_001_001_20230824130702_001_004_001_002"
 
 
@@ -120,7 +141,23 @@ def build_case(spec: BoothCaseSpec) -> dict:
             "h": y2 - y1,
             # 3-class → 화면 색. varroa=빨강 / disease=주황 / normal=초록
             "cls": {CLASS_VARROA: "varroa", CLASS_OTHER: "disease"}.get(cls, "normal"),
+            "label": BOX_LABELS[int(ann["category_id"])],
         })  # 좌표가 정확하면 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)
+
+    # 화면에 띄울 병명은 **라벨에서** 정한다. 폴더명(그리고 그걸 보고 적은 spec)은
+    # 틀릴 수 있다 — 2026-09-14 "석고병" 폴더 사진 두 장이 실제로는 부저병이었다.
+    # 다만 spec 이 지목한 병이 라벨에 실제로 있으면 그걸 쓴다 — 동률일 때
+    # (dwv-1: 날개불구 2 · 부저병 2) Counter 가 임의로 고르면 사진의 주인공이
+    # 아닌 병명이 제목에 올라간다.
+    sick_labels = [b["label"] for b in boxes if b["cls"] in ("varroa", "disease")]
+    if spec.disease_label and any(
+        lbl.startswith(spec.disease_label[:3]) for lbl in sick_labels
+    ):
+        disease_label = spec.disease_label
+    elif sick_labels:
+        disease_label = Counter(sick_labels).most_common(1)[0][0]
+    else:
+        disease_label = spec.disease_label
 
     risk = compute_risk(counts)
     # 응애든 다른 병이든 "이상 개체 수" 하나로 셈한다 — 화면 문구가 하나면 된다.
@@ -130,7 +167,7 @@ def build_case(spec: BoothCaseSpec) -> dict:
         "photo": f"photos/{spec.id}.jpg",
         "kind": spec.kind,
         "disease": spec.disease,
-        "diseaseLabel": spec.disease_label,
+        "diseaseLabel": disease_label,
         "imageWidth": width,
         "imageHeight": height,
         "riskScore": risk.risk_score,
@@ -209,7 +246,7 @@ def main() -> None:
     for spec in BOOTH_CASES:
         _export_photo(spec.rel, BOOTH_ASSETS / "photos" / f"{spec.id}.jpg", spec.brightness, spec.contrast)
     _export_closeup(VARROA_CLOSEUP, BOOTH_ASSETS / "varroa_closeup.jpg")
-    _export_closeup(CHALK_CLOSEUP, BOOTH_ASSETS / "chalk_closeup.jpg", CLASS_OTHER)
+    _export_closeup(FOUL_CLOSEUP, BOOTH_ASSETS / "foul_closeup.jpg", CLASS_OTHER)
     _export_closeup(DWV_CLOSEUP, BOOTH_ASSETS / "dwv_closeup.jpg", CLASS_OTHER)
 
     out = BOOTH_ASSETS / "cases.json"

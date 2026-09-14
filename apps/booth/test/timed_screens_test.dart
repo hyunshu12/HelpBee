@@ -124,7 +124,7 @@ void main() {
         home: Scaffold(body: DiseasesScreen(onDone: () {})),
       ),
     );
-    for (final name in ['석고병', '날개불구 바이러스', '바로아 응애']) {
+    for (final name in ['부저병', '날개불구 바이러스', '바로아 응애']) {
       expect(find.text(name), findsOneWidget);
     }
     expect(DiseasesScreen.diseases.last.$2, '바로아 응애');
