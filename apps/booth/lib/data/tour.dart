@@ -49,8 +49,8 @@ class TourResult {
 /// 석고병처럼 보이는 정상 사진(healthy-4, 40마리). 2·3라운드는 응애가 가장
 /// 묻히는 사진: 33마리 중 응애 1(varroa-1), 9마리 중 응애 1(varroa-5).
 ///
-/// 운영자 5탭 리셋 직후 첫 투어에만 쓰인다([showcaseRounds]). 그 외 관람객은
-/// 랜덤([assignRounds]).
+/// 2026-09-16 부스 당일: **모든 투어가 이 세트다.** 랜덤([assignRounds])은
+/// 풀에 이 사진이 없을 때의 폴백.
 const List<String> kShowcaseIds = ['healthy-4', 'varroa-1', 'varroa-5'];
 
 /// [kShowcaseIds] 를 풀에서 순서대로 찾는다. 하나라도 없으면(데이터 교체 등)

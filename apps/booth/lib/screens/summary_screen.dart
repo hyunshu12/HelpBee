@@ -64,7 +64,7 @@ class SummaryScreen extends StatelessWidget {
             // 정상 벌통이 섞여 나오므로(2026-09-14 찍기 방지) "다 찾았다"가 아니라
             // "다 맞혔다"로 쓴다 — 찾을 게 없는 사진도 있다.
             '사람 눈으로는 몇 마리만 병든 벌통을 가려내기 어렵습니다.\n'
-            'HelpBee 는 3장 모두 정확히 판정했습니다.',
+            'HelpBee 는 ${results.length}장 모두 정확히 판정했습니다.',
             style: t.bodyLarge?.copyWith(color: AppColors.textSecondary),
             textAlign: TextAlign.center,
           ),

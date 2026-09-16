@@ -39,6 +39,21 @@ void main() {
     expect(s.currentCase, isNotNull);
   });
 
+  test('rounds 를 줄이면 앞에서부터 그만큼만 쓴다 — 발표 시연 2장 (2026-09-17)', () {
+    final s = BoothSession()..startTour(_pool(), rng: Random(1), rounds: 2);
+    expect(s.rounds, hasLength(2));
+    expect(s.isLastRound, isFalse);
+    s.recordGuess(false);
+    expect(
+      s.isLastRound,
+      isTrue,
+      reason: '2장짜리 투어에서는 2번째가 마지막 — roundCount(3) 를 보면 안 된다',
+    );
+    s.recordGuess(false);
+    expect(s.currentCase, isNull, reason: '2장이 끝나면 요약으로 간다');
+    expect(s.results, hasLength(2));
+  });
+
   test('답할 때마다 라운드가 넘어가고 마지막에서 멈춘다', () {
     final s = BoothSession()..startTour(_pool(), rng: Random(1));
     s.recordGuess(false);
@@ -91,16 +106,18 @@ void main() {
     expect(s.results.single.guess, isNull);
   });
 
-  test('showcase 로 시작하면 고정 세트, 아니면 랜덤', () {
+  test('투어는 항상 고정 세트다 — 풀에 그 사진이 없을 때만 랜덤', () {
     final pool = [
       ..._pool(),
       _c('healthy-4', CaseKind.healthy, RiskTier.safe),
       _c('varroa-1', CaseKind.varroa, RiskTier.watch),
       _c('varroa-5', CaseKind.varroa, RiskTier.danger),
     ];
-    final s = BoothSession()..startTour(pool, showcase: true);
+    final s = BoothSession()..startTour(pool);
     expect(s.rounds.map((c) => c.id), kShowcaseIds);
     s.startTour(pool, rng: Random(3));
-    expect(s.rounds.map((c) => c.id), isNot(kShowcaseIds));
+    expect(s.rounds.map((c) => c.id), kShowcaseIds, reason: '시드가 달라도 고정');
+    s.startTour(_pool(), rng: Random(3));
+    expect(s.rounds, hasLength(3), reason: '고정 세트가 없으면 랜덤 폴백');
   });
 }

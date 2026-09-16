@@ -21,21 +21,31 @@ class BoothSession extends ChangeNotifier {
   /// 지금 몇 번째 라운드인가 (0-based). 아직 답하지 않은 라운드를 가리킨다.
   int get roundIndex => _results.length;
 
-  bool get isLastRound => roundIndex == roundCount - 1;
+  /// 마지막 라운드인가. 발표 시연은 2장짜리라(2026-09-17) [roundCount] 가 아니라
+  /// **실제 배정된 장수**를 본다.
+  bool get isLastRound => roundIndex == _rounds.length - 1;
 
   BoothCase? get currentCase =>
       roundIndex < _rounds.length ? _rounds[roundIndex] : null;
 
   int get correctCount => _results.where((r) => r.correct).length;
 
-  /// 풀에서 3장을 뽑아 새 투어를 시작한다.
+  /// 새 투어를 시작한다 — **항상** [kShowcaseIds] 고정 세트(가장 어려운 3장).
   ///
-  /// [showcase] 면 [kShowcaseIds] 고정 세트(가장 어려운 3장). 풀에 그 사진이
-  /// 없으면 랜덤으로 떨어진다.
-  void startTour(List<BoothCase> pool, {Random? rng, bool showcase = false}) {
-    _rounds =
-        (showcase ? showcaseRounds(pool) : null) ??
-        assignRounds(pool, rng ?? Random());
+  /// 2026-09-16 부스 당일 결정: 누가 오든 같은 3장. 랜덤([assignRounds])은 풀에
+  /// 고정 세트 사진이 없을 때(데이터 교체 등)의 폴백으로만 남는다.
+  /// [showcase] 는 이제 무시된다 — 호출부 호환용.
+  /// [rounds] 는 몇 장만 쓸지 (발표 시연 = 2). 기본은 [roundCount].
+  void startTour(
+    List<BoothCase> pool, {
+    Random? rng,
+    bool showcase = true,
+    int rounds = roundCount,
+  }) {
+    final full = showcaseRounds(pool) ?? assignRounds(pool, rng ?? Random());
+    // 발표 시연은 앞 2장만 쓴다 — 청중 앞에서 3장은 길다. 앞에서 자르므로
+    // 순서(정상 함정 → 응애)는 그대로 살아 있다.
+    _rounds = full.take(rounds).toList(growable: false);
     _results.clear();
     notifyListeners();
   }

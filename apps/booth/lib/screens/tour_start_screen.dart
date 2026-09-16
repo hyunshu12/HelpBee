@@ -8,9 +8,16 @@ import '../widgets/booth_scaffold.dart';
 /// 여기서 "몇 장이나 맞히실까요?"로 **관람객에게 목표를 준다** — 목표가 없으면
 /// 사진을 그냥 넘기게 되고, 요약의 "N장 맞힘"도 의미가 없어진다.
 class TourStartScreen extends StatelessWidget {
-  const TourStartScreen({super.key, required this.onStart});
+  const TourStartScreen({
+    super.key,
+    required this.onStart,
+    this.roundTotal = 3,
+  });
 
   final VoidCallback onStart;
+
+  /// 이번 투어에서 볼 사진 수. 발표 시연은 2장이다(2026-09-17).
+  final int roundTotal;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +28,7 @@ class TourStartScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '사진 3장을 진단해 봅니다',
+              '사진 $roundTotal장을 진단해 봅니다',
               style: t.headlineLarge,
               textAlign: TextAlign.center,
             ),

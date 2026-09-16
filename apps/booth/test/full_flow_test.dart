@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:helpbee_booth/data/slide_deck.dart';
 import 'package:helpbee_booth/main.dart';
 import 'package:helpbee_booth/screens/analyzing_screen.dart';
 import 'package:helpbee_booth/screens/attract_screen.dart';
@@ -8,6 +9,7 @@ import 'package:helpbee_booth/screens/guess_screen.dart';
 import 'package:helpbee_booth/screens/intro_screen.dart';
 import 'package:helpbee_booth/screens/outro_screen.dart';
 import 'package:helpbee_booth/screens/picker_screen.dart';
+import 'package:helpbee_booth/screens/presentation_screen.dart';
 import 'package:helpbee_booth/screens/summary_screen.dart';
 import 'package:helpbee_booth/screens/tour_start_screen.dart';
 import 'package:helpbee_booth/screens/report_screen.dart';
@@ -291,6 +293,131 @@ void main() {
           't=61 에는 아직 리셋되면 안 된다',
     );
 
+    await disposeAll(tester);
+  });
+
+  /// 이미지 없이 발표 모드를 돌리는 가짜 덱. 3장, 2번째(index 1)가 시연 장.
+  Future<SlideDeck?> fakeDeck(AssetBundle _) async => SlideDeck([
+    'assets/slides/99a.png',
+    'assets/slides/99b.png',
+    'assets/slides/99c.png',
+  ], demoIndex: 1);
+
+  /// 어트랙트 화면 오른쪽 위 모서리를 빠르게 5번 — 발표 모드 진입 제스처.
+  Future<void> presenterGesture(WidgetTester tester) async {
+    for (var i = 0; i < 5; i++) {
+      await tester.tapAt(Offset(kBoothSurface.width - 30, 30));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets('발표 모드: 오른쪽 위 5탭 → 시연(2라운드) → 시연 장 다음으로 복귀 → 마지막 장에서 종료', (
+    tester,
+  ) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: fakeDeck));
+    await _waitForCasesLoaded(tester);
+
+    await presenterGesture(tester);
+    expect(find.byType(PresentationScreen), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    await tester.tapAt(const Offset(1000, 500));
+    await tester.pump();
+    expect(find.text('시연 시작 →'), findsOneWidget);
+
+    await tester.tap(find.text('시연 시작 →'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byType(IntroScreen),
+      findsOneWidget,
+      reason: '어트랙트는 건너뛰고 인트로부터',
+    );
+
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 19));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(TourStartScreen), findsOneWidget);
+    expect(find.text('사진 2장을 진단해 봅니다'), findsOneWidget, reason: '발표 시연은 2라운드');
+    await tester.tap(find.text('시작하기'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    for (var round = 1; round <= 2; round++) {
+      expect(find.byType(GuessScreen), findsOneWidget, reason: 'R$round');
+      await _answerProblem(tester);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 4200));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(find.text(round == 2 ? '결과 보기 →' : '다음 사진 →'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    expect(find.byType(SummaryScreen), findsOneWidget, reason: '2장이면 요약으로');
+
+    await tester.tap(find.text('QR 받기 →'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(OutroScreen), findsNothing, reason: '발표 중엔 QR 화면을 건너뛴다');
+    expect(find.byType(PresentationScreen), findsOneWidget);
+    expect(find.text('3 / 3'), findsOneWidget, reason: '시연 장(2) 다음 장으로 복귀');
+
+    await tester.tapAt(const Offset(1000, 500));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(AttractScreen), findsOneWidget);
+
+    await disposeAll(tester);
+  });
+
+  testWidgets('발표 모드와 발표에서 시작한 시연은 60초 무동작에도 어트랙트로 돌아가지 않는다', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: fakeDeck));
+    await _waitForCasesLoaded(tester);
+    await presenterGesture(tester);
+    expect(find.byType(PresentationScreen), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 65));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byType(PresentationScreen),
+      findsOneWidget,
+      reason: '발표 중 idle 리셋 없음',
+    );
+
+    await tester.tapAt(const Offset(1000, 500));
+    await tester.pump();
+    await tester.tap(find.text('시연 시작 →'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 19));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(TourStartScreen), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 65));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(
+      find.byType(TourStartScreen),
+      findsOneWidget,
+      reason: '시연 중 idle 리셋 없음',
+    );
+
+    await disposeAll(tester);
+  });
+
+  testWidgets('슬라이드가 없으면 오른쪽 위 5탭은 아무 일도 하지 않는다 (부스 빌드)', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: (_) async => null));
+    await _waitForCasesLoaded(tester);
+    await presenterGesture(tester);
+    expect(find.byType(AttractScreen), findsOneWidget);
+    expect(find.byType(PresentationScreen), findsNothing);
     await disposeAll(tester);
   });
 }

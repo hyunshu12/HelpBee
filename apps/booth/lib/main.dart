@@ -7,6 +7,7 @@ import 'data/booth_case.dart';
 import 'data/booth_session.dart';
 import 'data/case_loader.dart';
 import 'data/operator_gesture.dart';
+import 'data/slide_deck.dart';
 import 'screens/analyzing_screen.dart';
 import 'screens/attract_screen.dart';
 import 'screens/guess_screen.dart';
@@ -14,6 +15,7 @@ import 'screens/diseases_screen.dart';
 import 'screens/intro_screen.dart';
 import 'screens/outro_screen.dart';
 import 'screens/picker_screen.dart';
+import 'screens/presentation_screen.dart';
 import 'screens/summary_screen.dart';
 import 'screens/tour_start_screen.dart';
 import 'screens/report_screen.dart';
@@ -36,6 +38,18 @@ Future<void> main() async {
   runApp(const BoothApp());
 }
 
+/// "시연 시작" 버튼이 뜨는 슬라이드(0-base). 발표 자료 13번째 장 = HelpBee 소개.
+/// (PDF 원본 14쪽 "시연" 자리표시 장은 슬라이드에서 아예 뺐다 — 그 자리를 이 앱이
+/// 대신한다.)
+const int kDemoSlideIndex = 12;
+
+/// 발표 시연의 라운드 수. 청중 앞에서 3장은 길어 2장으로 줄인다(2026-09-17).
+const int kDemoRounds = 2;
+
+/// 기본 덱 로더 — 앱 에셋 매니페스트 + [kDemoSlideIndex].
+Future<SlideDeck?> _defaultDeckLoader(AssetBundle bundle) =>
+    loadSlideDeck(bundle, demoIndex: kDemoSlideIndex);
+
 enum BoothStage {
   attract,
   intro,
@@ -47,10 +61,14 @@ enum BoothStage {
   summary,
   picker, // 요약 뒤 보너스 경로에서만
   outro,
+  presentation, // 발표 모드 (오른쪽 위 5탭). 슬라이드가 있는 빌드에서만.
 }
 
 class BoothApp extends StatefulWidget {
-  const BoothApp({super.key});
+  const BoothApp({super.key, this.deckLoader = _defaultDeckLoader});
+
+  /// 발표 슬라이드 로더. 테스트가 이미지 없이 가짜 덱을 넣는 구멍이다.
+  final Future<SlideDeck?> Function(AssetBundle bundle) deckLoader;
 
   @override
   State<BoothApp> createState() => _BoothAppState();
@@ -67,6 +85,14 @@ class _BoothAppState extends State<BoothApp> {
   BoothCase? _bonusCase;
   bool? _bonusGuess;
   Timer? _idle;
+
+  /// 오른쪽 위 5탭 — 발표 모드 진입용(왼쪽 위 [_operator] 는 리셋).
+  final OperatorGesture _presenter = OperatorGesture();
+  SlideDeck? _deck;
+
+  /// 지금 도는 투어가 발표의 "시연 시작"에서 출발했는가. 참이면 투어가 끝날 때
+  /// 어트랙트가 아니라 슬라이드로 돌아가고, 무동작 리셋도 걸지 않는다.
+  bool _demoFromDeck = false;
 
   /// cases.json 로드 실패 원인. null 이면 로딩 중이거나 성공한 것.
   Object? _loadError;
@@ -92,6 +118,14 @@ class _BoothAppState extends State<BoothApp> {
           // 사진 찍어 보고할 수 있는 문구를 띄운다.
           if (mounted) setState(() => _loadError = e);
         });
+
+    // 발표 슬라이드는 있으면 좋고 없으면 그만이다 — 실패해도 부스는 정상 동작.
+    widget
+        .deckLoader(rootBundle)
+        .then((d) {
+          if (mounted) setState(() => _deck = d);
+        })
+        .catchError((Object _) {});
   }
 
   @override
@@ -107,7 +141,13 @@ class _BoothAppState extends State<BoothApp> {
   /// 떠나면 부스가 그대로 멈춘다).
   void _armIdle() {
     _idle?.cancel();
-    if (_stage == BoothStage.attract) return; // 어트랙트가 이미 초기 상태다
+    // 어트랙트는 이미 초기 상태. 발표 중·발표에서 시작한 시연 중엔 발표자가
+    // 통제한다 — 60초 뒤 어트랙트로 튕기면 발표가 끊긴다.
+    if (_stage == BoothStage.attract ||
+        _stage == BoothStage.presentation ||
+        _demoFromDeck) {
+      return;
+    }
     _idle = Timer(_idleTimeout, _resetSession);
   }
 
@@ -118,21 +158,14 @@ class _BoothAppState extends State<BoothApp> {
     _armIdle();
   }
 
-  /// 다음 투어에 시연용 고정 세트([kShowcaseIds])를 쓸지.
-  ///
-  /// 앱 시작 직후와 **운영자 5탭 리셋** 직후에만 true. 60초 무동작 리셋은 건드리지
-  /// 않는다 — 귀빈 앞에서 운영자가 5탭으로 판을 깔면 가장 어려운 3장이 나오고,
-  /// 그 뒤 일반 관람객은 랜덤을 받는다.
-  bool _showcaseNext = true;
-
-  void _resetSession({bool showcase = false}) {
+  void _resetSession() {
     _idle?.cancel();
     _session.reset();
-    _showcaseNext = showcase;
     setState(() {
       _stage = BoothStage.attract;
       _bonusCase = null;
       _bonusGuess = null;
+      _demoFromDeck = false;
       // 다음 관람객을 위해 다시 섞는다 — 안 그러면 이전 순서가 그대로 남아
       // 사실상 세션 하나짜리 셔플이 된다.
       _cases = List.of(_cases)..shuffle();
@@ -159,7 +192,34 @@ class _BoothAppState extends State<BoothApp> {
       : (_session.results.isEmpty ? null : _session.results.last.diseaseGuess);
 
   void _operatorTap() {
-    if (_operator.tap(DateTime.now())) _resetSession(showcase: true);
+    if (_operator.tap(DateTime.now())) _resetSession();
+  }
+
+  /// 오른쪽 위 5탭 — 발표 모드 진입. 어트랙트에서만, 슬라이드가 있을 때만.
+  void _presenterTap() {
+    if (!_presenter.tap(DateTime.now())) return;
+    final deck = _deck;
+    if (_stage != BoothStage.attract || deck == null) return;
+    deck.index = 0;
+    _goTo(BoothStage.presentation);
+  }
+
+  /// 투어의 끝. 발표에서 시작했으면 슬라이드(시연 장 다음)로, 아니면 어트랙트로.
+  void _endTour() {
+    final deck = _deck;
+    if (!_demoFromDeck || deck == null) {
+      _resetSession();
+      return;
+    }
+    _idle?.cancel();
+    _session.reset();
+    deck.returnFromDemo();
+    setState(() {
+      _demoFromDeck = false;
+      _bonusCase = null;
+      _bonusGuess = null;
+      _stage = BoothStage.presentation;
+    });
   }
 
   @override
@@ -192,6 +252,15 @@ class _BoothAppState extends State<BoothApp> {
                 child: const SizedBox(width: 60, height: 60),
               ),
             ),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _presenterTap,
+                child: const SizedBox(width: 60, height: 60),
+              ),
+            ),
           ],
         ),
       ),
@@ -217,9 +286,13 @@ class _BoothAppState extends State<BoothApp> {
         return DiseasesScreen(onDone: () => _goTo(BoothStage.tourStart));
       case BoothStage.tourStart:
         return TourStartScreen(
+          roundTotal: _demoFromDeck ? kDemoRounds : BoothSession.roundCount,
           onStart: () {
-            _session.startTour(_cases, showcase: _showcaseNext);
-            _showcaseNext = false;
+            // 2026-09-16: 투어 3장은 누가 오든 고정 세트(kShowcaseIds).
+            _session.startTour(
+              _cases,
+              rounds: _demoFromDeck ? kDemoRounds : BoothSession.roundCount,
+            );
             _bonusCase = null;
             _bonusGuess = null;
             _goTo(BoothStage.guess);
@@ -230,7 +303,7 @@ class _BoothAppState extends State<BoothApp> {
           key: ValueKey(_activeCase!.id),
           case_: _activeCase!,
           roundIndex: _bonusCase != null ? null : _session.roundIndex,
-          roundTotal: BoothSession.roundCount,
+          roundTotal: _session.rounds.length,
           // 1라운드만 병명 택1. 보너스(자유 선택)는 항상 2택.
           onDiseaseAnswer: _bonusCase == null && _session.isDiseaseRound
               ? (d) {
@@ -279,7 +352,8 @@ class _BoothAppState extends State<BoothApp> {
         return SummaryScreen(
           session: _session,
           onMore: () => _goTo(BoothStage.picker),
-          onFinish: () => _goTo(BoothStage.outro),
+          // 발표 중엔 QR 화면(관람객용)을 건너뛰고 바로 슬라이드로 돌아간다.
+          onFinish: () => _demoFromDeck ? _endTour() : _goTo(BoothStage.outro),
         );
       case BoothStage.picker:
         return PickerScreen(
@@ -291,7 +365,17 @@ class _BoothAppState extends State<BoothApp> {
           },
         );
       case BoothStage.outro:
-        return OutroScreen(onRestart: _resetSession);
+        return OutroScreen(onRestart: _endTour);
+
+      case BoothStage.presentation:
+        return PresentationScreen(
+          deck: _deck!,
+          onDemo: () {
+            _demoFromDeck = true;
+            _goTo(BoothStage.intro);
+          },
+          onExit: _resetSession,
+        );
     }
   }
 }

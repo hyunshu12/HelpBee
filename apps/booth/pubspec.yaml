@@ -24,6 +24,7 @@ flutter:
     - assets/dwv_closeup.jpg
     - assets/qr_mrmr.png
     - assets/photos/
+    - assets/slides/
   fonts:
     - family: Jua
       fonts:
