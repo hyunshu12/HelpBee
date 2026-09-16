@@ -35,12 +35,23 @@ class BoothSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 현재 라운드에 대한 관람객 추측을 기록한다.
+  /// 지금 라운드가 병명 택1(1라운드)인가.
+  bool get isDiseaseRound => roundIndex == 0;
+
+  /// 현재 라운드에 대한 건강/문제 추측을 기록한다 (2·3라운드).
   /// 3장이 끝난 뒤 더 부르면 아무 일도 하지 않는다.
   void recordGuess(bool? guess) {
     final c = currentCase;
     if (c == null) return;
     _results.add(TourResult(case_: c, guess: guess));
+    notifyListeners();
+  }
+
+  /// 현재 라운드에 대한 병명 추측을 기록한다 (1라운드). null=건너뜀.
+  void recordDiseaseGuess(String? diseaseId) {
+    final c = currentCase;
+    if (c == null) return;
+    _results.add(TourResult(case_: c, diseaseGuess: diseaseId));
     notifyListeners();
   }
 

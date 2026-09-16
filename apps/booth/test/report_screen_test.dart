@@ -389,4 +389,31 @@ void main() {
       );
     }
   });
+
+  group('1라운드 병명 대조 문구', () {
+    BoothCase c(String? disease, String? label) => BoothCase(
+      id: 'x',
+      photo: 'photos/x.jpg',
+      kind: disease == null ? CaseKind.healthy : CaseKind.visible,
+      disease: disease,
+      diseaseLabel: label,
+      imageWidth: 1920,
+      imageHeight: 1080,
+      riskScore: 0,
+      tier: RiskTier.safe,
+      beeTotal: 10,
+      sickCount: disease == null ? 0 : 1,
+      recommendations: const [],
+      boxes: const [],
+    );
+
+    test('맞으면 칭찬, 틀리면 정답 병명을 알려준다', () {
+      final foul = c('foulbrood', '부저병');
+      expect(diseaseVerdictFor('foulbrood', foul), contains('정확히'));
+      expect(diseaseVerdictFor('dwv', foul), contains('부저병'));
+      expect(diseaseVerdictFor('healthy', foul), contains('부저병'));
+      expect(diseaseVerdictFor('healthy', c(null, null)), contains('정말 건강'));
+      expect(diseaseVerdictFor('dwv', c(null, null)), contains('함정'));
+    });
+  });
 }

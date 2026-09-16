@@ -56,6 +56,22 @@ Future<void> _enterFirstRound(WidgetTester tester) async {
   expect(find.byType(GuessScreen), findsOneWidget);
 }
 
+/// 현재 추측 화면의 "문제 있음" 쪽 답을 누른다 — 1라운드는 병명 택1이라
+/// '부저병', 2·3라운드는 '문제 있음'. (어느 쪽이든 어떤 버튼인지는 흐름 테스트의
+/// 관심사가 아니다 — 화면이 넘어가는지만 본다.)
+Future<void> _answerProblem(WidgetTester tester) async {
+  final disease = find.text('부저병');
+  await tester.tap(
+    disease.evaluate().isNotEmpty ? disease : find.text('문제 있음'),
+  );
+}
+
+/// "건강함" 쪽 — 1라운드는 '정상'.
+Future<void> _answerHealthy(WidgetTester tester) async {
+  final healthy = find.text('정상');
+  await tester.tap(healthy.evaluate().isNotEmpty ? healthy : find.text('건강함'));
+}
+
 void main() {
   // `rootBundle`은 `loadString` 결과를 프로세스 전역으로 캐싱한다(`CachingAssetBundle`).
   // 캐시된 Future는 그걸 만든 테스트의 FakeAsync 존에 묶여 있어서, 다음 테스트의 존에서
@@ -107,7 +123,7 @@ void main() {
 
     for (var round = 1; round <= 3; round++) {
       expect(find.byType(GuessScreen), findsOneWidget, reason: 'R$round 추측');
-      await tester.tap(find.text('문제 있음'));
+      await _answerProblem(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(
@@ -141,7 +157,7 @@ void main() {
     await _enterFirstRound(tester);
 
     for (var round = 1; round <= 3; round++) {
-      await tester.tap(find.text('문제 있음'));
+      await _answerProblem(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 4200));
@@ -161,7 +177,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(GuessScreen), findsOneWidget);
 
-    await tester.tap(find.text('건강함'));
+    await _answerHealthy(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 4200));
@@ -183,7 +199,7 @@ void main() {
     await _waitForCasesLoaded(tester);
     await _enterFirstRound(tester);
 
-    await tester.tap(find.text('건강함'));
+    await _answerHealthy(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(
@@ -216,7 +232,7 @@ void main() {
     await _enterFirstRound(tester);
 
     for (var round = 1; round <= 3; round++) {
-      await tester.tap(find.text('문제 있음'));
+      await _answerProblem(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 4200));
@@ -248,7 +264,7 @@ void main() {
     await _enterFirstRound(tester);
 
     for (var round = 1; round <= 3; round++) {
-      await tester.tap(find.text('문제 있음'));
+      await _answerProblem(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 4200));

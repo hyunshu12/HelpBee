@@ -102,7 +102,7 @@ class _RoundTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final skipped = result.guess == null;
+    final skipped = result.skipped;
     final mark = skipped ? '—' : (result.correct ? '✓' : '✗');
     final color = skipped
         ? AppColors.hintBorder

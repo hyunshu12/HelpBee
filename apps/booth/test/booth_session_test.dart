@@ -80,4 +80,13 @@ void main() {
     expect(() => s.results.clear(), throwsUnsupportedError);
     expect(() => s.rounds.clear(), throwsUnsupportedError);
   });
+
+  test('1라운드만 병명 라운드다', () {
+    final s = BoothSession()..startTour(_pool(), rng: Random(1));
+    expect(s.isDiseaseRound, isTrue);
+    s.recordDiseaseGuess('healthy');
+    expect(s.isDiseaseRound, isFalse);
+    expect(s.results.single.diseaseGuess, 'healthy');
+    expect(s.results.single.guess, isNull);
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
+import '../data/tour.dart';
 import '../theme/app_colors.dart';
 import '../widgets/booth_scaffold.dart';
 import '../widgets/round_indicator.dart';
@@ -15,15 +16,27 @@ class GuessScreen extends StatelessWidget {
   const GuessScreen({
     super.key,
     required this.case_,
-    required this.onAnswer,
+    this.onAnswer,
+    this.onDiseaseAnswer,
     this.roundIndex,
     this.roundTotal = 3,
-  });
+  }) : assert(
+         (onAnswer == null) != (onDiseaseAnswer == null),
+         '건강/문제 2택(onAnswer) 또는 병명 택1(onDiseaseAnswer) 중 하나만',
+       );
 
   final BoothCase case_;
 
-  /// true=건강함 · false=문제 있음 · null=건너뜀
-  final ValueChanged<bool?> onAnswer;
+  /// 건강/문제 2택 모드. true=건강함 · false=문제 있음 · null=건너뜀
+  final ValueChanged<bool?>? onAnswer;
+
+  /// 병명 택1 모드 (1라운드). [kRound1Choices] 의 id · null=건너뜀.
+  ///
+  /// 2026-09-16: 1라운드는 응애를 뺀 풀(정상·날개불구·부저병)에서 뽑고
+  /// 관람객이 셋 중 하나를 고른다. 찍으면 33%.
+  final ValueChanged<String?>? onDiseaseAnswer;
+
+  bool get _diseaseMode => onDiseaseAnswer != null;
 
   /// 투어 라운드 (0-based). 보너스 경로면 null — 표시하지 않는다.
   final int? roundIndex;
@@ -35,16 +48,29 @@ class GuessScreen extends StatelessWidget {
     return BoothScaffold(
       footer: Row(
         children: [
-          Expanded(
-            child: _Choice(label: '건강함', onTap: () => onAnswer(true)),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: _Choice(label: '문제 있음', onTap: () => onAnswer(false)),
-          ),
+          if (_diseaseMode)
+            for (final (i, choice) in kRound1Choices.indexed) ...[
+              if (i > 0) const SizedBox(width: 20),
+              Expanded(
+                child: _Choice(
+                  label: choice.label,
+                  onTap: () => onDiseaseAnswer!(choice.id),
+                ),
+              ),
+            ]
+          else ...[
+            Expanded(
+              child: _Choice(label: '건강함', onTap: () => onAnswer!(true)),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _Choice(label: '문제 있음', onTap: () => onAnswer!(false)),
+            ),
+          ],
           const SizedBox(width: 20),
           TextButton(
-            onPressed: () => onAnswer(null),
+            onPressed: () =>
+                _diseaseMode ? onDiseaseAnswer!(null) : onAnswer!(null),
             // 서서 쓰는 화면이라 보조 버튼도 60dp 이상(테마 기본).
             // 시각적 위계는 유지 — 채우기 버튼이 아니라 옅은 꿀색 알약.
             style: TextButton.styleFrom(minimumSize: const Size(230, 76)),
@@ -62,7 +88,12 @@ class GuessScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Expanded(child: Text('이 벌통, 건강해 보이나요?', style: t.headlineLarge)),
+              Expanded(
+                child: Text(
+                  _diseaseMode ? '이 벌통, 어떤 상태일까요?' : '이 벌통, 건강해 보이나요?',
+                  style: t.headlineLarge,
+                ),
+              ),
               if (roundIndex != null)
                 RoundIndicator(index: roundIndex!, total: roundTotal),
             ],

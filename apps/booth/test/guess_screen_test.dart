@@ -94,4 +94,24 @@ void main() {
       reason: '액자가 사진 비율을 벗어나면 흰 띠가 생긴다',
     );
   });
+
+  testWidgets('병명 모드 — 정상·날개불구·부저병 셋 중 하나를 고르고, 건너뛰면 null', (tester) async {
+    // 2026-09-16: 1라운드는 응애를 뺀 풀에서 병명 택1이다. 찍으면 33%.
+    await useBoothSurface(tester);
+    final picked = <String?>[];
+    Widget app() => MaterialApp(
+      home: Scaffold(
+        body: GuessScreen(case_: _c, onDiseaseAnswer: picked.add),
+      ),
+    );
+    await tester.pumpWidget(app());
+    expect(find.text('건강함'), findsNothing, reason: '병명 모드에 2택 버튼이 남아 있다');
+    expect(find.text('이 벌통, 어떤 상태일까요?'), findsOneWidget);
+    for (final label in ['정상', '날개불구', '부저병', '바로 결과 보기']) {
+      await tester.pumpWidget(app());
+      await tester.tap(find.text(label));
+    }
+    expect(picked, ['healthy', 'dwv', 'foulbrood', null]);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/booth_case.dart';
+import '../data/tour.dart';
 import '../data/case_kind.dart';
 import '../theme/app_colors.dart';
 import '../widgets/bbox_overlay.dart';
@@ -19,6 +20,7 @@ class ReportScreen extends StatefulWidget {
     super.key,
     required this.case_,
     required this.guess,
+    this.diseaseGuess,
     required this.isLastRound,
     required this.isBonus,
     required this.onNext,
@@ -26,8 +28,11 @@ class ReportScreen extends StatefulWidget {
 
   final BoothCase case_;
 
-  /// 관람객의 추측. true=건강함, false=문제 있음, null=건너뜀.
+  /// 관람객의 추측. true=건강함, false=문제 있음, null=건너뜀(또는 병명 모드).
   final bool? guess;
+
+  /// 1라운드 병명 택1 추측 ([kRound1Choices] 의 id). null 이면 2택 모드.
+  final String? diseaseGuess;
 
   /// 투어의 마지막 라운드인가 — 주 버튼 문구가 달라진다.
   final bool isLastRound;
@@ -49,6 +54,16 @@ class _ReportScreenState extends State<ReportScreen> {
   /// `mine` 을 반드시 화면에 렌더해야 한다 — "건너뛰면 대조 줄이 안 나온다" 테스트가
   /// 화면 어디에도 '당신' 이 없으면 무엇을 넘겨도 통과하는 공허한 테스트가 된다.
   ({String mine, String verdict, bool correct})? get _comparison {
+    final d = widget.diseaseGuess;
+    if (d != null) {
+      final mine = kRound1Choices.firstWhere((c) => c.id == d).label;
+      final answer = round1AnswerOf(widget.case_);
+      return (
+        mine: mine,
+        verdict: diseaseVerdictFor(d, widget.case_),
+        correct: d == answer,
+      );
+    }
     final g = widget.guess;
     if (g == null) return null;
     final verdict = verdictFor(widget.case_.kind, g, widget.case_.isHealthy);
@@ -332,6 +347,21 @@ String? verdictFor(CaseKind kind, bool? guess, bool isHealthy) {
     (CaseKind.healthy, true) => '의심하지 않고 잘 보셨네요. 정말 건강합니다.',
     (CaseKind.healthy, false) => '함정이었습니다 — 이 벌통은 건강합니다.',
   };
+}
+
+/// 1라운드(병명 택1)의 대조 문구.
+@visibleForTesting
+String diseaseVerdictFor(String picked, BoothCase c) {
+  final answer = round1AnswerOf(c);
+  if (picked == answer) {
+    return c.isHealthy
+        ? '의심하지 않고 잘 보셨네요. 정말 건강합니다.'
+        : '정확히 짚으셨어요. 몇 마리만 병든 벌통입니다.';
+  }
+  if (c.isHealthy) return '함정이었습니다 — 이 벌통은 건강합니다.';
+  final label = c.diseaseLabel ?? '병';
+  if (picked == 'healthy') return '놓치셨네요 — $label 벌이 섞여 있었습니다.';
+  return '$label 이었습니다 — 비슷해 보이죠, 그래서 어렵습니다.';
 }
 
 /// "당신: 건강함" 대조 카드. 맞히면 초록, 틀리면 꿀색 톤 — 틀렸다고 빨강으로

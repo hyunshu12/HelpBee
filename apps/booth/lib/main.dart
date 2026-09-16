@@ -145,6 +145,11 @@ class _BoothAppState extends State<BoothApp> {
       ? _bonusGuess
       : (_session.results.isEmpty ? null : _session.results.last.guess);
 
+  /// 결과 화면에 보여줄 1라운드 병명 추측. 보너스 경로에는 없다.
+  String? get _activeDiseaseGuess => _bonusCase != null
+      ? null
+      : (_session.results.isEmpty ? null : _session.results.last.diseaseGuess);
+
   void _operatorTap() {
     if (_operator.tap(DateTime.now())) _resetSession();
   }
@@ -217,14 +222,23 @@ class _BoothAppState extends State<BoothApp> {
           case_: _activeCase!,
           roundIndex: _bonusCase != null ? null : _session.roundIndex,
           roundTotal: BoothSession.roundCount,
-          onAnswer: (g) {
-            if (_bonusCase != null) {
-              _bonusGuess = g;
-            } else {
-              _session.recordGuess(g);
-            }
-            _goTo(BoothStage.analyzing);
-          },
+          // 1라운드만 병명 택1. 보너스(자유 선택)는 항상 2택.
+          onDiseaseAnswer: _bonusCase == null && _session.isDiseaseRound
+              ? (d) {
+                  _session.recordDiseaseGuess(d);
+                  _goTo(BoothStage.analyzing);
+                }
+              : null,
+          onAnswer: _bonusCase == null && _session.isDiseaseRound
+              ? null
+              : (g) {
+                  if (_bonusCase != null) {
+                    _bonusGuess = g;
+                  } else {
+                    _session.recordGuess(g);
+                  }
+                  _goTo(BoothStage.analyzing);
+                },
         );
       case BoothStage.analyzing:
         return AnalyzingScreen(
@@ -238,6 +252,7 @@ class _BoothAppState extends State<BoothApp> {
           key: ValueKey(_reportCase!.id),
           case_: _reportCase!,
           guess: _activeGuess,
+          diseaseGuess: _activeDiseaseGuess,
           isLastRound: _bonusCase != null || _session.currentCase == null,
           isBonus: _bonusCase != null,
           // 보너스면 마무리로, 투어면 **다음 라운드**로 — 마지막 라운드에서만
