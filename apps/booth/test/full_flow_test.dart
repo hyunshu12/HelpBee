@@ -420,4 +420,56 @@ void main() {
     expect(find.byType(PresentationScreen), findsNothing);
     await disposeAll(tester);
   });
+
+  testWidgets('대기 화면의 "PPT로 이동" 버튼으로 발표를 연다 (5탭 제스처를 외우지 않아도 되게)', (
+    tester,
+  ) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: fakeDeck));
+    await _waitForCasesLoaded(tester);
+
+    expect(find.text('PPT로 이동'), findsOneWidget, reason: '대기 화면에 보여야 한다');
+    await tester.tap(find.text('PPT로 이동'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PresentationScreen), findsOneWidget);
+    expect(find.text('1 / 3'), findsOneWidget, reason: '항상 1장부터');
+
+    await disposeAll(tester);
+  });
+
+  testWidgets('시연 중 "PPT로 이동" 을 누르면 투어를 끊고 시연 장 다음으로 간다', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: fakeDeck));
+    await _waitForCasesLoaded(tester);
+    await tester.tap(find.text('PPT로 이동'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // 시연 장으로 넘어가 시연 시작.
+    await tester.tapAt(const Offset(1000, 500));
+    await tester.pump();
+    await tester.tap(find.text('시연 시작 →'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(IntroScreen), findsOneWidget);
+
+    // 인트로 도중에 끊는다.
+    expect(find.text('PPT로 이동'), findsOneWidget, reason: '시연 중에도 탈출구가 있어야 한다');
+    await tester.tap(find.text('PPT로 이동'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(PresentationScreen), findsOneWidget);
+    expect(find.text('3 / 3'), findsOneWidget, reason: '시연 장(2) 다음 장');
+
+    await disposeAll(tester);
+  });
+
+  testWidgets('슬라이드가 없는 부스 빌드에는 "PPT로 이동" 이 없다', (tester) async {
+    await useBoothSurface(tester);
+    await tester.pumpWidget(BoothApp(deckLoader: (_) async => null));
+    await _waitForCasesLoaded(tester);
+    expect(find.text('PPT로 이동'), findsNothing);
+    await disposeAll(tester);
+  });
 }

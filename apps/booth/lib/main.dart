@@ -197,7 +197,12 @@ class _BoothAppState extends State<BoothApp> {
 
   /// 오른쪽 위 5탭 — 발표 모드 진입. 어트랙트에서만, 슬라이드가 있을 때만.
   void _presenterTap() {
-    if (!_presenter.tap(DateTime.now())) return;
+    if (_presenter.tap(DateTime.now())) _openDeck();
+  }
+
+  /// 발표 슬라이드를 1장부터 연다. 대기 화면의 "PPT로 이동" 버튼과
+  /// 오른쪽 위 5탭 제스처가 함께 쓴다.
+  void _openDeck() {
     final deck = _deck;
     if (_stage != BoothStage.attract || deck == null) return;
     deck.index = 0;
@@ -261,6 +266,19 @@ class _BoothAppState extends State<BoothApp> {
                 child: const SizedBox(width: 60, height: 60),
               ),
             ),
+            // "PPT로 이동" — 대기 화면에서는 발표를 **열고**, 시연 중에는 슬라이드로
+            // **돌아간다**. 투어 중간 화면(추측·결과 등)에는 띄우지 않는다:
+            // 관람객이 누르면 남의 발표 자료로 빠져나가고, 진단 화면이 어수선해진다.
+            // 오른쪽 위 제스처 히트박스보다 **뒤에** 둬야 탭을 먼저 받는다.
+            if (_deck != null &&
+                (_demoFromDeck || _stage == BoothStage.attract))
+              Positioned(
+                right: 24,
+                top: 20,
+                child: _BackToDeckButton(
+                  onPressed: _demoFromDeck ? _endTour : _openDeck,
+                ),
+              ),
           ],
         ),
       ),
@@ -377,6 +395,47 @@ class _BoothAppState extends State<BoothApp> {
           onExit: _resetSession,
         );
     }
+  }
+}
+
+/// 발표 슬라이드로 가는 버튼 (우측 상단).
+///
+/// 두 자리에서 쓴다.
+/// - **대기 화면**: 발표를 1장부터 연다. 숨은 5탭 제스처를 외우지 않아도 되도록
+///   눈에 보이는 버튼을 둔다(2026-09-17 발표 준비 중 요청).
+/// - **시연 중**: 시연을 끝까지 돌지 않고 끊고 싶을 때 — 질문이 들어왔거나 시간이
+///   밀렸거나. 시연 장 **다음** 장으로 데려간다(발표를 이어가는 자리).
+///
+/// 흰 알약 모양인 이유: 크림색 화면과 사진 위, 그리고 어두운 마무리 화면까지
+/// 어디에 놓여도 읽혀야 한다.
+class _BackToDeckButton extends StatelessWidget {
+  const _BackToDeckButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      elevation: 3,
+      shadowColor: AppColors.shadowWarmStrong,
+      shape: const StadiumBorder(side: BorderSide(color: AppColors.hintBorder)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          child: Text(
+            'PPT로 이동',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
