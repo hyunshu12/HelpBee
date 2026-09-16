@@ -29,8 +29,13 @@ class BoothSession extends ChangeNotifier {
   int get correctCount => _results.where((r) => r.correct).length;
 
   /// 풀에서 3장을 뽑아 새 투어를 시작한다.
-  void startTour(List<BoothCase> pool, {Random? rng}) {
-    _rounds = assignRounds(pool, rng ?? Random());
+  ///
+  /// [showcase] 면 [kShowcaseIds] 고정 세트(가장 어려운 3장). 풀에 그 사진이
+  /// 없으면 랜덤으로 떨어진다.
+  void startTour(List<BoothCase> pool, {Random? rng, bool showcase = false}) {
+    _rounds =
+        (showcase ? showcaseRounds(pool) : null) ??
+        assignRounds(pool, rng ?? Random());
     _results.clear();
     notifyListeners();
   }

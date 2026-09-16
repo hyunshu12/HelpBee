@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:helpbee_booth/data/booth_case.dart';
 import 'package:helpbee_booth/data/booth_session.dart';
+import 'package:helpbee_booth/data/tour.dart';
 import 'package:helpbee_booth/data/case_kind.dart';
 import 'package:helpbee_booth/data/risk_tier.dart';
 
@@ -88,5 +89,18 @@ void main() {
     expect(s.isDiseaseRound, isFalse);
     expect(s.results.single.diseaseGuess, 'healthy');
     expect(s.results.single.guess, isNull);
+  });
+
+  test('showcase 로 시작하면 고정 세트, 아니면 랜덤', () {
+    final pool = [
+      ..._pool(),
+      _c('healthy-4', CaseKind.healthy, RiskTier.safe),
+      _c('varroa-1', CaseKind.varroa, RiskTier.watch),
+      _c('varroa-5', CaseKind.varroa, RiskTier.danger),
+    ];
+    final s = BoothSession()..startTour(pool, showcase: true);
+    expect(s.rounds.map((c) => c.id), kShowcaseIds);
+    s.startTour(pool, rng: Random(3));
+    expect(s.rounds.map((c) => c.id), isNot(kShowcaseIds));
   });
 }

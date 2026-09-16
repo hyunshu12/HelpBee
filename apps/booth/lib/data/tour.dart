@@ -42,6 +42,26 @@ class TourResult {
   }
 }
 
+/// 시연용 고정 세트 — **가장 어려운 3장** (2026-09-16, 귀빈 1회 시연용).
+///
+/// 심리를 역이용한다. "맞혀보라"는 말을 들으면 사람은 문제가 있다고 가정하고
+/// 병을 고른다 — 그래서 1라운드는 **정상**이다. 그것도 흰 애벌레 방이 섞여 있어
+/// 석고병처럼 보이는 정상 사진(healthy-4, 40마리). 2·3라운드는 응애가 가장
+/// 묻히는 사진: 33마리 중 응애 1(varroa-1), 9마리 중 응애 1(varroa-5).
+///
+/// 운영자 5탭 리셋 직후 첫 투어에만 쓰인다([showcaseRounds]). 그 외 관람객은
+/// 랜덤([assignRounds]).
+const List<String> kShowcaseIds = ['healthy-4', 'varroa-1', 'varroa-5'];
+
+/// [kShowcaseIds] 를 풀에서 순서대로 찾는다. 하나라도 없으면(데이터 교체 등)
+/// null — 호출부가 랜덤으로 떨어진다.
+List<BoothCase>? showcaseRounds(List<BoothCase> pool) {
+  final byId = {for (final c in pool) c.id: c};
+  final picked = [for (final id in kShowcaseIds) byId[id]];
+  if (picked.any((c) => c == null)) return null;
+  return picked.cast<BoothCase>();
+}
+
 /// 풀에서 3장을 뽑는다.
 ///
 ///   R1  응애를 뺀 나머지 — 정상 | 날개불구 | 부저병. 관람객이 셋 중 하나를 고른다.

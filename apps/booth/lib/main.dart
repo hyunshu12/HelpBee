@@ -118,9 +118,17 @@ class _BoothAppState extends State<BoothApp> {
     _armIdle();
   }
 
-  void _resetSession() {
+  /// 다음 투어에 시연용 고정 세트([kShowcaseIds])를 쓸지.
+  ///
+  /// 앱 시작 직후와 **운영자 5탭 리셋** 직후에만 true. 60초 무동작 리셋은 건드리지
+  /// 않는다 — 귀빈 앞에서 운영자가 5탭으로 판을 깔면 가장 어려운 3장이 나오고,
+  /// 그 뒤 일반 관람객은 랜덤을 받는다.
+  bool _showcaseNext = true;
+
+  void _resetSession({bool showcase = false}) {
     _idle?.cancel();
     _session.reset();
+    _showcaseNext = showcase;
     setState(() {
       _stage = BoothStage.attract;
       _bonusCase = null;
@@ -151,7 +159,7 @@ class _BoothAppState extends State<BoothApp> {
       : (_session.results.isEmpty ? null : _session.results.last.diseaseGuess);
 
   void _operatorTap() {
-    if (_operator.tap(DateTime.now())) _resetSession();
+    if (_operator.tap(DateTime.now())) _resetSession(showcase: true);
   }
 
   @override
@@ -210,7 +218,8 @@ class _BoothAppState extends State<BoothApp> {
       case BoothStage.tourStart:
         return TourStartScreen(
           onStart: () {
-            _session.startTour(_cases);
+            _session.startTour(_cases, showcase: _showcaseNext);
+            _showcaseNext = false;
             _bonusCase = null;
             _bonusGuess = null;
             _goTo(BoothStage.guess);

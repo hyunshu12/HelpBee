@@ -106,6 +106,21 @@ void main() {
     expect(combos.length, greaterThan(5), reason: '매번 같은 3장이면 반복 관람객이 지루하다');
   });
 
+  test('시연 세트 — 정상 → 응애 33마리 → 응애 9마리 순서로 고정', () {
+    // "맞혀보라"고 하면 병을 고른다 — 그래서 첫 장이 정상이다.
+    final pool = [..._pool(), _c('healthy-4', CaseKind.healthy, RiskTier.safe)];
+    final r = showcaseRounds(pool)!;
+    expect(r.map((c) => c.id), ['healthy-4', 'varroa-1', 'varroa-5']);
+    expect(r[0].isHealthy, isTrue);
+    expect(r[1].kind, CaseKind.varroa);
+    expect(r[2].kind, CaseKind.varroa);
+    // 풀에 그 사진이 없으면 null — 호출부가 랜덤으로 떨어진다.
+    expect(
+      showcaseRounds(_pool().where((c) => c.id != 'varroa-1').toList()),
+      isNull,
+    );
+  });
+
   test('후보군이 비어도 멈추지 않는다', () {
     // 데이터 사고로 정상 사진이 하나도 없어도 부스는 돌아야 한다.
     final poolWithoutHealthy = _pool()
