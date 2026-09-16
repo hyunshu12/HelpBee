@@ -6,8 +6,8 @@ import 'package:helpbee_booth/data/risk_tier.dart';
 void main() {
   test('fromJson이 티어와 박스를 읽는다', () {
     final c = BoothCase.fromJson(const {
-      'id': 'danger-90',
-      'photo': 'photos/danger-90.jpg',
+      'id': 'varroa-2',
+      'photo': 'photos/varroa-2.jpg',
       'kind': 'varroa',
       'disease': 'varroa',
       'diseaseLabel': '응애',
@@ -23,7 +23,7 @@ void main() {
       ],
     });
 
-    expect(c.id, 'danger-90');
+    expect(c.id, 'varroa-2');
     expect(c.tier, RiskTier.danger);
     expect(c.riskScore, 90);
     expect(c.boxes, hasLength(1));
@@ -33,8 +33,8 @@ void main() {
 
   test('박스가 없는 정상 케이스를 읽는다', () {
     final c = BoothCase.fromJson(const {
-      'id': 'safe-0',
-      'photo': 'photos/safe-0.jpg',
+      'id': 'healthy-1',
+      'photo': 'photos/healthy-1.jpg',
       'kind': 'healthy',
       'disease': null,
       'diseaseLabel': null,
@@ -94,8 +94,8 @@ void main() {
 
   test('정상 케이스만 isHealthy 다', () {
     final healthy = BoothCase.fromJson({
-      'id': 'safe-0',
-      'photo': 'photos/safe-0.jpg',
+      'id': 'healthy-1',
+      'photo': 'photos/healthy-1.jpg',
       'kind': 'healthy',
       'disease': null,
       'diseaseLabel': null,
@@ -148,8 +148,8 @@ void main() {
 
   test('응애 케이스의 처방 순서는 건드리지 않는다', () {
     final c = BoothCase.fromJson({
-      'id': 'danger-100',
-      'photo': 'photos/danger-100.jpg',
+      'id': 'varroa-1',
+      'photo': 'photos/varroa-1.jpg',
       'kind': 'varroa',
       'disease': 'varroa',
       'diseaseLabel': '응애',

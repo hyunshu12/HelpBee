@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'booth_case.dart';
 import 'case_kind.dart';
-import 'risk_tier.dart';
 
 /// 라운드 하나의 결과 — 어떤 사진에 관람객이 뭐라고 답했는가.
 class TourResult {
@@ -18,32 +17,36 @@ class TourResult {
   bool get correct => guess != null && guess == case_.isHealthy;
 }
 
-/// 풀에서 3장을 뽑아 **난이도 계단** 순서로 배정한다 (설계 §2).
+/// 풀에서 3장을 뽑는다 — **세 라운드 모두 독립 동전던지기 (병 | 정상)**.
 ///
-///   R1 쉬움      눈에 보이는 병       → 대개 맞힘. 자신감이 붙는다
-///   R2 어려움    응애 위험 | 정상      → 대개 틀림. "어? 뭐가 문제였지"
-///   R3 더 어려움  응애 주의 | 정상      → 더 미세하거나, 의심병을 찌르는 함정
+/// 2026-09-16 까지는 난이도 계단(보이는 병 → 응애 위험 → 응애 주의)이었다.
+/// 계단은 이야기로는 좋았지만 두 가지가 문제였다: (1) R1 이 확정으로 병든
+/// 벌통이라 "문제 있음"만 눌러도 평균 2장이 맞았고, (2) 계단을 만들려고 눈에
+/// 확 띄는 사진(부저병 12/12 같은)을 써야 해서 1라운드가 퀴즈가 아니라 관찰이
+/// 됐다. "이거 너무 쉬운데" — 실측 피드백.
 ///
-/// 순서가 이야기다. R1 의 성공이 있어야 R2 의 실패가 대비로 살고, R3 에 뭐가
-/// 나올지 모르므로 마지막까지 진지하게 본다.
+/// 이제 라운드마다 병/정상을 동전으로 정하고, 병일 때는 응애든 다른 병이든
+/// 풀에서 아무거나 뽑는다. 풀 자체가 "눈으로 구분하기 힘든 사진만"으로 짜여
+/// 있다(make_booth_cases.py). 어느 한쪽으로만 찍으면 기대값은 정확히 1.5장
+/// — 사진을 실제로 봐야만 그 위로 올라간다.
 ///
-/// **2026-09-14: R2 에도 정상을 섞었다.** 그전에는 R1·R2 가 둘 다 확정으로 병든
-/// 벌통이라, 관람객이 사진을 보지 않고 "문제 있음"만 세 번 눌러도 최소 2장을
-/// 맞혔다(실측 피드백 "생각보다 맞추기 쉬운데"). 눈이 아니라 확률로 맞히는
-/// 체험은 이 부스가 하려는 말과 정반대다. 이제 같은 전략의 기대값은 3장 중
-/// 2.0장으로 내려가고, "건강함"만 누르는 전략도 1.0장에 그친다.
-///
-/// 후보가 빈 군이 있으면 그 군은 풀 전체에서 아무거나 채운다 — 부스가 데이터
-/// 사고로 멈추는 것보다는 순서가 틀리는 게 낫다. 이미 뽑힌 사진은 제외해
-/// 한 세션에 같은 사진이 두 번 나오지 않게 한다.
+/// 한 세션에 같은 사진이 두 번 나오지 않게 뽑힌 것은 제외하고, 한쪽 후보가
+/// 다 떨어지면 반대쪽으로 채운다. 풀이 비어 있어도 멈추지 않는다 — 부스가
+/// 데이터 사고로 서는 것보다는 배정이 틀리는 게 낫다.
 List<BoothCase> assignRounds(List<BoothCase> pool, Random rng) {
   final taken = <String>{};
 
-  BoothCase pick(bool Function(BoothCase) where) {
+  BoothCase pick(
+    bool Function(BoothCase) where, {
+    required bool Function(BoothCase) orElse,
+  }) {
     final fresh = pool
         .where((c) => !taken.contains(c.id))
         .toList(growable: false);
-    final candidates = fresh.where(where).toList(growable: false);
+    var candidates = fresh.where(where).toList(growable: false);
+    if (candidates.isEmpty) {
+      candidates = fresh.where(orElse).toList(growable: false);
+    }
     final from = candidates.isNotEmpty
         ? candidates
         : (fresh.isNotEmpty ? fresh : pool);
@@ -53,15 +56,11 @@ List<BoothCase> assignRounds(List<BoothCase> pool, Random rng) {
   }
 
   bool healthy(BoothCase c) => c.kind == CaseKind.healthy;
+  bool sick(BoothCase c) => c.kind != CaseKind.healthy;
 
-  final r1 = pick((c) => c.kind == CaseKind.visible);
-  // 동전 던지기로 병/정상을 고른다 — 관람객이 라운드 번호만 보고 답을 추론할 수
-  // 없어야 한다.
-  final r2 = rng.nextBool()
-      ? pick((c) => c.kind == CaseKind.varroa && c.tier == RiskTier.danger)
-      : pick(healthy);
-  final r3 = rng.nextBool()
-      ? pick((c) => c.kind == CaseKind.varroa && c.tier == RiskTier.watch)
-      : pick(healthy);
-  return [r1, r2, r3];
+  BoothCase flip() => rng.nextBool()
+      ? pick(sick, orElse: healthy)
+      : pick(healthy, orElse: sick);
+
+  return [flip(), flip(), flip()];
 }

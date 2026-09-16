@@ -24,9 +24,9 @@ BoothCase _c(String id, CaseKind kind, RiskTier tier) => BoothCase(
 
 List<BoothCase> _pool() => [
   _c('dwv-1', CaseKind.visible, RiskTier.safe),
-  _c('danger-100', CaseKind.varroa, RiskTier.danger),
-  _c('watch-50', CaseKind.varroa, RiskTier.watch),
-  _c('safe-0', CaseKind.healthy, RiskTier.safe),
+  _c('varroa-1', CaseKind.varroa, RiskTier.danger),
+  _c('varroa-3', CaseKind.varroa, RiskTier.watch),
+  _c('healthy-1', CaseKind.healthy, RiskTier.safe),
 ];
 
 void main() {
@@ -55,8 +55,8 @@ void main() {
 
   test('맞힌 수를 센다 — 건너뛴 라운드는 세지 않는다', () {
     final s = BoothSession()..startTour(_pool(), rng: Random(1));
-    // R1 은 항상 눈에 보이는 병 → '문제 있음' 이 정답.
-    s.recordGuess(false);
+    // R1 정답으로 답한다 (2026-09-16 부터 R1 도 병/정상 반반이라 시드에 기대지 않는다).
+    s.recordGuess(s.currentCase!.isHealthy);
     // R2 는 시드에 따라 응애일 수도 정상일 수도 있으므로(2026-09-14 찍기 방지),
     // **정답의 반대**로 답해 확실히 틀린다. 시드 번호에 기대는 단언은 배정
     // 규칙을 바꿀 때마다 조용히 깨진다.

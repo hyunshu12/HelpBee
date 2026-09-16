@@ -5,7 +5,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_fonts.dart';
 import '../widgets/booth_scaffold.dart';
 
-/// 사진 10장 중 하나를 고르는 화면.
+/// 사진을 하나 고르는 화면 — 한 줄에 5장, 줄 수는 사진 수에 맞춘다(15장이면 3줄).
 ///
 /// ⚠️ 티어·점수를 절대 쓰지 않는다. 관람객이 답을 미리 알면 다음 단계(추측)가
 /// 무의미해진다 — `picker_screen_test` 가 '위험/주의/안전/100/90/50' 부재를 단언한다.
@@ -37,14 +37,14 @@ class PickerScreen extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                for (var row = 0; row < 2; row++) ...[
+                for (var row = 0; row < _rows; row++) ...[
                   if (row > 0) const SizedBox(height: 20),
                   Expanded(
                     child: Row(
                       children: [
-                        for (var col = 0; col < 5; col++) ...[
+                        for (var col = 0; col < _cols; col++) ...[
                           if (col > 0) const SizedBox(width: 20),
-                          Expanded(child: _slotAt(row * 5 + col)),
+                          Expanded(child: _slotAt(row * _cols + col)),
                         ],
                       ],
                     ),
@@ -58,7 +58,12 @@ class PickerScreen extends StatelessWidget {
     );
   }
 
-  /// 10칸 중 i번 칸. 케이스가 10장보다 적어도(데이터 사고) 빈 칸으로 버틴다.
+  static const _cols = 5;
+
+  /// 줄 수 = ⌈사진 수 / 5⌉. 최소 1줄 — 사진이 0장이어도 레이아웃은 서 있어야 한다.
+  int get _rows => cases.isEmpty ? 1 : (cases.length + _cols - 1) ~/ _cols;
+
+  /// i번 칸. 마지막 줄이 덜 차면 빈 칸으로 버틴다.
   Widget _slotAt(int i) => i < cases.length
       ? _PhotoCardButton(
           index: i + 1,

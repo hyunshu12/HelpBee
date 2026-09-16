@@ -27,16 +27,19 @@ BoothCase _c(String id, CaseKind kind, RiskTier tier) => BoothCase(
   boxes: const [],
 );
 
-/// R1 visible / R2 varroa / R3 healthy 로 고정된 세션을 만든다.
-BoothSession _session(List<bool?> guesses) {
+/// 세 종류가 한 번씩 나오는 세션. 라운드 배정이 동전던지기라(2026-09-16) 순서는
+/// 시드에 따라 다르므로, 답은 라운드마다 현재 케이스를 보고 [correct] 대로 낸다
+/// (null 은 건너뜀).
+BoothSession _session(List<bool?> correct) {
   final s = BoothSession()
     ..startTour([
       _c('dwv-1', CaseKind.visible, RiskTier.safe),
-      _c('danger-100', CaseKind.varroa, RiskTier.danger),
-      _c('safe-0', CaseKind.healthy, RiskTier.safe),
+      _c('varroa-1', CaseKind.varroa, RiskTier.danger),
+      _c('healthy-1', CaseKind.healthy, RiskTier.safe),
     ], rng: Random(0));
-  for (final g in guesses) {
-    s.recordGuess(g);
+  for (final want in correct) {
+    final healthy = s.currentCase!.isHealthy;
+    s.recordGuess(want == null ? null : (want ? healthy : !healthy));
   }
   return s;
 }
@@ -68,9 +71,9 @@ void main() {
   });
 
   test('라운드 성격 캡션이 종류마다 다르다', () {
-    expect(roundCaption(CaseKind.visible), '보이는 병');
-    expect(roundCaption(CaseKind.varroa), '안 보이는 병');
-    expect(roundCaption(CaseKind.healthy), '함정');
+    expect(roundCaption(CaseKind.visible), '다른 병');
+    expect(roundCaption(CaseKind.varroa), '응애');
+    expect(roundCaption(CaseKind.healthy), '정상');
     final all = {
       roundCaption(CaseKind.visible),
       roundCaption(CaseKind.varroa),
@@ -81,13 +84,13 @@ void main() {
 
   testWidgets('세 라운드 결과를 정오답과 함께 보여준다', (tester) async {
     await useBoothSurface(tester);
-    // R1 정답(병든 벌통에 '문제 있음') / R2 오답('건강함') / R3 정답('건강함')
-    await tester.pumpWidget(_wrap(_session([false, true, true])));
+    // 정답 / 오답 / 정답
+    await tester.pumpWidget(_wrap(_session([true, false, true])));
 
     expect(find.textContaining('2장'), findsWidgets);
-    expect(find.text('보이는 병'), findsOneWidget);
-    expect(find.text('안 보이는 병'), findsOneWidget);
-    expect(find.text('함정'), findsOneWidget);
+    expect(find.text('다른 병'), findsOneWidget);
+    expect(find.text('응애'), findsOneWidget);
+    expect(find.text('정상'), findsOneWidget);
     expect(find.text('✓'), findsNWidgets(2));
     expect(find.text('✗'), findsOneWidget);
     expect(find.textContaining('HelpBee 는 3장 모두 정확히 판정했습니다'), findsOneWidget);
@@ -95,7 +98,7 @@ void main() {
 
   testWidgets('건너뛴 라운드는 — 로 표시한다', (tester) async {
     await useBoothSurface(tester);
-    await tester.pumpWidget(_wrap(_session([false, null, null])));
+    await tester.pumpWidget(_wrap(_session([true, null, null])));
     expect(find.text('—'), findsNWidgets(2));
     expect(find.text('✓'), findsOneWidget);
   });

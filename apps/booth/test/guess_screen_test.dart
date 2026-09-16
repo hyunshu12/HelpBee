@@ -10,8 +10,8 @@ import 'package:helpbee_booth/widgets/bbox_overlay.dart';
 import 'test_surface.dart';
 
 const _c = BoothCase(
-  id: 'watch-50',
-  photo: 'photos/watch-50.jpg',
+  id: 'varroa-3',
+  photo: 'photos/varroa-3.jpg',
   kind: CaseKind.varroa,
   disease: 'varroa',
   diseaseLabel: '응애',

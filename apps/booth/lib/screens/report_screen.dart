@@ -314,16 +314,19 @@ class _ResultCard extends StatelessWidget {
 
 /// 관람객 추측과 케이스 성격에 맞는 한 줄. 건너뛰면 null.
 ///
-/// 라운드마다 성격이 달라서 문구도 달라야 한다 — R1 은 "보이는 걸 봤다",
-/// R2 는 "못 보는 게 정상이다", R3 는 "함정이었다" 가 핵심이다. 한 문구로
+/// 케이스 성격마다 문구가 달라야 한다 — 다른 병은 "자세히 보면 보인다",
+/// 응애는 "못 보는 게 정상이다", 정상은 "함정이었다" 가 핵심이다. 한 문구로
 /// 통일하면 3라운드가 같은 말을 세 번 하는 화면이 된다.
+///
+/// 2026-09-16 부터 다른 병 사진도 수십 마리 중 한둘만 병든 광각이라
+/// "눈에 보이는 병" 이라고 부르지 않는다 — 보이긴 하지만 찾아야 보인다.
 @visibleForTesting
 String? verdictFor(CaseKind kind, bool? guess, bool isHealthy) {
   if (guess == null) return null;
   final correct = guess == isHealthy;
   return switch ((kind, correct)) {
-    (CaseKind.visible, true) => '잘 보셨어요. 이건 눈에 보이는 병입니다.',
-    (CaseKind.visible, false) => '놓치셨네요 — 날개와 유충 색을 다시 보세요.',
+    (CaseKind.visible, true) => '잘 찾으셨어요. 몇 마리만 병든 벌통입니다.',
+    (CaseKind.visible, false) => '놓치셨네요 — 날개와 애벌레 색을 다시 보세요.',
     (CaseKind.varroa, true) => '맞히셨네요! 그런데 어디가 문제인지 보이셨나요?',
     (CaseKind.varroa, false) => '못 찾는 게 정상입니다. 응애는 2mm예요.',
     (CaseKind.healthy, true) => '의심하지 않고 잘 보셨네요. 정말 건강합니다.',

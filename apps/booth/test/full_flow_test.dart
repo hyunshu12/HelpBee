@@ -31,11 +31,14 @@ import 'test_surface.dart';
 ///   settle 되지 않는다(위 경고 참조). 그래서 `AttractScreen`이 나타날 때까지
 ///   짧은 pump를 여러 번 반복하는 쪽으로 기다린다.
 Future<void> _waitForCasesLoaded(WidgetTester tester) async {
-  for (var i = 0; i < 20; i++) {
+  // 2026-09-16: cases.json 이 15장·박스 400여 개로 커지면서 20회(200ms)로는
+  // 실제 파일 I/O 가 끝나기 전에 포기하는 일이 생겼다. 상한만 넉넉히 잡는다 —
+  // 로드가 끝나면 즉시 빠져나오므로 빨라진 만큼 빨리 끝난다.
+  for (var i = 0; i < 300; i++) {
     await tester.pump(const Duration(milliseconds: 10));
     if (find.byType(AttractScreen).evaluate().isNotEmpty) return;
   }
-  fail('assets/cases.json 로드가 끝나지 않았다 (20회 폴링 초과)');
+  fail('assets/cases.json 로드가 끝나지 않았다 (300회 폴링 초과)');
 }
 
 /// 어트랙트 → 인트로 → 병 소개 → 투어 시작 → 1라운드 추측 화면까지.

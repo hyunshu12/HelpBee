@@ -12,7 +12,7 @@ void main() {
           width: 800,
           height: 600,
           child: BboxOverlay(
-            photoAsset: 'assets/photos/danger-90.jpg',
+            photoAsset: 'assets/photos/varroa-2.jpg',
             imageSize: const Size(1920, 1080),
             boxes: const [
               BoothBox(x: 519, y: 71, w: 292, h: 565, cls: 'varroa'),
@@ -31,7 +31,7 @@ void main() {
           width: 800,
           height: 600,
           child: BboxOverlay(
-            photoAsset: 'assets/photos/safe-0.jpg',
+            photoAsset: 'assets/photos/healthy-1.jpg',
             imageSize: const Size(1920, 1080),
             boxes: const [],
             animate: false,
@@ -63,6 +63,25 @@ void main() {
       expect(boxStyleFor('normal', label: '유충').tag, '유충');
       expect(boxStyleFor('disease', label: '부저병').tag, '부저병');
       expect(boxStyleFor('varroa', label: '응애').color, AppColors.tierDanger);
+    });
+
+    test('정상 박스가 많으면 이름표를 생략하고, 병든 박스는 항상 단다', () {
+      // 소비판 광각은 정상 박스가 58개 — 전부 이름표를 달면 사진이 글자에 묻힌다.
+      List<BoothBox> normals(int n) => [
+        for (var i = 0; i < n; i++)
+          BoothBox(x: i * 10.0, y: 0, w: 5, h: 5, cls: 'normal', label: '유충'),
+      ];
+      expect(shouldTagNormals(normals(kMaxTaggedNormals)), isTrue);
+      expect(shouldTagNormals(normals(kMaxTaggedNormals + 1)), isFalse);
+      // 병든 박스 수는 판단에 안 들어간다 — 정상이 적으면 병이 많아도 단다.
+      expect(
+        shouldTagNormals([
+          ...normals(3),
+          for (var i = 0; i < 40; i++)
+            BoothBox(x: i * 10.0, y: 50, w: 5, h: 5, cls: 'disease'),
+        ]),
+        isTrue,
+      );
     });
 
     test('작은 박스는 화면에서 최소 크기까지 키워 그린다', () {

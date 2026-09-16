@@ -18,23 +18,23 @@ def _case(case_id: str) -> dict:
 
 
 def test_danger_case_matches_verified_label_values():
-    c = _case("danger-100")
+    c = _case("varroa-1")
     assert c["riskScore"] == 100
     assert c["tier"] == "danger"
-    assert c["beeTotal"] == 7
-    assert c["sickCount"] == 2
+    assert c["beeTotal"] == 5
+    assert c["sickCount"] == 1
     assert len(c["recommendations"]) == 5
 
 
 def test_all_bee_boxes_are_kept():
     """좌표가 정확하면(2026-08-30 xyxy 수정) 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)."""
-    c = _case("danger-100")
+    c = _case("varroa-1")
     assert len(c["boxes"]) == c["beeTotal"]
     assert sum(1 for b in c["boxes"] if b["cls"] == "varroa") == c["sickCount"]
 
 
 def test_safe_case_has_no_varroa_boxes():
-    c = _case("safe-0")
+    c = _case("healthy-1")
     assert c["riskScore"] == 0
     assert c["tier"] == "safe"
     assert c["sickCount"] == 0
@@ -52,18 +52,21 @@ def test_every_box_is_inside_image_bounds(spec):
         assert b["y"] + b["h"] <= c["imageHeight"]
 
 
-def test_pool_covers_the_difficulty_ladder():
-    """R1 쉬움 / R2 응애 위험 / R3 응애 주의·정상 — 세 후보군이 다 있어야 배정이 성립한다.
+def test_pool_is_hard_by_eye():
+    """2026-09-16: 세 라운드가 독립 동전던지기(병 | 정상)라 두 무리가 겉보기에 같아야 한다.
 
-    2026-09-08: 4장 자유선택에서 10장 3라운드 투어로 바뀌었다.
+    - 병든 사진은 병든 개체가 소수(≤ 20%)여야 한다 — 12/12 부저병 같은 건 퀴즈가 아니다.
+    - 응애 사진은 compute_risk 가 safe 를 주면 안 된다 — 화면에 '안전' 배지가 떠서
+      정답('문제 있음')과 모순된다.
     """
     cases = [build_case(s) for s in BOOTH_CASES]
-    danger = [c for c in cases if c["kind"] == "varroa" and c["tier"] == "danger"]
-    watch = [c for c in cases if c["kind"] == "varroa" and c["tier"] == "watch"]
-    assert len(danger) >= 1, "R2(응애 위험) 후보가 없다"
-    assert len(watch) >= 1, "R3(응애 주의) 후보가 없다"
-    assert sum(1 for c in cases if c["kind"] == "visible") >= 1, "R1 후보가 없다"
-    assert sum(1 for c in cases if c["kind"] == "healthy") >= 1, "R3 함정 후보가 없다"
+    for c in cases:
+        if c["kind"] == "healthy":
+            assert c["sickCount"] == 0, c["id"]
+            continue
+        assert c["sickCount"] / c["beeTotal"] <= 0.20, f"{c['id']}: 병든 개체가 너무 많아 눈에 띈다"
+        if c["kind"] == "varroa":
+            assert c["tier"] != "safe", f"{c['id']}: 응애인데 안전 등급 — 정답과 모순"
 
 
 def test_visible_case_has_disease_fields():
@@ -76,7 +79,7 @@ def test_visible_case_has_disease_fields():
     assert case["kind"] == "visible"
     assert case["disease"] in ("dwv", "chalkbrood")
     assert case["diseaseLabel"]
-    assert case["sickCount"] >= 2, "감염 개체가 2마리 이상인 사진을 골라야 한다"
+    assert case["sickCount"] >= 1
     assert "varroaCount" not in case, "varroaCount 는 sickCount 로 대체됐다"
     # 다른 병 박스는 'disease' 로 나가야 결과 화면이 주황으로 그린다.
     assert any(b["cls"] == "disease" for b in case["boxes"])
@@ -112,8 +115,9 @@ def test_pool_covers_every_round():
     from training.data.make_booth_cases import BOOTH_CASES
 
     kinds = [s.kind for s in BOOTH_CASES]
+    # 정상은 최소 3장 — 세 라운드가 다 정상으로 떨어져도 채울 수 있어야 한다.
+    assert kinds.count("healthy") >= 3
+    assert kinds.count("varroa") >= 3
     assert kinds.count("visible") >= 3
-    assert kinds.count("varroa") >= 5
-    assert kinds.count("healthy") >= 2
-    assert len(BOOTH_CASES) == 10
-    assert len({s.id for s in BOOTH_CASES}) == 10, "id 중복"
+    assert len(BOOTH_CASES) == 15
+    assert len({s.id for s in BOOTH_CASES}) == 15, "id 중복"

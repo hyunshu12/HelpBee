@@ -37,8 +37,8 @@ BoothCase _case({
   int recs = 5,
   CaseKind kind = CaseKind.varroa,
 }) => BoothCase(
-  id: 'danger-100',
-  photo: 'photos/danger-100.jpg',
+  id: 'varroa-1',
+  photo: 'photos/varroa-1.jpg',
   imageWidth: 1920,
   imageHeight: 1080,
   riskScore: 100,
@@ -64,7 +64,7 @@ void main() {
     '인트로': () => IntroScreen(onDone: () {}),
     '병 소개': () => DiseasesScreen(onDone: () {}),
     '사진 고르기': () => PickerScreen(
-      cases: [for (var i = 0; i < 10; i++) _case()],
+      cases: [for (var i = 0; i < 15; i++) _case()],
       onPick: (_) {},
     ),
     '투어 시작': () => TourStartScreen(onStart: () {}),

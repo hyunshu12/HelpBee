@@ -17,8 +17,8 @@ import 'test_surface.dart';
 /// 화면 밝기 다음으로 배터리를 많이 먹는 항목이고, 코드로 통제 가능한 것 중엔
 /// 가장 큰 항목이다.
 const _case = BoothCase(
-  id: 'danger-100',
-  photo: 'photos/danger-100.jpg',
+  id: 'varroa-1',
+  photo: 'photos/varroa-1.jpg',
   kind: CaseKind.varroa,
   disease: 'varroa',
   diseaseLabel: '응애',

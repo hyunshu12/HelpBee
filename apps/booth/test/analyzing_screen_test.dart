@@ -8,8 +8,8 @@ import 'package:helpbee_booth/screens/analyzing_screen.dart';
 import 'test_surface.dart';
 
 const _c = BoothCase(
-  id: 'danger-90',
-  photo: 'photos/danger-90.jpg',
+  id: 'varroa-2',
+  photo: 'photos/varroa-2.jpg',
   kind: CaseKind.varroa,
   disease: 'varroa',
   diseaseLabel: '응애',

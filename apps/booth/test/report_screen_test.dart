@@ -10,11 +10,11 @@ import 'package:helpbee_booth/widgets/surfaces.dart';
 
 import 'test_surface.dart';
 
-// 실제 danger-100 케이스(assets/cases.json)의 recommendations 5개를 그대로 옮김 —
+// 실제 varroa-1 케이스(assets/cases.json)의 recommendations 5개를 그대로 옮김 —
 // 위험 티어의 실제 최악 케이스(처방 5개)로 오버플로 유무를 검증하기 위함.
 BoothCase _danger() => const BoothCase(
-  id: 'danger-90',
-  photo: 'photos/danger-90.jpg',
+  id: 'varroa-2',
+  photo: 'photos/varroa-2.jpg',
   kind: CaseKind.varroa,
   disease: 'varroa',
   diseaseLabel: '응애',
@@ -35,8 +35,8 @@ BoothCase _danger() => const BoothCase(
 );
 
 BoothCase _safe() => const BoothCase(
-  id: 'safe-0',
-  photo: 'photos/safe-0.jpg',
+  id: 'healthy-1',
+  photo: 'photos/healthy-1.jpg',
   kind: CaseKind.healthy,
   disease: null,
   diseaseLabel: null,
@@ -297,7 +297,7 @@ void main() {
 
   group('대조 문구', () {
     test('kind 와 정오답 조합마다 다른 문구가 나온다', () {
-      expect(verdictFor(CaseKind.visible, false, false), contains('눈에 보이는 병'));
+      expect(verdictFor(CaseKind.visible, false, false), contains('잘 찾으셨어요'));
       expect(verdictFor(CaseKind.visible, true, false), contains('놓치셨네요'));
       expect(verdictFor(CaseKind.varroa, false, false), contains('맞히셨네요'));
       expect(verdictFor(CaseKind.varroa, true, false), contains('2mm'));

@@ -234,6 +234,21 @@ BoxStyle boxStyleFor(String cls, {String? label}) => switch (cls) {
   ),
 };
 
+/// 정상 벌·유충 박스에 이름표를 다는 상한.
+///
+/// 이 수를 넘는 사진(소비판 광각은 정상 박스가 40~58개)에 전부 이름표를 달면
+/// 사진이 글자에 묻힌다(2026-09-16 웹 실측). 병든 박스는 개수와 무관하게 항상
+/// 이름표를 단다 — 그게 이 화면의 요점이다. 정상 박스는 색이 초록 하나뿐이고
+/// 범례가 설명하므로, 많을 때는 테두리만으로 충분하다.
+@visibleForTesting
+const int kMaxTaggedNormals = 15;
+
+/// 이 사진에서 정상 박스에도 이름표를 달지.
+@visibleForTesting
+bool shouldTagNormals(List<BoothBox> boxes) =>
+    boxes.where((b) => b.cls != 'varroa' && b.cls != 'disease').length <=
+    kMaxTaggedNormals;
+
 /// 화면에 그릴 때 보장하는 박스 최소 크기(논리 픽셀).
 ///
 /// 부저병 사진의 박스는 소방 한 칸이라 화면에서 20px 남짓이다 — 태그보다 작아
@@ -283,6 +298,7 @@ class _BoxPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final ordered = revealOrder(boxes);
+    final tagNormals = shouldTagNormals(boxes);
     for (var i = 0; i < ordered.length; i++) {
       final b = ordered[i];
       final progress = boxProgressAt(i, elapsedMs, count: ordered.length);
@@ -297,7 +313,8 @@ class _BoxPainter extends CustomPainter {
       _drawPartialRect(canvas, r, progress, style);
 
       // 태그는 테두리가 다 그려진 뒤 붙는다.
-      if (progress >= 1.0 && style.tag != null) {
+      final isSick = b.cls == 'varroa' || b.cls == 'disease';
+      if (progress >= 1.0 && style.tag != null && (isSick || tagNormals)) {
         _drawTag(canvas, r, style);
       }
     }

@@ -22,44 +22,59 @@ BoothCase _c(String id, CaseKind kind, RiskTier tier) => BoothCase(
   boxes: const [],
 );
 
-/// 실제 풀과 같은 구성 (visible 3 · varroa danger 3 · varroa watch 2 · healthy 2).
+/// 실제 풀과 같은 구성 (varroa 5 · visible 5 · healthy 5).
 List<BoothCase> _pool() => [
-  _c('foul-1', CaseKind.visible, RiskTier.safe),
-  _c('foul-2', CaseKind.visible, RiskTier.safe),
-  _c('dwv-1', CaseKind.visible, RiskTier.safe),
-  _c('danger-100', CaseKind.varroa, RiskTier.danger),
-  _c('danger-90', CaseKind.varroa, RiskTier.danger),
-  _c('danger-2', CaseKind.varroa, RiskTier.danger),
-  _c('watch-50', CaseKind.varroa, RiskTier.watch),
-  _c('watch-2', CaseKind.varroa, RiskTier.watch),
-  _c('safe-0', CaseKind.healthy, RiskTier.safe),
-  _c('safe-2', CaseKind.healthy, RiskTier.safe),
+  for (var i = 1; i <= 5; i++) _c('varroa-$i', CaseKind.varroa, RiskTier.watch),
+  for (var i = 1; i <= 5; i++) _c('other-$i', CaseKind.visible, RiskTier.safe),
+  for (var i = 1; i <= 5; i++)
+    _c('healthy-$i', CaseKind.healthy, RiskTier.safe),
 ];
 
 void main() {
-  test('난이도 계단대로 배정한다 — 쉬움 → 어려움 → 더 어려움', () {
+  test('3장을 뽑고 같은 사진은 두 번 나오지 않는다', () {
     for (var seed = 0; seed < 50; seed++) {
       final r = assignRounds(_pool(), Random(seed));
       expect(r, hasLength(3));
-      expect(r[0].kind, CaseKind.visible, reason: 'R1 은 눈에 보이는 병 (seed $seed)');
-      expect(
-        r[1].kind == CaseKind.healthy ||
-            (r[1].kind == CaseKind.varroa && r[1].tier == RiskTier.danger),
-        isTrue,
-        reason: 'R2 는 응애 위험 또는 정상(함정) (seed $seed)',
-      );
-      expect(
-        r[2].kind == CaseKind.healthy ||
-            (r[2].kind == CaseKind.varroa && r[2].tier == RiskTier.watch),
-        isTrue,
-        reason: 'R3 는 응애 주의 또는 정상(함정) (seed $seed)',
-      );
       expect(
         r.map((c) => c.id).toSet(),
         hasLength(3),
         reason: '같은 사진이 두 번 나왔다 (seed $seed)',
       );
     }
+  });
+
+  test('라운드 번호로 답을 추론할 수 없다 — 셋 다 병/정상이 반반이다', () {
+    // 2026-09-16: 난이도 계단을 없앴다. 어느 라운드든 정상이 절반쯤 나와야
+    // "N 라운드는 항상 병" 같은 요령이 안 통한다.
+    const seeds = 400;
+    final healthyAt = [0, 0, 0];
+    for (var seed = 0; seed < seeds; seed++) {
+      final r = assignRounds(_pool(), Random(seed));
+      for (var i = 0; i < 3; i++) {
+        if (r[i].isHealthy) healthyAt[i]++;
+      }
+    }
+    for (var i = 0; i < 3; i++) {
+      final ratio = healthyAt[i] / seeds;
+      expect(
+        ratio,
+        inInclusiveRange(0.38, 0.62),
+        reason: '${i + 1}라운드 정상 비율 ${ratio.toStringAsFixed(2)} — 한쪽으로 쏠렸다',
+      );
+    }
+  });
+
+  test('병 라운드에는 응애와 다른 병이 섞여 나온다', () {
+    final kinds = <CaseKind>{};
+    for (var seed = 0; seed < 100; seed++) {
+      for (final c in assignRounds(_pool(), Random(seed))) {
+        kinds.add(c.kind);
+      }
+    }
+    expect(
+      kinds,
+      containsAll([CaseKind.varroa, CaseKind.visible, CaseKind.healthy]),
+    );
   });
 
   test('세션마다 조합이 달라진다', () {
@@ -89,36 +104,31 @@ void main() {
       }
     }
     final sickAvg = alwaysSick / seeds;
+    // 2026-09-16: 세 라운드 다 동전 던지기 — 한쪽으로만 찍으면 기대값 1.5장.
+    // 여유 0.3 은 200 시드의 표본 흔들림 몫이다.
     expect(
       sickAvg,
-      lessThan(2.4),
+      lessThan(1.8),
       reason: '"문제 있음"만 눌러 평균 ${sickAvg.toStringAsFixed(2)}장 — 찍기가 통한다',
     );
     expect(
       alwaysHealthy / seeds,
-      lessThan(2.0),
+      lessThan(1.8),
       reason: '"건강함"만 눌러도 다 맞으면 반대쪽으로 찍기가 통한다',
     );
   });
 
-  test('R3 의 함정(정상)이 가끔 나온다', () {
-    var healthy = 0;
-    for (var seed = 0; seed < 200; seed++) {
-      if (assignRounds(_pool(), Random(seed))[2].kind == CaseKind.healthy) {
-        healthy++;
-      }
-    }
-    expect(healthy, greaterThan(50), reason: '정상이 거의 안 나오면 함정이 성립 안 한다');
-    expect(healthy, lessThan(150), reason: '정상만 나오면 응애 주의를 못 본다');
-  });
-
   test('후보군이 비어도 멈추지 않는다', () {
-    // 데이터 사고로 visible 이 하나도 없어도 부스는 돌아야 한다.
-    final poolWithoutVisible = _pool()
-        .where((c) => c.kind != CaseKind.visible)
+    // 데이터 사고로 정상 사진이 하나도 없어도 부스는 돌아야 한다.
+    final poolWithoutHealthy = _pool()
+        .where((c) => c.kind != CaseKind.healthy)
         .toList();
-    final r = assignRounds(poolWithoutVisible, Random(0));
-    expect(r, hasLength(3));
+    for (var seed = 0; seed < 20; seed++) {
+      expect(assignRounds(poolWithoutHealthy, Random(seed)), hasLength(3));
+    }
+    // 반대로 병 사진이 없어도.
+    final onlyHealthy = _pool().where((c) => c.isHealthy).toList();
+    expect(assignRounds(onlyHealthy, Random(0)), hasLength(3));
   });
 
   group('TourResult.correct', () {
@@ -138,13 +148,13 @@ void main() {
 
     test('건강한 벌통에 "문제 있음" 은 오답 — R3 함정', () {
       final healthy = TourResult(
-        case_: _c('safe-0', CaseKind.healthy, RiskTier.safe),
+        case_: _c('healthy-1', CaseKind.healthy, RiskTier.safe),
         guess: false,
       );
       expect(healthy.correct, isFalse);
 
       final healthyRight = TourResult(
-        case_: _c('safe-0', CaseKind.healthy, RiskTier.safe),
+        case_: _c('healthy-1', CaseKind.healthy, RiskTier.safe),
         guess: true,
       );
       expect(healthyRight.correct, isTrue);
@@ -152,7 +162,7 @@ void main() {
 
     test('건너뛴 라운드는 맞힌 것으로 세지 않는다', () {
       final skipped = TourResult(
-        case_: _c('safe-0', CaseKind.healthy, RiskTier.safe),
+        case_: _c('healthy-1', CaseKind.healthy, RiskTier.safe),
         guess: null,
       );
       expect(skipped.correct, isFalse);

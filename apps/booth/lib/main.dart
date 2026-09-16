@@ -191,9 +191,9 @@ class _BoothAppState extends State<BoothApp> {
     switch (_stage) {
       case BoothStage.attract:
         return AttractScreen(
-          // 히어로는 danger-100 — 응애 박스가 2개라 애니메이션이 가장 강하다.
+          // 히어로는 varroa-1 — 위험 100 이라 게이지가 꽉 차고 빨간 박스가 뜬다.
           case_: _cases.firstWhere(
-            (c) => c.id == 'danger-100',
+            (c) => c.id == 'varroa-1',
             orElse: () => _cases.first,
           ),
           onStart: () => _goTo(BoothStage.intro),
