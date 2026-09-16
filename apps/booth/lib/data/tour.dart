@@ -45,11 +45,12 @@ class TourResult {
 /// 풀에서 3장을 뽑는다.
 ///
 ///   R1  응애를 뺀 나머지 — 정상 | 날개불구 | 부저병. 관람객이 셋 중 하나를 고른다.
-///   R2  병든 벌통 (응애·다른 병 아무거나). 건강/문제 2택.
-///   R3  병든 벌통. 건강/문제 2택.
+///   R2  응애가 반드시 있는 사진 (다른 병도 같이 들어 있다). 건강/문제 2택.
+///   R3  응애가 반드시 있는 사진. 건강/문제 2택.
 ///
-/// 2026-09-16 확정. 1라운드가 3택이라 찍으면 33%, 2·3라운드는 항상 병든
-/// 벌통이지만 "무엇이 문제였는지"를 결과 화면이 보여주는 게 요점이다.
+/// 2026-09-16 확정. 1라운드가 3택이라 찍으면 33%. 2·3라운드는 항상 병든
+/// 벌통이지만, 결과 화면이 "응애 말고도 이런 병이 있었다"를 같이 보여주는 게
+/// 요점이다 — 다른 병을 보고 맞힌 관람객도 응애는 못 봤다는 대비가 선다.
 ///
 /// 한 세션에 같은 사진이 두 번 나오지 않게 뽑힌 것은 제외하고, 후보가 비면
 /// 아직 안 나온 아무 사진으로 채운다 — 부스가 데이터 사고로 서는 것보다는
@@ -72,7 +73,7 @@ List<BoothCase> assignRounds(List<BoothCase> pool, Random rng) {
 
   final round1Ids = {for (final c in kRound1Choices) c.id};
   bool round1(BoothCase c) => round1Ids.contains(round1AnswerOf(c));
-  bool sick(BoothCase c) => c.kind != CaseKind.healthy;
+  bool varroa(BoothCase c) => c.kind == CaseKind.varroa;
 
-  return [pick(round1), pick(sick), pick(sick)];
+  return [pick(round1), pick(varroa), pick(varroa)];
 }

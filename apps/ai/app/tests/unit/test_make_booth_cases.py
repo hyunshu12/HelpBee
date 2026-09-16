@@ -18,19 +18,21 @@ def _case(case_id: str) -> dict:
 
 
 def test_danger_case_matches_verified_label_values():
-    c = _case("varroa-1")
-    assert c["riskScore"] == 100
+    # varroa-4 (성충_응애/012): 응애 1 + 날개불구 1 / 8 — 2026-09-16 라벨 검증값.
+    c = _case("varroa-4")
+    assert c["riskScore"] == 78
     assert c["tier"] == "danger"
-    assert c["beeTotal"] == 5
-    assert c["sickCount"] == 1
+    assert c["beeTotal"] == 8
+    assert c["sickCount"] == 2
     assert len(c["recommendations"]) == 5
 
 
 def test_all_bee_boxes_are_kept():
     """좌표가 정확하면(2026-08-30 xyxy 수정) 정상 벌 박스도 겹치거나 잘리지 않는다 — 전부 그린다 (설계 §6 갱신)."""
-    c = _case("varroa-1")
+    c = _case("varroa-4")
     assert len(c["boxes"]) == c["beeTotal"]
-    assert sum(1 for b in c["boxes"] if b["cls"] == "varroa") == c["sickCount"]
+    # sickCount = 응애 + 다른 병 (2026-09-16 부터 응애 사진에 다른 병이 같이 있다)
+    assert sum(1 for b in c["boxes"] if b["cls"] in ("varroa", "disease")) == c["sickCount"]
 
 
 def test_safe_case_has_no_varroa_boxes():
@@ -64,9 +66,27 @@ def test_pool_is_hard_by_eye():
         if c["kind"] == "healthy":
             assert c["sickCount"] == 0, c["id"]
             continue
-        assert c["sickCount"] / c["beeTotal"] <= 0.20, f"{c['id']}: 병든 개체가 너무 많아 눈에 띈다"
+        assert c["sickCount"] / c["beeTotal"] <= 1 / 3, f"{c['id']}: 병든 개체가 너무 많아 눈에 띈다"
         if c["kind"] == "varroa":
             assert c["tier"] != "safe", f"{c['id']}: 응애인데 안전 등급 — 정답과 모순"
+
+
+def test_varroa_cases_carry_a_second_disease():
+    """2026-09-16: 2·3라운드 사진은 응애 + 다른 병이 같이 있어야 한다.
+
+    결과 화면에서 "응애 말고도 이런 게 있었다"가 함께 보여야 하고, 다른 병을 보고
+    '문제 있음'을 맞힌 관람객에게도 "그래도 응애는 못 봤다"는 대비가 선다.
+    """
+    for spec in (s for s in BOOTH_CASES if s.kind == "varroa"):
+        c = build_case(spec)
+        assert any(b["cls"] == "varroa" for b in c["boxes"]), spec.id
+        assert any(b["cls"] == "disease" for b in c["boxes"]), f"{spec.id}: 다른 병이 없다"
+
+
+def test_round1_pool_has_no_chalkbrood():
+    """1라운드 선택지는 정상·날개불구·부저병 — 석고병이 나오면 맞힐 방법이 없다."""
+    for spec in (s for s in BOOTH_CASES if s.kind == "visible"):
+        assert build_case(spec)["disease"] in ("dwv", "foulbrood"), spec.id
 
 
 def test_visible_case_has_disease_fields():
@@ -119,5 +139,5 @@ def test_pool_covers_every_round():
     assert kinds.count("healthy") >= 3
     assert kinds.count("varroa") >= 3
     assert kinds.count("visible") >= 3
-    assert len(BOOTH_CASES) == 15
-    assert len({s.id for s in BOOTH_CASES}) == 15, "id 중복"
+    assert len(BOOTH_CASES) == 14
+    assert len({s.id for s in BOOTH_CASES}) == 14, "id 중복"

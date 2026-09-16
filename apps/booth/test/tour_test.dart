@@ -50,8 +50,8 @@ void main() {
     }
   });
 
-  test('1라운드는 응애가 아니고, 2·3라운드는 병든 벌통이다', () {
-    // 2026-09-16 확정: R1 = 정상 | 날개불구 | 부저병 (택1), R2·R3 = 병든 벌통 (2택).
+  test('1라운드는 응애가 아니고, 2·3라운드는 응애가 있는 사진이다', () {
+    // 2026-09-16 확정: R1 = 정상 | 날개불구 | 부저병 (택1), R2·R3 = 응애 사진 (2택).
     for (var seed = 0; seed < 100; seed++) {
       final r = assignRounds(_pool(), Random(seed));
       expect(r[0].kind, isNot(CaseKind.varroa), reason: 'R1 에 응애 (seed $seed)');
@@ -60,8 +60,8 @@ void main() {
         isIn([for (final c in kRound1Choices) c.id]),
         reason: 'R1 정답이 선택지에 없다 (seed $seed)',
       );
-      expect(r[1].isHealthy, isFalse, reason: 'R2 가 정상 (seed $seed)');
-      expect(r[2].isHealthy, isFalse, reason: 'R3 가 정상 (seed $seed)');
+      expect(r[1].kind, CaseKind.varroa, reason: 'R2 에 응애가 없다 (seed $seed)');
+      expect(r[2].kind, CaseKind.varroa, reason: 'R3 에 응애가 없다 (seed $seed)');
     }
   });
 

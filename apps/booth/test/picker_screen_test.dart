@@ -23,19 +23,19 @@ BoothCase _case(String id, RiskTier tier, int risk) => BoothCase(
   boxes: const [],
 );
 
-/// 실제 풀과 같은 15장. 5x3 격자가 다 그려지고 마지막 칸까지 눌리는지 본다.
+/// 실제 풀과 같은 14장. 5x3 격자(마지막 줄 한 칸 빈 채)가 다 그려지고 마지막
+/// 칸까지 눌리는지 본다.
 final _cases = [
   for (var i = 1; i <= 5; i++) _case('varroa-$i', RiskTier.watch, 50),
   _case('dwv-1', RiskTier.safe, 0),
   _case('dwv-2', RiskTier.safe, 0),
   _case('foul-1', RiskTier.safe, 0),
   _case('foul-2', RiskTier.safe, 0),
-  _case('chalk-1', RiskTier.safe, 0),
   for (var i = 1; i <= 5; i++) _case('healthy-$i', RiskTier.safe, 0),
 ];
 
 void main() {
-  testWidgets('열다섯 장을 모두 그린다', (tester) async {
+  testWidgets('열네 장을 모두 그린다', (tester) async {
     await useBoothSurface(tester);
     await tester.pumpWidget(
       MaterialApp(
@@ -44,7 +44,7 @@ void main() {
         ),
       ),
     );
-    expect(find.byType(Image), findsNWidgets(15));
+    expect(find.byType(Image), findsNWidgets(14));
   });
 
   testWidgets('카드 N 을 누르면 케이스 N 이 전달된다', (tester) async {
@@ -81,7 +81,7 @@ void main() {
   // 2026-08-31 회귀: 고정 childAspectRatio(16/10) GridView 는 캔버스가 가정보다
   // 짧으면(웹 백업의 브라우저 크롬, 기기별 세이프에어리어) 아래 줄을 잘라내
   // 아래 줄 카드를 **아예 누를 수 없게** 만든다. 실제 웹 빌드에서 재현됨.
-  testWidgets('캔버스가 짧아도 열다섯 카드 모두 넘침 없이 눌린다', (tester) async {
+  testWidgets('캔버스가 짧아도 열네 카드 모두 넘침 없이 눌린다', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 720));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -97,7 +97,7 @@ void main() {
     expect(tester.takeException(), isNull, reason: '짧은 캔버스에서 레이아웃이 넘치면 안 된다');
 
     // 마지막 카드까지 실제로 탭이 닿아야 한다 — 잘린 카드는 히트테스트가 안 된다.
-    await tester.tap(find.byType(InkWell).at(14), warnIfMissed: false);
+    await tester.tap(find.byType(InkWell).at(13), warnIfMissed: false);
     expect(picked, ['healthy-5'], reason: '마지막 카드가 화면 밖으로 잘렸다');
   });
 }
