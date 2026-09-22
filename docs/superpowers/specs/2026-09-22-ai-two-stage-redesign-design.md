@@ -52,7 +52,7 @@
 [원본 사진 1~N] ─ EXIF 회전만, 다운스케일 금지, 원본 보존
    ▼ ① 품질 체크(해상도·블러·밝기) → 경고만
    ▼ ② Stage-1 성충 검출: YOLO11s, 1-class `bee`, 입력 긴 변 1280 축소본, conf 0.15(recall 우선)
-        벌 수 > 400 또는 원본 > 20MP면 2×2 타일(SAHI) + NMS 병합
+        원본 > 20MP이거나 1차 패스 탐지 수 > 400이면 2×2 타일(SAHI) 재패스 + NMS 병합
    ▼ ③ 박스 → 원본 좌표 역매핑 → 원본에서 크롭(여백 10% 랜덤 지터) → 종횡비 유지 패딩 → 224²
    ▼ ④ Stage-2 감염 분류: ShuffleNet-V2 x1.0 (ImageNet 사전학습), 이진, temperature scaling 보정
    ▼ ⑤ 집계 vdi / CI / bee_total
