@@ -2,7 +2,10 @@
 """단일 split 진실 소스. golden/cal-A/cal-B는 colony 홀드아웃, train/val은 colony 내 시간 블록.
 
 - golden: 10분 디듀프 (같은 colony·device 에서 직전 채택 프레임과 10분 미만이면 dropped_dup)
-- frozen_colonies: 한 번 정해지면 `--frozen` 으로 재생성해도 유지 (Training 셋 추가 시)
+- frozen_colonies: 한 번 정해지면 `--frozen` 으로 재생성해도 유지 (Training 셋 추가 시).
+  `training/data/frozen_colonies.json` 이 있으면 `--frozen` 없이는 실행 거부(rc 2) — 새로 뽑으려면
+  명시적 `--refreeze`. `--frozen` 이면 출력 frozen_colonies == 입력 == 커밋 파일을 검사한다.
+- 라벨 대비 이미지 누락은 루트별로 세어 출력, 5% 초과면 rc 2 (압축 해제 레이아웃 오류)
 - 외부 데이터(VarroaDataset / EV2)는 `split_external` — EV2 는 영상 단위 홀드아웃(연속 프레임 누수 방지)
 
 Usage (apps/ai 에서):
@@ -115,46 +118,76 @@ def split_external(rows: list[dict], seed: int, holdout_frac: float = 0.15) -> d
 
 
 def load_items_from_aihub(roots: list[Path], source_tags: list[str]) -> list[dict]:
-    from training.data.aihub_to_yolo import _resolve_image_path, parse_annotations
+    """루트별 02.라벨링데이터/*.json → manifest 항목. 이미지 누락은 루트별로 세어 로그하고,
+    5% 초과면 MissingImagesError (압축 해제 레이아웃 오류 — DOWNLOAD.md §5)."""
+    from training.data.aihub_to_yolo import _resolve_image_path, check_missing_images, parse_annotations
     items = []
     for root, tag in zip(roots, source_tags):
+        n_json = missing = bad_ts = 0
         for jp in (root / "02.라벨링데이터").rglob("*.json"):
+            n_json += 1
             d = json.loads(jp.read_text(encoding="utf-8"))
             img = _resolve_image_path(jp, d["image"]["filename"])
             if img is None:
+                missing += 1
                 continue
             boxes, _ = parse_annotations(d, "adult1")
             ts = d.get("collection", {}).get("datetime", "")[:15]
             try:
                 t = datetime.strptime(ts, "%Y%m%d_%H%M%S")
             except ValueError:
+                bad_ts += 1
                 continue
             items.append({"image": str(img.resolve()), "colony": str(d.get("colony", {}).get("id")),
                           "device": d.get("collection", {}).get("device", ""), "ts": t,
                           "has_varroa_adult": any(b[5] == 5 for b in boxes), "n_adult": len(boxes), "source": tag})
+        print(f"[{tag}] json={n_json} missing_image={missing} bad_datetime={bad_ts}", flush=True)
+        check_missing_images(missing, n_json, str(root))
     return items
 
 
-def main():
+DEFAULT_FROZEN_COLONIES = Path("training/data/frozen_colonies.json")
+
+
+def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--roots", nargs="+", type=Path, required=True)
     p.add_argument("--tags", nargs="+", required=True)
     p.add_argument("--output", type=Path, default=Path("training/split_manifest.json"))
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--frozen", type=Path, default=None, help="기존 manifest — frozen_colonies 유지")
-    a = p.parse_args()
+    p.add_argument("--frozen-colonies", dest="frozen_colonies", type=Path, default=DEFAULT_FROZEN_COLONIES,
+                   help="동결 colony 파일 (커밋됨). 존재하면 --frozen 또는 --refreeze 없이는 실행 거부")
+    p.add_argument("--refreeze", action="store_true",
+                   help="golden/cal colony 를 새로 뽑아 동결 파일을 덮어씀 (golden 오염 위험 — 의도적일 때만)")
+    a = p.parse_args(argv)
     if len(a.roots) != len(a.tags):
         p.error("--roots 와 --tags 개수가 같아야 한다")
+    if a.frozen and a.refreeze:
+        p.error("--frozen 과 --refreeze 는 함께 쓸 수 없다")
+    committed = (json.loads(a.frozen_colonies.read_text(encoding="utf-8"))
+                 if a.frozen_colonies.exists() else None)
+    if committed is not None and not (a.frozen or a.refreeze):
+        p.error(f"{a.frozen_colonies} 가 이미 있다 — golden/cal colony 동결 유지: "
+                f"--frozen {a.output} 로 재생성하거나, 정말 다시 뽑을 때만 --refreeze")
     frozen = json.loads(a.frozen.read_text(encoding="utf-8"))["frozen_colonies"] if a.frozen else None
-    items = load_items_from_aihub(a.roots, a.tags)
+    if frozen is not None and committed is not None and frozen != committed:
+        p.error(f"--frozen {a.frozen} 의 frozen_colonies 가 {a.frozen_colonies} 와 다르다")
+    try:
+        items = load_items_from_aihub(a.roots, a.tags)
+    except ValueError as e:  # MissingImagesError
+        p.error(str(e))
     if not items:
         p.error(f"라벨 0건 — {[str(r / '02.라벨링데이터') for r in a.roots]} 확인")
     m = build_manifest(items, a.seed, frozen=frozen)
+    if frozen is not None and m["frozen_colonies"] != frozen:
+        p.error("frozen_colonies 가 입력과 달라짐 — 동결 위반")
     a.output.write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
-    Path("training/data/frozen_colonies.json").write_text(
-        json.dumps(m["frozen_colonies"], ensure_ascii=False, indent=1), encoding="utf-8")
+    a.frozen_colonies.parent.mkdir(parents=True, exist_ok=True)
+    a.frozen_colonies.write_text(json.dumps(m["frozen_colonies"], ensure_ascii=False, indent=1), encoding="utf-8")
     print(Counter(v["split"] for v in m["images"].values()))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

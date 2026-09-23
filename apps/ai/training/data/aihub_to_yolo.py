@@ -167,8 +167,27 @@ def _unique_filename(json_path: Path, image_filename: str) -> str:
     return f"{parent_id}_{stem}{suffix}"
 
 
-def _parse_one_json(json_path: Path, mapping: str = DEFAULT_MAPPING) -> Sample | None:
-    """71667 JSON 1개 → Sample. bbox 해석·매핑은 parse_annotations 단일 소스."""
+MAX_MISSING_IMAGE_FRAC = 0.05  # 라벨은 있는데 이미지가 없는 비율 상한 — 넘으면 압축 해제 레이아웃 오류로 본다
+
+
+class MissingImagesError(ValueError):
+    """라벨 대비 이미지 누락이 MAX_MISSING_IMAGE_FRAC 초과 (01.원천데이터/02.라벨링데이터 형제 레이아웃 확인)."""
+
+
+def check_missing_images(missing: int, total: int, where: str) -> None:
+    """누락 수를 로그로 남기고 total 의 5% 초과면 MissingImagesError."""
+    if missing:
+        logger.warning(f"이미지 없는 라벨 {missing}/{total} ({where})")
+    if total and missing / total > MAX_MISSING_IMAGE_FRAC:
+        raise MissingImagesError(
+            f"이미지 누락 {missing}/{total} ({missing / total:.1%}) > {MAX_MISSING_IMAGE_FRAC:.0%} — "
+            f"{where} 아래 {IMAGE_DIR_NAME}/{LABEL_DIR_NAME} 가 같은 루트의 형제인지 확인 (DOWNLOAD.md §5)")
+
+
+def _parse_one_json(json_path: Path, mapping: str = DEFAULT_MAPPING,
+                    reasons: Counter | None = None) -> Sample | None:
+    """71667 JSON 1개 → Sample. bbox 해석·매핑은 parse_annotations 단일 소스.
+    reasons 가 주어지면 이미지 누락 시 reasons["missing_image"] 를 올린다."""
     try:
         d = json.loads(json_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
@@ -187,6 +206,8 @@ def _parse_one_json(json_path: Path, mapping: str = DEFAULT_MAPPING) -> Sample |
     image_path = _resolve_image_path(json_path, image_filename)
     if image_path is None:
         logger.warning(f"image 파일 없음: {image_filename} (label: {json_path})")
+        if reasons is not None:
+            reasons["missing_image"] += 1
         return None
 
     # YOLO 라벨 변환 (bbox = xyxy 픽셀, area 교차검증)
@@ -252,8 +273,10 @@ def collect_samples(
 
     samples: list[Sample] = []
     skipped = Counter()
+    seen = 0
     for jp in label_files:
-        s = _parse_one_json(jp, mapping)
+        seen += 1
+        s = _parse_one_json(jp, mapping, reasons=skipped)
         if s is None:
             skipped["parse_or_no_label"] += 1
             continue
@@ -262,6 +285,7 @@ def collect_samples(
             break
 
     logger.info(f"수집된 샘플: {len(samples)} (skipped={dict(skipped)})")
+    check_missing_images(skipped["missing_image"], seen, str(source))
     return samples
 
 
@@ -342,7 +366,11 @@ def main():
     )
     args = p.parse_args()
 
-    samples = collect_samples(args.source, limit=args.limit, seed=args.seed, mapping=args.mapping)
+    try:
+        samples = collect_samples(args.source, limit=args.limit, seed=args.seed, mapping=args.mapping)
+    except MissingImagesError as e:
+        logger.error(str(e))
+        raise SystemExit(2) from None
     if not samples:
         raise SystemExit("샘플 0건. --source 경로 확인.")
 

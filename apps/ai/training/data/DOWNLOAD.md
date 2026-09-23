@@ -75,19 +75,50 @@ tail -f download.log   # Ctrl+C 로 tail 만 빠져나온다 (다운로드는 �
 
 ## 5. zip 해제 (7-Zip)
 
-AI Hub 파일은 tar 안에 zip 으로 들어 있다. 한국어 파일명이 깨지지 않게 코드페이지를 지정해 푼다.
+AI Hub 파일은 tar 안에 zip 으로 들어 있다. 원천 zip(`VS_*`/`TS_*`)과 라벨 zip(`VL_*`/`TL_*`)을
+**같은 루트** 아래 `01.원천데이터/` 와 `02.라벨링데이터/` 로 나란히 풀어야 한다. 코드
+(`make_split_manifest`, `aihub_to_yolo`, `make_crops`)는 라벨 경로의 `02.라벨링데이터` 한 세그먼트만
+`01.원천데이터` 로 바꿔 이미지를 찾는다. zip 마다 따로 폴더를 만들어 풀면(`.../VS_xxx/`, `.../VL_xxx/`)
+이미지를 하나도 못 찾는다.
+
+```
+<ROOT>/                        ← --roots 로 넘기는 경로 (= /d/helpbee-data/aihub-71667-val)
+├── 01.원천데이터/성충/성충_응애/044/X.jpg
+└── 02.라벨링데이터/성충/성충_응애/044/X.json    ← 01 아래와 같은 하위 경로
+```
+
+한국어 파일명이 깨지지 않게 코드페이지를 지정한다. 먼저 zip 하나의 목록을 보고 최상위 폴더를 확인한다.
 
 ```bash
 SEVENZ="/c/Program Files/7-Zip/7z.exe"
-cd /d/helpbee-data/aihub-71667-val
-find . -name '*.zip' -print0 | while IFS= read -r -d '' z; do
-  "$SEVENZ" x -mcp=65001 -y "$z" -o"$(dirname "$z")/$(basename "$z" .zip)"
-done
-# 폴더명 검증 — 0 이면 파일명이 깨진 것. -mcp=949 로 다시 푼다.
-test "$(find . -type d -name '01.원천데이터' | wc -l)" -ge 1 && echo OK || echo "FAIL: 01.원천데이터 없음 — 인코딩 확인"
+ROOT=/d/helpbee-data/aihub-71667-val
+cd "$ROOT"
+"$SEVENZ" l -mcp=65001 "$(find . -name 'VS_*.zip' | head -1)" | sed -n '15,25p'
 ```
 
-Training 폴더(`aihub-71667-train`)도 같은 방식으로 푼다. 다 풀고 검증까지 통과한 뒤에만 zip 을 정리한다.
+- 목록이 `01.원천데이터/...` (라벨 zip 이면 `02.라벨링데이터/...`)로 시작하면 **zip 이 최상위 폴더를 이미
+  포함**한다 → `INNER=1`.
+- 목록이 `성충/...` 처럼 바로 하위 폴더로 시작하면 → `INNER=0`.
+
+```bash
+INNER=0   # 위에서 확인한 값
+find . -name '*.zip' -print0 | while IFS= read -r -d '' z; do
+  case "$(basename "$z")" in
+    VS_*|TS_*) sub=01.원천데이터 ;;
+    VL_*|TL_*) sub=02.라벨링데이터 ;;
+    *) case "$z" in *원천*) sub=01.원천데이터 ;; *라벨*) sub=02.라벨링데이터 ;; *) echo "SKIP(분류 불가): $z"; continue ;; esac ;;
+  esac
+  if [ "$INNER" = 1 ]; then dest="$ROOT"; else dest="$ROOT/$sub"; fi
+  "$SEVENZ" x -mcp=65001 -y "$z" -o"$dest"
+done
+# 레이아웃 검증 — 두 폴더가 $ROOT 바로 아래 형제여야 한다. 0 이면 파일명 깨짐(-mcp=949 로 다시) 또는 경로 오류.
+test -d "$ROOT/01.원천데이터" && test -d "$ROOT/02.라벨링데이터" && echo "OK: 형제 레이아웃" \
+  || echo "FAIL: $ROOT/01.원천데이터 · $ROOT/02.라벨링데이터 가 둘 다 있어야 함"
+# 미러 검증 — 라벨 대비 이미지 누락 수. make_split_manifest/aihub_to_yolo 도 같은 수를 출력하고 5% 초과면 rc 2.
+cd /c/path/to/apps/ai && python -c "from pathlib import Path; from training.data.aihub_to_yolo import collect_samples; collect_samples(Path(r'$ROOT'), mapping='adult1')"
+```
+
+Training 폴더(`aihub-71667-train`)도 `ROOT` 만 바꿔 같은 방식으로 푼다. 다 풀고 검증까지 통과한 뒤에만 zip 을 정리한다.
 
 ## 6. 외부 데이터 — VarroaDataset · EV2 (Zenodo, CC BY 4.0)
 
@@ -143,8 +174,8 @@ ls   # dataset_free/  dataset_infested/  labels.txt
 D:\helpbee-data\
 ├── aihub-71667-filetree.txt
 ├── aihub-71488-filetree.txt
-├── aihub-71667-val\      # …\01.원천데이터\, …\02.라벨링데이터\
-├── aihub-71667-train\
+├── aihub-71667-val\      # 01.원천데이터\ + 02.라벨링데이터\ 바로 아래 형제 (§5)
+├── aihub-71667-train\    # 같은 구조
 └── external\
     ├── varroadataset\    # gt.csv, train\, val\, test\
     └── ev2\              # labels.txt, dataset_free\, dataset_infested\

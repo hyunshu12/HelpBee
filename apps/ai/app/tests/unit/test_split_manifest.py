@@ -80,3 +80,74 @@ def test_committed_manifest_frozen_colonies_unchanged():
         pytest.skip("split_manifest.json / frozen_colonies.json 미커밋 (71667 Validation 도착 전)")
     m = json.loads(manifest.read_text(encoding="utf-8"))
     assert m["frozen_colonies"] == json.loads(frozen.read_text(encoding="utf-8"))
+
+
+# ---- 최종 리뷰 I3: 동결 강제 / I4: 이미지 누락 집계 ----
+
+def _write_tree(root: Path, n: int, n_missing: int) -> None:
+    """가짜 71667 트리 — 01.원천데이터/02.라벨링데이터 형제. 앞 n_missing 개는 이미지 없음."""
+    for i in range(n):
+        lab = root / "02.라벨링데이터" / "성충" / "성충_응애" / f"{i % 12:03d}"
+        img = root / "01.원천데이터" / "성충" / "성충_응애" / f"{i % 12:03d}"
+        lab.mkdir(parents=True, exist_ok=True)
+        img.mkdir(parents=True, exist_ok=True)
+        fn = f"C_{i:04d}.jpg"
+        d = {"image": {"width": 1920, "height": 1080, "filename": fn},
+             "annotations": [{"category_id": 5 if i % 3 == 0 else 4, "bbox": [0, 0, 10, 10], "area": 100}],
+             "collection": {"device": "소비판촬영기", "datetime": f"202308{10 + i // 100:02d}_{9 + (i % 100) // 10:02d}{i % 10:02d}00_001"},
+             "colony": {"id": f"{i % 12:03d}"}}
+        (lab / f"C_{i:04d}.json").write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        if i >= n_missing:
+            (img / fn).write_bytes(b"x")
+
+
+def test_load_items_counts_missing_and_fails_over_5pct(tmp_path, capsys):
+    from training.data.aihub_to_yolo import MissingImagesError
+    from training.data.make_split_manifest import load_items_from_aihub
+
+    ok = tmp_path / "ok"
+    _write_tree(ok, 100, 3)  # 3% 누락 — 허용, 로그
+    items = load_items_from_aihub([ok], ["71667-val"])
+    assert len(items) == 97
+    assert "missing_image=3" in capsys.readouterr().out
+    bad = tmp_path / "bad"
+    _write_tree(bad, 100, 10)  # 10% 누락 — 레이아웃 오류
+    with pytest.raises(MissingImagesError):
+        load_items_from_aihub([bad], ["71667-val"])
+
+
+def test_collect_samples_fails_over_5pct_missing(tmp_path):
+    from training.data.aihub_to_yolo import MissingImagesError, collect_samples
+
+    _write_tree(tmp_path / "ok", 40, 1)
+    assert len(collect_samples(tmp_path / "ok", mapping="adult1")) == 39
+    _write_tree(tmp_path / "bad", 40, 10)
+    with pytest.raises(MissingImagesError):
+        collect_samples(tmp_path / "bad", mapping="adult1")
+
+
+def test_main_refuses_to_refreeze_without_flag(tmp_path, monkeypatch):
+    import training.data.make_split_manifest as msm
+
+    monkeypatch.setattr(msm, "load_items_from_aihub", lambda roots, tags: _items())
+    out, fz = tmp_path / "split_manifest.json", tmp_path / "frozen_colonies.json"
+    base = ["--roots", str(tmp_path), "--tags", "71667-val", "--output", str(out), "--frozen-colonies", str(fz)]
+    assert msm.main(base) == 0  # 동결 파일 없음 → 최초 생성
+    first = json.loads(fz.read_text(encoding="utf-8"))
+    assert json.loads(out.read_text(encoding="utf-8"))["frozen_colonies"] == first
+
+    with pytest.raises(SystemExit) as e:  # 동결 파일 있음 + 플래그 없음 → 거부
+        msm.main(base + ["--seed", "7"])
+    assert e.value.code == 2
+    assert json.loads(fz.read_text(encoding="utf-8")) == first  # 안 바뀜
+
+    assert msm.main(base + ["--seed", "7", "--frozen", str(out)]) == 0  # --frozen → 동결 유지
+    assert json.loads(fz.read_text(encoding="utf-8")) == first
+    assert json.loads(out.read_text(encoding="utf-8"))["frozen_colonies"] == first
+
+    other = tmp_path / "other.json"  # 커밋 파일과 다른 frozen 입력 → 거부
+    other.write_text(json.dumps({"frozen_colonies": {"golden": ["x"], "cal_a": [], "cal_b": []}}), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        msm.main(base + ["--frozen", str(other)])
+
+    assert msm.main(base + ["--seed", "7", "--refreeze"]) == 0  # 명시적 재동결만 허용
