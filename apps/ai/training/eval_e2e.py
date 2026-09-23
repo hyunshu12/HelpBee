@@ -22,7 +22,8 @@ bee_varroa 탐지 수 / 전체 벌 탐지 수를 raw 로 aggregate(보정 없음
 
 출력 JSON (스키마 고정):
     {"tier_confusion": {true: {pred: n}}, "tier_agreement": float, "trivial_all_low": float,
-     "healthy_frames_under_3_pct": float, "single_stage_baseline": {...} | null}
+     "healthy_frames_under_3_pct": float, "single_stage_baseline": {...} | null,
+     "vdi_mae": float, "vdi_mae_by_target": {"<target>": float}}   # 스펙 §7 의사-프레임 VDI MAE
 
 onnxruntime/cv2/ultralytics 는 함수 안에서 lazy import — 이 모듈은 numpy/pandas/yaml/scipy 만으로 import 가능.
 """
@@ -110,6 +111,18 @@ def summarize(rows: list[dict]) -> dict:
         "tier_agreement": tier_agreement(truth, pred),
         "trivial_all_low": trivial_baseline(truth),
         "healthy_frames_under_3_pct": float(np.mean(healthy)) if healthy else None,
+    }
+
+
+def vdi_mae(rows: list[dict]) -> dict:
+    """의사-프레임 VDI MAE: |앱이 보여줄 vdi(aggregate, 보정 포함) − 참 raw %(k_true/n·100)| 평균, 전체 + target별."""
+    err = [(r["target"], abs(r["vdi"] - r["k_true"] / r["n"] * 100)) for r in rows]
+    by_t: dict[str, list[float]] = {}
+    for t, e in err:
+        by_t.setdefault(f"{float(t):g}", []).append(e)
+    return {
+        "vdi_mae": float(np.mean([e for _, e in err])) if err else None,
+        "vdi_mae_by_target": {t: float(np.mean(v)) for t, v in by_t.items()},
     }
 
 
@@ -207,7 +220,8 @@ def main() -> None:
     targets = tuple(float(t) for t in a.targets.split(",") if t.strip())
     frames = build_pseudo_frames(df, targets=targets, n_bees=a.n_bees, n_frames=a.n_frames, seed=a.seed)
     logits = onnx_logits(a.onnx, a.crops, [p for f in frames for p in f["paths"]])
-    res = summarize(frame_tiers(frames, logits, cfg))
+    rows = frame_tiers(frames, logits, cfg)
+    res = {**summarize(rows), **vdi_mae(rows)}
 
     if a.baseline_weights and a.baseline_labels:
         res["single_stage_baseline"] = single_stage_baseline(a.baseline_weights, a.baseline_labels, a.golden, cfg,

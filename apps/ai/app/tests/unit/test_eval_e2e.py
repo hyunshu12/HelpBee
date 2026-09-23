@@ -13,6 +13,7 @@ from training.eval_e2e import (
     tier_confusion,
     trivial_baseline,
     true_tier,
+    vdi_mae,
 )
 
 
@@ -69,3 +70,13 @@ def test_make_single2_data_yaml(tmp_path: Path):
     d = yaml.safe_load(out.read_text(encoding="utf-8"))
     assert d["nc"] == 2 and d["names"] == ["bee_normal", "bee_varroa"]
     assert (d["path"], d["train"], d["val"], d["label_root"]) == ("/x", "t.txt", "v.txt", "/labels")
+
+
+def test_vdi_mae_overall_and_by_target():
+    rows = [{"target": 0, "n": 100, "k_true": 0, "vdi": 1.0},
+            {"target": 0, "n": 100, "k_true": 0, "vdi": 0.0},
+            {"target": 5, "n": 200, "k_true": 10, "vdi": 7.0},   # 참 5% → 오차 2
+            {"target": 5, "n": 200, "k_true": 10, "vdi": 4.0}]   # 오차 1
+    m = vdi_mae(rows)
+    assert m["vdi_mae"] == (1 + 0 + 2 + 1) / 4
+    assert m["vdi_mae_by_target"] == {"0": 0.5, "5": 1.5}
