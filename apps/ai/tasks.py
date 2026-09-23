@@ -69,8 +69,13 @@ def crops(args: list[str]) -> int:
     return _run([sys.executable, "-m", "training.data.make_crops",
                  "--manifest", "training/split_manifest.json", "--out", "training/crops", *args])
 
+def train_stage2(args: list[str]) -> int:
+    """Stage-2 학습·보정·ONNX — training/configs/stage2.yaml. 추가 인자(--degrade none|90, --set k=v ...)는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.train_stage2", "--config", "training/configs/stage2.yaml", *args])
+
 TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
-                                                  "train-stage1": train_stage1, "crops": crops}
+                                                  "train-stage1": train_stage1, "crops": crops,
+                                                  "train-stage2": train_stage2}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:

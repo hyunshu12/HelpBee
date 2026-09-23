@@ -1,0 +1,16 @@
+# v0.2.0 Stage-2 — 벌 단위 응애 감염 이진 분류기 (ShuffleNet-V2 x1.0, 스펙 §6).
+# 실행: python tasks.py train-stage2 [--degrade none|90] [--set key=value ...]
+# 산출물: <project>/<name>/{best.pt,stage2.onnx,metadata.json,resolved_config.json},
+#         training/configs/vdi.yaml, training/eval_history/v0.2.0-stage2.json
+epochs: 50
+patience: 10
+batch: 64
+lr: 3.0e-4
+weight_decay: 0.01
+label_smoothing: 0.05
+degrade: none
+img_size: 224
+seed: 42
+crops: training/crops
+project: training/runs/stage2
+name: v0.2.0-stage2
