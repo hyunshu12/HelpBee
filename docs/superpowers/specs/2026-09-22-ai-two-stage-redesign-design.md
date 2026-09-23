@@ -1,6 +1,6 @@
 # HelpBee AI 재설계 — 2-Stage 벌 단위 감염 분류 + VDI 지표 (v0.2.0 목표) — **v2**
 
-> **Status: DRAFT v2.1 → 사용자 승인 시 ACCEPTED** | v1: 2026-09-22 | v2: 2026-09-23 (적대적 검증 반영) | v2.1: 2026-09-23 (2차 검증 반영) | Owner: AI팀
+> **Status: ACCEPTED (v2.1, 사용자 승인 2026-09-23)** | v1: 2026-09-22 | v2: 2026-09-23 (적대적 검증 반영) | v2.1: 2026-09-23 (2차 검증 반영) | Owner: AI팀
 > **문서 지위: 이 문서는 AI 도메인 재설계의 단일 기준이다.** 이후 모든 AI 작업(데이터·학습·서빙·스키마·모바일 캡처)은 이 문서를 따르며, 다른 결정은 §13 결정 로그에 날짜와 근거를 남기고 **문서를 먼저 고친 뒤 코드를 바꾼다.**
 > v1 → v2 변경 근거: [`2026-09-23-ai-two-stage-redesign-adversarial-review.md`](2026-09-23-ai-two-stage-redesign-adversarial-review.md) (차단 7 · 주요 16 · 기각 1)
 > 대체 대상: ADR-0001, `2026-05-07-yolo-two-stage-design.md`, `training/configs/risk.yaml`
@@ -201,6 +201,7 @@
 | 날짜 | 결정 | 근거 |
 |---|---|---|
 | 2026-09-22 | 목표 = 실제 벌 개체별 감염 판정 시연; 벌 크롭 → 분류; 핸드헬드 폰; 비영리; 게이트 제거; `vdi`·tier 이름 변경; 외부 데이터 혼합; Training 셋 1차; Stage-1 성충 1-class | 사용자 + xyxy 재계산 |
+| 2026-09-23 | **스펙 v2.1 승인(ACCEPTED)** — 구현 계획 2개(데이터·학습 / 서빙·앱 동기)로 진행 | 사용자 |
 | 2026-09-23 | **v2.1 (2차 검증)**: `risk_score`는 `score_mapping(vdi)` 점수 단위 유지; 트렌드 시리즈 분리; `bee_infested` 저장·읽기 시 집계; `vdi_display` 단일 반올림·tier 기준; CI는 raw Jeffreys 후 보정 사상(점추정만 clip); cal-A/cal-B 반분; out-of-fold 크롭; 합성 의사-프레임 부트스트랩; CAM 닫힌 형식; 타임아웃 체인 95/90s; sharp q95·HEIC·GPS strip; AI 축소 우회는 two-stage만; golden colony 합집합 동결; Gate 0(b)를 5.5단계로; 디스크 예산표; 연산 2~4일/3~8h; A3 예외; OpenAI shim 계약·폴백 규칙; insufficient→info | critic-v2 |
 | 2026-09-23 | **적대적 검증 반영 v2**: 모바일 캡처·업로드 범위 포함; `insufficient` tier(0마리·품질 실패); **시각 증거 포함**(Grad-CAM++ 표시 전용 + 크롭 갤러리); DWV 제외; Stage-1 2.5만 상한 + 71488 필수; N장 합산은 읽기 시 집계; D: 파티션; Rogan–Gladen 보정 + specificity 게이트 + cal split 복원; 예측 박스 크롭; golden colony 홀드아웃; 이중 출력 이행 순서; OpenAI shim; 인용 2건 정정 | 검증 기록 문서 |
 
