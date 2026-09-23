@@ -1,0 +1,35 @@
+# v0.2.0 Stage-1 — 성충 1-class(bee) YOLO11s 검출 (스펙 §6).
+# data 는 make_fold_lists.py 산출물. fold 전환: python -m training.train --config ... --fold A|B|all
+# 개별 값 오버라이드: --set key=value ... (학습 후 runs/.../resolved_config.json 에 최종값 기록)
+data: training/lists/stage1_all.yaml
+model: yolo11s.yaml
+pretrained: yolo11s.pt
+epochs: 100
+patience: 20
+batch: -1
+imgsz: 1024
+device: 0
+workers: 4
+optimizer: AdamW
+lr0: 0.001
+lrf: 0.01
+cos_lr: true
+box: 7.5
+cls: 0.5
+dfl: 1.5
+hsv_h: 0.01
+hsv_s: 0.4
+hsv_v: 0.3
+degrees: 15.0
+translate: 0.1
+scale: 0.85        # ultralytics scale=gain → 배율 [0.15, 1.85]
+mosaic: 1.0
+mixup: 0.0
+copy_paste: 0.0    # bbox 라벨에서 no-op (2026-06-08 확인)
+close_mosaic: 10
+max_det: 1500
+project: training/runs/yolo
+name: v0.2.0-stage1
+seed: 42
+deterministic: true
+amp: true

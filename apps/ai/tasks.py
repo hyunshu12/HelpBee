@@ -60,7 +60,12 @@ def golden(args: list[str]) -> int:
     return _run([sys.executable, "-m", "training.data.golden_holdout",
                  "--manifest", "training/split_manifest.json", "--output", "training/golden.json", *args])
 
-TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden}
+def train_stage1(args: list[str]) -> int:
+    """Stage-1 학습 — training/configs/stage1.yaml. 추가 인자(--fold A, --set k=v ...)는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.train", "--config", "training/configs/stage1.yaml", *args])
+
+TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
+                                                  "train-stage1": train_stage1}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:

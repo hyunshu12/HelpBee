@@ -19,6 +19,14 @@ YOLO 학습 진입점 — 이어 학습(resume) 지원.
 
     4) Hyperparameter 오버라이드:
         python -m training.train --config ... --epochs 50 --batch 8 --imgsz 960
+        python -m training.train --config ... --set lr0=3e-4 amp=false scale=0.5   # 임의 키
+
+    5) Stage-1 2-fold (v0.2.0):
+        python -m training.train --config training/configs/stage1.yaml --fold A
+       → data 를 training/lists/stage1_A.yaml (make_fold_lists.py 산출물) 로 교체.
+         data yaml 의 label_root 가 있으면 ultralytics 라벨 조회를 manifest 모드로 패치.
+
+    학습 종료 시 <save_dir>/resolved_config.json 에 최종 설정(오버라이드·fold 반영)을 기록한다.
 
 Overfit 감지:
     - patience (yolo.yaml) 만큼 val mAP 정체 시 자동 종료 (Ultralytics early stopping)
@@ -29,6 +37,7 @@ Overfit 감지:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
@@ -36,6 +45,33 @@ from pathlib import Path
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce(v: str):
+    if v.lower() in ("true", "false"):
+        return v.lower() == "true"
+    try:
+        return int(v)
+    except ValueError:
+        try:
+            return float(v)
+        except ValueError:
+            return v
+
+
+def apply_overrides(cfg: dict, sets: list[str]) -> dict:
+    """`key=value` 목록을 cfg 사본에 적용 (bool/int/float 자동 변환, 그 외 문자열)."""
+    out = dict(cfg)
+    for s in sets:
+        k, _, v = s.partition("=")
+        out[k] = _coerce(v)
+    return out
+
+
+def dump_resolved(cfg: dict, save_dir: Path) -> Path:
+    p = Path(save_dir) / "resolved_config.json"
+    p.write_text(json.dumps(cfg, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    return p
 
 
 def main():
@@ -61,6 +97,13 @@ def main():
     p.add_argument("--device", type=str, default=None, help="'0' / 'cpu' / '0,1'")
     p.add_argument("--name", type=str, default=None, help="run 이름 오버라이드")
     p.add_argument("--workers", type=int, default=None)
+    p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="임의 config 키 오버라이드")
+    p.add_argument(
+        "--fold",
+        choices=("A", "B", "all"),
+        default=None,
+        help="Stage-1 fold — data 를 training/lists/stage1_<fold>.yaml 로 교체",
+    )
     args = p.parse_args()
 
     if args.resume and args.pretrained:
@@ -73,6 +116,10 @@ def main():
         v = getattr(args, key)
         if v is not None:
             cfg[key] = v
+    cfg = apply_overrides(cfg, args.set)
+    if args.fold:
+        cfg["data"] = f"training/lists/stage1_{args.fold}.yaml"
+    label_root = cfg.pop("label_root", None)
 
     # project 를 cwd 기준 절대경로로 고정.
     # Ultralytics 의 runs_dir/cwd 차이에 무관하게 산출물이 항상 <cwd>/runs/yolo/<name> 에 떨어지도록 강제한다.
@@ -84,6 +131,7 @@ def main():
     # dataset.yaml 의 상대 path('../datasets/...') 를 절대경로로 치환한 임시 yaml 을 만들어 전달.
     # ultralytics 의 datasets_dir 는 import 시점에 고정돼 사후 settings.update 가 안 먹으므로,
     # data yaml 자체에 절대 path 를 넣어 datasets_dir 의존을 완전히 제거한다.
+    resolved = dict(cfg, fold=args.fold, config=str(args.config))
     data_path = cfg.get("data")
     if data_path:
         data_yaml = Path(str(data_path))
@@ -91,6 +139,7 @@ def main():
             data_yaml = (Path.cwd() / data_yaml).resolve()
         if data_yaml.exists():
             raw = yaml.safe_load(data_yaml.read_text(encoding="utf-8"))
+            label_root = raw.get("label_root") or label_root
             p = raw.get("path")
             if p and not Path(str(p)).is_absolute():
                 raw["path"] = str((data_yaml.parent / str(p)).resolve())
@@ -106,6 +155,13 @@ def main():
 
     # ultralytics는 lazy import (로깅 깔끔)
     from ultralytics import YOLO  # type: ignore
+
+    if label_root:
+        from training.data.yolo_list_dataset import patch_label_lookup
+
+        patch_label_lookup(Path(str(label_root)))
+        resolved["label_root"] = str(label_root)
+        logger.info(f"manifest 모드 라벨 조회 패치: label_root={label_root}")
 
     if args.resume:
         if not args.resume.exists():
@@ -147,6 +203,7 @@ def main():
 
     results = model.train(**cfg)
     save_dir = getattr(results, "save_dir", None) or model.trainer.save_dir
+    print(f"[OK] resolved config: {dump_resolved(resolved, Path(save_dir))}")
     print(f"\n[OK] best.pt: {save_dir}/weights/best.pt")
     print(f"[OK] last.pt: {save_dir}/weights/last.pt")
 
