@@ -25,6 +25,8 @@ __pycache__/
 *.so
 .Python
 env/
+# 학습 박스 부트스트랩 스크립트 폴더 (venv 아님)
+!apps/ai/training/env/
 venv/
 .venv/
 pip-log.txt

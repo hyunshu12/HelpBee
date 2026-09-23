@@ -88,5 +88,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-07-08 | **배포 인프라 절감 모드**: 계획 확정(단일 EC2, ~$66/월) + api/ai 컨테이너화(tsx 런타임) + client-ip Cloudflare 대응 + SSM 배포 워크플로 + Sentry/gitleaks/백업/prod시드 + 레거시 IaC 삭제 | #46~#51 | [2026-07-08-deploy-infra-cost-saving-mode.md](./2026-07-08-deploy-infra-cost-saving-mode.md) |
 | 2026-08-12 | 한국어 어절 중간 줄바꿈 수정: 웹 전역 `word-break: keep-all`(+overflow-wrap) · 홈 인용 `text-balance` · 모바일 `keepAll()`(WORD JOINER) 9개 화면 | #52 (예정) | [2026-08-12-korean-text-wrapping.md](./2026-08-12-korean-text-wrapping.md) |
 | 2026-08-20 | **진단 이력 탭 구현**: `GET /v1/analyses`의 `hiveId` optional화(전체 벌통 이력 쿼리 + NULLS LAST·tie-breaker 정렬) + 플레이스홀더였던 모바일 이력 화면을 실제 목록으로 교체(로딩/에러/빈상태/pull-to-refresh/리포트 이동) | (미생성) | [2026-08-20-analysis-history-tab.md](./2026-08-20-analysis-history-tab.md) |
+| 2026-09-23 | Windows 학습 박스 부트스트랩(winget Python/Git/7-Zip, 실행정책·7z PATH) + Makefile 대체 `apps/ai/tasks.py` 러너(doctor/trash) — 박스 doctor `cuda True RTX 4060` | (미생성) | [2026-09-23-training-box-bootstrap.md](./2026-09-23-training-box-bootstrap.md) |
 
 (새 기록 추가 시 위 표 갱신)
