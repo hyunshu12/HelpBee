@@ -73,9 +73,13 @@ def train_stage2(args: list[str]) -> int:
     """Stage-2 학습·보정·ONNX — training/configs/stage2.yaml. 추가 인자(--degrade none|90, --set k=v ...)는 그대로 전달."""
     return _run([sys.executable, "-m", "training.train_stage2", "--config", "training/configs/stage2.yaml", *args])
 
+def gate0(args: list[str]) -> int:
+    """Gate 0(b) px/mm 별 recall 곡선 → training/eval_history/v0.2.0-gate0.json. --weights/--crops 등 인자는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.gate0_pxmm", *args])
+
 TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
                                                   "train-stage1": train_stage1, "crops": crops,
-                                                  "train-stage2": train_stage2}
+                                                  "train-stage2": train_stage2, "gate0": gate0}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:
