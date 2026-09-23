@@ -55,7 +55,12 @@ def split(args: list[str]) -> int:
     return _run([sys.executable, "-m", "training.data.make_split_manifest",
                  "--roots", str(root / "aihub-71667-val"), "--tags", "71667-val", *args])
 
-TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split}
+def golden(args: list[str]) -> int:
+    """split_manifest.json 의 golden split 에서 응애/정상 golden 선택 → training/golden.json. 추가 인자는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.data.golden_holdout",
+                 "--manifest", "training/split_manifest.json", "--output", "training/golden.json", *args])
+
+TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:
