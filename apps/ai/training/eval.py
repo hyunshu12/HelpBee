@@ -46,7 +46,7 @@ def compute_infestation_rate(
     if not label_path.exists():
         return None
     counts: Counter = Counter()
-    for line in label_path.read_text().splitlines():
+    for line in label_path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             counts[int(line.split()[0])] += 1
     total_bees = counts.get(normal_id, 0) + counts.get(varroa_id, 0) + counts.get(other_id, 0)
@@ -100,7 +100,7 @@ def main():
     # 클래스 인덱스 → 이름 (data.yaml의 names)
     import yaml as _yaml
 
-    data_cfg = _yaml.safe_load(args.golden.read_text())
+    data_cfg = _yaml.safe_load(args.golden.read_text(encoding="utf-8"))
     names: dict[int, str] = (
         data_cfg["names"]
         if isinstance(data_cfg["names"], dict)
@@ -160,7 +160,7 @@ def main():
     }
 
     out_path = args.output or args.weights.parent / "eval_golden.json"
-    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("\n===== Golden Eval =====")
     for k, v in result.items():

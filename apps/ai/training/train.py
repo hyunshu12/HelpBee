@@ -66,7 +66,7 @@ def main():
     if args.resume and args.pretrained:
         sys.exit("--resume 과 --pretrained 는 동시 사용 불가. 둘 중 하나만.")
 
-    cfg = yaml.safe_load(args.config.read_text())
+    cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
 
     # CLI 오버라이드
     for key in ("epochs", "batch", "imgsz", "device", "name", "workers"):

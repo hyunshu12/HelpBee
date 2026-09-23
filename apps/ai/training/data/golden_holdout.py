@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 def has_varroa_label(label_path: Path, varroa_class_id: int = 1) -> int:
     """라벨 파일에서 varroa(클래스 id=1) 인스턴스 수 반환."""
     n = 0
-    for line in label_path.read_text().splitlines():
+    for line in label_path.read_text(encoding="utf-8").splitlines():
         if line.strip() and int(line.split()[0]) == varroa_class_id:
             n += 1
     return n
@@ -150,7 +150,7 @@ def write_golden(items: list[Item], output: Path):
         shutil.copy2(it.image, img_dst / it.image.name)
         shutil.copy2(it.label, lbl_dst / it.label.name)
         manifest.append({"image": it.image.name, "meta": it.meta})
-    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # data.yaml — Ultralytics가 eval에서 사용.
     # ⚠️ 학습/변환과 동일한 3-class 스키마여야 한다 (dataset.yaml 단일 소스).
@@ -200,7 +200,7 @@ def main():
     # 분포 리포트
     cls_counter = Counter()
     for it in selected:
-        for line in it.label.read_text().splitlines():
+        for line in it.label.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 cls_counter[int(line.split()[0])] += 1
     print("\n===== Golden 통계 =====")
