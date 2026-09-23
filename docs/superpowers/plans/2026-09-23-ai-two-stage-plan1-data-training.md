@@ -784,7 +784,14 @@ platt: {a: 1.13, b: -0.42}
 thresholds: {elevated: 3.0, high: 10.0}
 quality: {blur_laplacian_min: 100, exposure_mean: [40, 215]}
 capture_floor_px_per_mm: null   # Gate 0 후 기록
+recommendations:              # 계획 2가 읽음 (스펙 §3 문구)
+  low: ["응애 감염 징후가 낮게 관찰됐습니다. 다음 점검 시기에 재촬영하세요."]
+  elevated: ["감염 벌 비율이 높게 관찰됐습니다. 가루설탕법(설탕 15g+일벌 100마리)으로 확인하세요."]
+  high: ["감염 벌 비율이 매우 높게 관찰됐습니다. 가루설탕법으로 확인 후 방제 계획을 세우세요."]
+  insufficient: ["벌이 보이도록 소비판을 가까이서 다시 촬영해 주세요."]
+  next_check_windows: ["3월 중순~4월 초", "6월 중순~7월 초", "7월 하순~8월 중순", "10월 하순~11월 초"]
 ```
+`export_onnx`와 함께 `metadata.json`에 `{"fc_weight": [1024 floats], "platt": {a,b}, "tau":...}`를 기록한다(계획 2의 CAM 계산이 읽음).
 
 - [ ] **Step 1: 테스트**
 
@@ -875,8 +882,8 @@ def export_onnx(model: nn.Module, path: Path) -> Path:
 - Produces:
 ```python
 @dataclass
-class VdiConfig: tau: float; tpr: float; fpr: float; corrected: bool; elevated: float = 3.0; high: float = 10.0
-def load_vdi_config(path: Path) -> VdiConfig
+class VdiConfig: tau: float; tpr: float; fpr: float; corrected: bool; elevated: float = 3.0; high: float = 10.0; platt: tuple[float, float] = (1.0, 0.0)
+def load_vdi_config(path: Path) -> VdiConfig   # platt는 vdi.yaml의 {a,b}에서 읽음 (계획 2 서빙이 사용)
 def rogan_gladen(raw_pct: float, cfg: VdiConfig) -> float          # clip [0,100]; corrected=False 또는 tpr-fpr<0.5 면 raw
 def jeffreys_ci(k: int, n: int) -> tuple[float, float]              # % 단위
 def corrected_ci(k: int, n: int, cfg: VdiConfig) -> tuple[float, float]  # 끝점 사상, 하한 0 floor, 상한 ≥ raw 상한
@@ -925,11 +932,12 @@ from scipy.stats import beta
 
 @dataclass
 class VdiConfig:
-    tau: float; tpr: float; fpr: float; corrected: bool; elevated: float = 3.0; high: float = 10.0
+    tau: float; tpr: float; fpr: float; corrected: bool; elevated: float = 3.0; high: float = 10.0; platt: tuple[float, float] = (1.0, 0.0)
 
 def load_vdi_config(path: Path) -> VdiConfig:
     d = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return VdiConfig(d["tau"], d["tpr"], d["fpr"], bool(d["corrected"]), d["thresholds"]["elevated"], d["thresholds"]["high"])
+    pl = d.get("platt", {"a": 1.0, "b": 0.0})
+    return VdiConfig(d["tau"], d["tpr"], d["fpr"], bool(d["corrected"]), d["thresholds"]["elevated"], d["thresholds"]["high"], (float(pl["a"]), float(pl["b"])))
 
 def _usable(cfg: VdiConfig) -> bool: return cfg.corrected and (cfg.tpr - cfg.fpr) >= 0.5
 
