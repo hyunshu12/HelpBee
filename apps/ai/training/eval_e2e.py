@@ -41,12 +41,22 @@ import pandas as pd
 import yaml
 
 from app.services.vdi import VdiConfig, aggregate
+from training.data.make_split_manifest import is_71667
 from training.train_stage2 import sigmoid
 
 logger = logging.getLogger(__name__)
 
 TIERS = ("low", "elevated", "high")
 SINGLE2_NAMES = ["bee_normal", "bee_varroa"]
+
+
+def frame_crops(rows: list[dict], split: str) -> pd.DataFrame:
+    """의사-프레임 재료: split 이 일치하는 **71667** 크롭만 (manifest 태그 `71667-val` 등 접두 매칭).
+    외부 소스(VarroaDataset/EV2)는 해상도·촬영 조건이 달라 한 프레임에 섞지 않는다."""
+    df = pd.DataFrame([r for r in rows if r["split"] == split and is_71667(r["source"])])
+    if not df.empty:
+        df["label"] = df["label"].astype(int)
+    return df
 
 
 def build_pseudo_frames(df: pd.DataFrame, targets=(0, 2, 5, 12, 20), n_bees=300, n_frames=40, seed=42) -> list[dict]:
@@ -213,10 +223,9 @@ def main() -> None:
     from training.train_stage2 import read_crops
 
     cfg = load_vdi_config(a.vdi)
-    df = pd.DataFrame([r for r in read_crops(a.crops) if r["split"] == a.split])
+    df = frame_crops(read_crops(a.crops), a.split)
     if df.empty:
-        raise SystemExit(f"crops.csv 에 split={a.split!r} 크롭이 없음: {a.crops}")
-    df["label"] = df["label"].astype(int)
+        raise SystemExit(f"crops.csv 에 split={a.split!r} 71667 크롭이 없음: {a.crops}")
     targets = tuple(float(t) for t in a.targets.split(",") if t.strip())
     frames = build_pseudo_frames(df, targets=targets, n_bees=a.n_bees, n_frames=a.n_frames, seed=a.seed)
     logits = onnx_logits(a.onnx, a.crops, [p for f in frames for p in f["paths"]])

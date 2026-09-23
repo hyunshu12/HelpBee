@@ -20,6 +20,19 @@ from datetime import datetime
 from pathlib import Path
 
 
+SOURCE_71667 = "71667"
+
+
+def is_71667(source: str) -> bool:
+    """manifest 태그(`71667-val`, `71667-train`, ...)와 리터럴 `71667` 을 모두 71667 로 본다 (접두 매칭)."""
+    return str(source).startswith(SOURCE_71667)
+
+
+def source_group(source: str) -> str:
+    """집계·샘플링용 소스 그룹: 71667 태그는 `71667` 하나로, 나머지(varroadataset/ev2)는 그대로."""
+    return SOURCE_71667 if is_71667(source) else str(source)
+
+
 def build_manifest(items: list[dict], seed: int, golden_frac=0.10, cal_frac=0.15, dedupe_min=10,
                    frozen: dict | None = None) -> dict:
     rng = random.Random(seed)

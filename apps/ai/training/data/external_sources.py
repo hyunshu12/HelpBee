@@ -16,7 +16,8 @@ EV2 (Zenodo 13771384) — `dataset.zip` 안의 `labels.txt` (2026-09-23 zip 목�
     한 줄 = 한 프레임 = 벌 1마리:
         {"video": "varroa_infested/1_00953.MTS", "id": "frame_4", "varroa_visible": "yes"|"no",
          "coord_1": [x1, y1], "coord_2": [x2, y2]}
-    - 박스는 **벌** 위치 (1920×1080 프레임 좌표), 항상 1개.
+    - 박스는 **벌** 위치 (1920×1080 프레임 좌표), 항상 1개. (x1,y1)≤(x2,y2) 로 정규화해 돌려준다.
+      PNG 자체는 이미 벌 크롭(spec §2)이라 make_crops 는 이 박스로 자르지 않는다(메타로만 보관).
     - label: `video` 접두가 varroa_infested → 1 (3,882), varroa_free → 0 (1,288).
     - ⚠️ 폴더 ≠ 감염 라벨: 이미지 폴더는 `varroa_visible` 로 정해진다 (yes → dataset_infested/,
       no → dataset_free/). 감염됐지만 응애가 안 보이는 프레임 699장이 dataset_free/ 에 있으므로
@@ -61,8 +62,9 @@ def parse_ev2(jsonl_path: Path) -> list[dict]:
         cls, video = d["video"].split("/", 1)
         visible = _EV2_VISIBLE[d["varroa_visible"]]
         folder = "dataset_infested" if visible else "dataset_free"
-        (x1, y1), (x2, y2) = d["coord_1"], d["coord_2"]
+        (ax, ay), (bx, by) = d["coord_1"], d["coord_2"]  # 라벨러 드래그 방향 무관 → min/max 정규화
+        box = (min(ax, bx), min(ay, by), max(ax, bx), max(ay, by))
         rows.append({"source": "ev2", "image": Path(folder, f"{video}_{d['id'].replace('_', '')}.png"),
-                     "label": _EV2_LABEL[cls], "split": "unsplit", "boxes": [(x1, y1, x2, y2)],
+                     "label": _EV2_LABEL[cls], "split": "unsplit", "boxes": [box],
                      "varroa_visible": visible})
     return rows

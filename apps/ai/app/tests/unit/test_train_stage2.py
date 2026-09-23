@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import yaml
 
-from training.train_stage2 import (auroc, choose_tau, ece, fit_platt, measure_rates, sample_weights,
+from training.train_stage2 import (auroc, check_splits, choose_tau, ece, fit_platt, measure_rates, sample_weights,
                                    select_splits, write_vdi_yaml)
 
 
@@ -137,3 +137,12 @@ def test_parse_degrade():
     assert parse_degrade(90) == 90
     with pytest.raises(ValueError):
         parse_degrade("abc")
+
+
+def test_check_splits_fails_fast_on_empty_or_single_class():
+    ok = {k: [{"label": "0"}, {"label": "1"}] for k in ("train", "val", "cal_a", "cal_b")}
+    check_splits(ok)
+    with pytest.raises(ValueError, match="cal_a"):
+        check_splits({**ok, "cal_a": []})
+    with pytest.raises(ValueError, match="val"):
+        check_splits({**ok, "val": [{"label": "0"}]})

@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 import yaml
 
+from training.data.make_split_manifest import is_71667, source_group
 from training.train import apply_overrides, dump_resolved
 
 logger = logging.getLogger(__name__)
@@ -126,17 +127,31 @@ def sample_weights(labels: np.ndarray, sources: np.ndarray) -> np.ndarray:
 
 def select_splits(rows: list[dict]) -> dict[str, list[dict]]:
     """crops.csv 행 → train/val/cal_a/cal_b. train=모든 소스 `train`; val=71667 `val`+VarroaDataset `val`;
-    cal_a/cal_b=71667 만. golden·VarroaDataset test·EV2 holdout 은 제외(평가 전용)."""
+    cal_a/cal_b=71667 만. golden·VarroaDataset test·EV2 holdout 은 제외(평가 전용).
+    71667 판정은 `is_71667`(접두 매칭) — manifest 태그 `71667-val`/`71667-train` 이 crops.csv 로 그대로 온다."""
     out: dict[str, list[dict]] = {"train": [], "val": [], "cal_a": [], "cal_b": []}
     for r in rows:
         s, sp = r["source"], r["split"]
         if sp == "train":
             out["train"].append(r)
-        elif sp == "val" and s in ("71667", "varroadataset"):
+        elif sp == "val" and (is_71667(s) or s == "varroadataset"):
             out["val"].append(r)
-        elif sp in ("cal_a", "cal_b") and s == "71667":
+        elif sp in ("cal_a", "cal_b") and is_71667(s):
             out[sp].append(r)
     return out
+
+
+def check_splits(sp: dict[str, list[dict]]) -> None:
+    """학습 전 조기 검증: train/val/cal_a/cal_b 가 비었거나 한 클래스뿐이면 ValueError.
+    (몇 시간 학습 뒤 Platt/τ 단계에서 np.concatenate([]) 로 죽거나 NaN 이 나는 것을 막는다.)"""
+    bad = []
+    for k in ("train", "val", "cal_a", "cal_b"):
+        labels = {int(r["label"]) for r in sp.get(k, [])}
+        if labels != {0, 1}:
+            bad.append(f"{k}: n={len(sp.get(k, []))} labels={sorted(labels)}")
+    if bad:
+        raise ValueError("Stage-2 split 부족 (양성·음성 모두 필요) — " + "; ".join(bad)
+                         + " · crops.csv 의 source/split 열 확인 (71667 은 is_71667 접두 매칭)")
 
 
 # ── 보정·지표 (numpy) ─────────────────────────────────────────────────────────
@@ -327,8 +342,9 @@ def train(cfg: dict) -> dict:
     sp = select_splits(read_crops(crops_dir))
     for k, v in sp.items():
         logger.info(f"{k}: {len(v)} crops ({sum(int(r['label']) for r in v)} pos)")
+    check_splits(sp)
     labels = np.array([int(r["label"]) for r in sp["train"]])
-    weights = sample_weights(labels, np.array([r["source"] for r in sp["train"]]))
+    weights = sample_weights(labels, np.array([source_group(r["source"]) for r in sp["train"]]))
     sampler = WeightedRandomSampler(torch.as_tensor(weights, dtype=torch.double), num_samples=len(weights),
                                     replacement=True, generator=torch.Generator().manual_seed(cfg["seed"]))
     workers = int(cfg.get("workers", 4))

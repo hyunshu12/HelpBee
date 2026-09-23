@@ -34,6 +34,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from training.data.make_split_manifest import source_group
 from training.train_stage2 import ece, read_crops, sigmoid
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def build_report(df: pd.DataFrame, logits, emb, tau: float, platt: tuple[float, 
     """df: crops.csv 행(source/device/colony/native_w/native_h/label). logits/emb 는 행 순서 일치."""
     p = sigmoid(platt[0] * np.asarray(logits, np.float64) + platt[1])
     y = df["label"].astype(int).to_numpy()
+    df = df.assign(source=df["source"].map(source_group))  # 71667-val/71667-train → 71667 한 그룹
     return {
         "overall": overall_metrics(p, y, tau),
         "by_source": by_group(df, "source", p, y, tau),

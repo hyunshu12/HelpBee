@@ -5,11 +5,14 @@ import numpy as np
 import pytest
 
 from training.data.make_crops import (
+    ext_box_meta,
     external_crop_box,
+    include_external,
     label_for,
     label_json_for,
     match_predictions,
     model_key_for,
+    normalize_box,
     write_stats,
 )
 
@@ -58,6 +61,43 @@ def test_external_crop_box_rules():
     # VarroaDataset: 이미 벌 1마리 크롭 → 이미지 전체 (boxes 는 응애 위치라 무시)
     vd = {"source": "varroadataset", "boxes": [(10, 10, 20, 20)]}
     assert external_crop_box(vd, (280, 160, 3)) == (0, 0, 160, 280)
-    # EV2: boxes[0] = 벌 박스 (프레임 좌표)
-    ev = {"source": "ev2", "boxes": [(100, 200, 300, 400)]}
-    assert external_crop_box(ev, (1080, 1920, 3)) == (100, 200, 300, 400)
+    # EV2: PNG 도 이미 벌 크롭(spec §2) → 이미지 전체. 프레임 좌표 박스(크롭 밖)는 자르는 데 안 씀 (I1)
+    ev = {"source": "ev2", "label": 1, "varroa_visible": True, "boxes": [(1044, 969, 702, 708)]}
+    assert external_crop_box(ev, (300, 260, 3)) == (0, 0, 260, 300)
+    assert ext_box_meta(ev) == "702 708 1044 969"  # 메타로만, min/max 정규화
+    assert ext_box_meta(vd) == ""
+
+
+def test_normalize_box_order():
+    assert normalize_box((30, 40, 10, 20)) == (10, 20, 30, 40)
+    assert normalize_box((10, 20, 30, 40)) == (10, 20, 30, 40)
+
+
+def test_ev2_infested_not_visible_excluded():
+    # I2: Stage-2 는 '보이는 응애' 분류기 — 감염 영상이지만 응애 안 보이는 프레임은 양성도 음성도 아님
+    assert include_external({"source": "ev2", "label": 1, "varroa_visible": True})
+    assert not include_external({"source": "ev2", "label": 1, "varroa_visible": False})
+    assert include_external({"source": "ev2", "label": 0, "varroa_visible": False})  # 음성
+    assert include_external({"source": "varroadataset", "label": 1, "varroa_visible": None})
+    assert include_external({"source": "varroadataset", "label": 0, "varroa_visible": None})
+
+
+def test_crops_external_skips_not_visible_positive_before_reading(tmp_path, monkeypatch):
+    import training.data.make_crops as mc
+
+    read: list = []
+    monkeypatch.setattr(mc, "_imread", lambda p: read.append(p) or None)  # cv2 없이: 읽기 시도만 기록
+    rows = [{"source": "ev2", "image": Path("dataset_free/a.png"), "label": 1, "varroa_visible": False,
+             "boxes": [(0, 0, 1, 1)]},
+            {"source": "ev2", "image": Path("dataset_free/b.png"), "label": 0, "varroa_visible": False,
+             "boxes": [(0, 0, 1, 1)]}]
+    res = mc.crops_external(rows, tmp_path, {}, tmp_path, writer=None)
+    assert res["excluded_not_visible"] == 1 and res["unreadable"] == 1 and res["n"] == 0
+    assert read == [tmp_path / "dataset_free/b.png"]
+
+
+def test_crop_pad_empty_box_raises_clearly():
+    pytest.importorskip("cv2")
+    from training.data.make_crops import crop_pad_224
+    with pytest.raises(ValueError, match="빈 크롭"):
+        crop_pad_224(np.zeros((300, 260, 3), np.uint8), (1000, 900, 1200, 1000))

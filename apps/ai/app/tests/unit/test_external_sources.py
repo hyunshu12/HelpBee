@@ -41,3 +41,10 @@ def test_ev2_image_path_follows_visible_flag_not_label(tmp_path: Path):
         Path("dataset_free/1_00953.MTS_frame6.png"),
         Path("dataset_free/19_00974.MTS_frame102.png"),
     ]
+
+
+def test_ev2_box_normalized_when_dragged_backwards(tmp_path: Path):
+    p = tmp_path / "labels.txt"
+    p.write_text('{"video": "varroa_infested/2_00001.MTS", "id": "frame_1", "varroa_visible": "yes", '
+                 '"coord_1": [1044, 969], "coord_2": [702, 708]}\n', encoding="utf-8")
+    assert parse_ev2(p)[0]["boxes"] == [(702, 708, 1044, 969)]
