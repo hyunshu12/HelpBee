@@ -32,6 +32,12 @@ def test_adult1_mapping_drops_larvae_keeps_all_adults():
     assert sorted(b[5] for b in boxes) == [4, 5, 6] and all(b[0] == 0 for b in boxes)
 
 
+def test_single2_mapping_adult_normal_varroa_only():
+    d = _doc([{"category_id": c, "bbox": [0, 0, 10, 10], "area": 100} for c in range(7)])
+    boxes, _ = parse_annotations(d, "single2")
+    assert sorted((b[5], b[0]) for b in boxes) == [(4, 0), (5, 1)]  # 유충·날개불구(6) 제외
+
+
 def test_parse_skips_missing_area():
     d = _doc(
         [

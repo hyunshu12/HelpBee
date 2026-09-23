@@ -14,6 +14,8 @@ AI Hub 71667 (꿀벌 질병 진단 이미지 데이터) → Ultralytics YOLO 형
 클래스 매핑 (`--mapping`):
     - adult1  (기본, v0.2.0 Stage-1): 성충 3종(4·5·6) → 1-class `bee`. 유충 제외.
     - legacy3 (v0.1.0 호환): 7-class → bee_normal / bee_with_varroa / bee_other_disease.
+    - single2 (v0.2.0 단일 스테이지 베이스라인): 성충 정상 → bee_normal(0), 성충 응애 → bee_varroa(1).
+      유충·날개불구(6) 제외.
 
 출력 모드:
     - 기본: images/<split>/ (복사 또는 --no-copy 심링크) + labels/<split>/
@@ -66,6 +68,8 @@ CLASS_MAPPINGS: dict[str, dict[int, int | None]] = {
     "adult1": {0: None, 1: None, 2: None, 3: None, 4: 0, 5: 0, 6: 0},
     # v0.1.0 호환(참고용) — 0 bee_normal / 1 bee_with_varroa / 2 bee_other_disease
     "legacy3": {0: 0, 1: 1, 2: 2, 3: 2, 4: 0, 5: 1, 6: 2},
+    # v0.2.0 단일 스테이지 베이스라인(baseline_single.yaml): 0 bee_normal / 1 bee_varroa, 날개불구 제외
+    "single2": {0: None, 1: None, 2: None, 3: None, 4: 0, 5: 1, 6: None},
 }
 DEFAULT_MAPPING = "adult1"
 
@@ -329,7 +333,7 @@ def main():
         type=str,
         default=DEFAULT_MAPPING,
         choices=sorted(CLASS_MAPPINGS),
-        help="adult1=성충 1-class bee (v0.2.0 Stage-1), legacy3=v0.1.0 3-class",
+        help="adult1=성충 1-class bee (v0.2.0 Stage-1), legacy3=v0.1.0 3-class, single2=단일 스테이지 베이스라인 2-class",
     )
     p.add_argument(
         "--manifest",
@@ -365,11 +369,10 @@ def main():
         if dev := s.meta.get("capture_device"):
             device_counter[dev] += 1
 
-    cls_names = (
-        {0: "bee"}
-        if args.mapping == "adult1"
-        else {0: "bee_normal", 1: "bee_with_varroa", 2: "bee_other_disease"}
-    )
+    cls_names = {
+        "adult1": {0: "bee"},
+        "single2": {0: "bee_normal", 1: "bee_varroa"},
+    }.get(args.mapping, {0: "bee_normal", 1: "bee_with_varroa", 2: "bee_other_disease"})
     print(f"\n===== 변환 통계 (mapping={args.mapping}) =====")
     print(f"이미지: {len(samples)}")
     checked = area_totals["n_boxes"] - area_totals["area_missing"]

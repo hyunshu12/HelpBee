@@ -1,0 +1,57 @@
+# apps/ai/app/tests/unit/test_eval_stage2.py
+import numpy as np
+import pandas as pd
+
+from training.eval_stage2 import by_group, lodo_probe, overall_metrics, size_only_auroc, source_probe_acc
+
+
+def test_size_only_auroc_detects_size_shortcut_and_chance_without_it():
+    rng = np.random.default_rng(0)
+    y = np.array([0, 1] * 200)
+    w = np.where(y == 1, 300, 150) + rng.normal(0, 10, len(y))
+    h = w * 1.1
+    assert size_only_auroc(w, h, y) > 0.95
+    w2 = rng.normal(200, 30, len(y))
+    assert abs(size_only_auroc(w2, w2 * 1.1, y) - 0.5) < 0.12
+
+
+def test_source_probe_acc_high_when_embedding_encodes_source():
+    rng = np.random.default_rng(1)
+    src = np.array(["71667", "vd2"] * 100)
+    emb = rng.normal(0, 1, (200, 16))
+    emb[:, 0] += np.where(src == "vd2", 4.0, -4.0)
+    assert source_probe_acc(emb, src) > 0.95
+    assert source_probe_acc(rng.normal(0, 1, (200, 16)), src) < 0.7
+
+
+def test_by_group_recall_specificity():
+    df = pd.DataFrame({"device": ["a", "a", "a", "b", "b", "b"]})
+    y = np.array([1, 1, 0, 1, 0, 0])
+    p = np.array([0.9, 0.2, 0.1, 0.8, 0.7, 0.1])
+    g = by_group(df, "device", p, y, tau=0.5)
+    assert g["a"] == {"recall": 0.5, "specificity": 1.0, "n_pos": 2, "n_neg": 1}
+    assert g["b"] == {"recall": 1.0, "specificity": 0.5, "n_pos": 1, "n_neg": 2}
+
+
+def test_by_group_missing_class_is_none():
+    g = by_group(pd.DataFrame({"colony": ["c"]}), "colony", np.array([0.1]), np.array([0]), tau=0.5)
+    assert g["c"]["recall"] is None and g["c"]["specificity"] == 1.0
+
+
+def test_overall_metrics_keys_and_values():
+    y = np.array([0, 0, 1, 1])
+    p = np.array([0.1, 0.4, 0.6, 0.9])
+    m = overall_metrics(p, y, tau=0.5)
+    assert set(m) == {"recall", "specificity", "auroc", "ece"}
+    assert m["recall"] == 1.0 and m["specificity"] == 1.0 and m["auroc"] == 1.0
+
+
+def test_lodo_probe_reports_each_device():
+    rng = np.random.default_rng(2)
+    dev = np.array(["d1", "d2", "d3"] * 60)
+    y = np.array([0, 1] * 90)
+    emb = rng.normal(0, 1, (180, 8))
+    emb[:, 0] += np.where(y == 1, 3.0, -3.0)
+    r = lodo_probe(emb, y, dev)
+    assert set(r) == {"d1", "d2", "d3"}
+    assert all(v["auroc"] > 0.9 and v["n"] == 60 for v in r.values())
