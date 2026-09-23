@@ -18,3 +18,6 @@ boto3==1.43.30
 
 # 관측성 — SENTRY_DSN 설정 시에만 main.py가 조건부 import (미설정=no-op)
 sentry-sdk>=2,<3
+
+# VDI 수식 (Jeffreys CI) — app/services/vdi.py (평가·서빙 공용)
+scipy>=1.11
