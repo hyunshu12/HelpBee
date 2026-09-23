@@ -2,9 +2,9 @@
 
 Usage (apps/ai 에서, 학습 박스):
     python -m training.data.make_crops --manifest training/split_manifest.json \\
-        --weights-A runs/yolo/v0.2.0-stage1A/weights/best.pt \\
-        --weights-B runs/yolo/v0.2.0-stage1B/weights/best.pt \\
-        --weights-all runs/yolo/v0.2.0-stage1all/weights/best.pt \\
+        --weights-A training/runs/yolo/v0.2.0-stage1A/weights/best.pt \\
+        --weights-B training/runs/yolo/v0.2.0-stage1B/weights/best.pt \\
+        --weights-all training/runs/yolo/v0.2.0-stage1all/weights/best.pt \\
         --out training/crops [--external-varroa <root>] [--external-ev2 <root>]
 
 71667: Stage-1 예측 박스를 GT(legacy3 파싱, 원래 cat71667 사용)와 IoU≥0.5 로 1:1 매칭하고, 매칭된

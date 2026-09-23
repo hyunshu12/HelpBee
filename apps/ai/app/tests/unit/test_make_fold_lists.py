@@ -57,3 +57,13 @@ def test_make_fold_lists(tmp_path):
     before = (out / "stage1_A_train.txt").read_bytes()
     make_fold_lists(mf, labels, out)
     assert (out / "stage1_A_train.txt").read_bytes() == before
+
+
+def test_make_fold_lists_fails_when_most_labels_missing(tmp_path):
+    import pytest
+
+    mf, labels, _ = _fake(tmp_path)
+    empty = tmp_path / "wrong_labels"
+    empty.mkdir()
+    with pytest.raises(ValueError, match="같은 --output"):
+        make_fold_lists(mf, empty, tmp_path / "lists")

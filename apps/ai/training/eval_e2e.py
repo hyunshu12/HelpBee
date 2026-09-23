@@ -10,6 +10,10 @@ Usage (apps/ai 에서, 학습 박스):
         [--out training/eval_history/v0.2.0-e2e.json]
     (= python tasks.py eval-e2e --onnx ...)
 
+⚠️ golden 모집단 차이: 크롭은 split=="golden" **전체**(디듀프 후 golden colony 이미지 전부)에서 오고,
+단일 스테이지 베이스라인·Stage-1 eval.py 는 golden.json 300장(응애 100 + 정상 200)만 쓴다 — 두 수치를
+나란히 놓을 때 모집단이 다르다는 점을 표에 적을 것.
+
 의사-프레임: golden 크롭에서 target% 양성이 되도록 n_bees 개를 복원추출해 한 "프레임"으로 본다
 (Stage-1 은 완벽하다고 가정 → Stage-2 + VDI 집계만의 e2e). 각 크롭에 Stage-2(ONNX)를 돌려
 p = σ(a·logit + b) > τ 개수 k 를 세고 aggregate([(k, n)], cfg) 로 tier 를 낸다.
@@ -60,10 +64,17 @@ def frame_crops(rows: list[dict], split: str) -> pd.DataFrame:
 
 
 def build_pseudo_frames(df: pd.DataFrame, targets=(0, 2, 5, 12, 20), n_bees=300, n_frames=40, seed=42) -> list[dict]:
-    """target% 양성 의사-프레임. 양성/음성 크롭을 각각 복원추출 (라벨은 paths 와 같은 순서)."""
+    """target% 양성 의사-프레임. 양성/음성 크롭을 각각 복원추출 (라벨은 paths 와 같은 순서).
+
+    단순화: 스펙 §5.1 '층화 부트스트랩' 과 달리 colony 층화 없이 양성·음성 풀 전체에서 뽑는다
+    (golden colony 가 3~몇 개뿐이라 층화 이득이 작음). colony 편중은 eval_stage2 by_colony 로 본다."""
     rng = np.random.default_rng(seed)
     pos = df[df.label == 1].path.to_numpy()
     neg = df[df.label == 0].path.to_numpy()
+    if any(t > 0 for t in targets) and len(pos) == 0:
+        raise ValueError("의사-프레임: 양성 크롭 0개 — target>0 프레임을 만들 수 없음 (crops.csv golden 양성 확인)")
+    if any(t < 100 for t in targets) and len(neg) == 0:
+        raise ValueError("의사-프레임: 음성 크롭 0개 (crops.csv golden 음성 확인)")
     out = []
     for t in targets:
         k = int(round(t * n_bees / 100))

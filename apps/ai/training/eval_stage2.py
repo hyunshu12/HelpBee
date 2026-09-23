@@ -5,6 +5,9 @@ Usage (apps/ai 에서, 학습 박스):
         --split golden [--vdi training/configs/vdi.yaml] [--out training/eval_history/v0.2.0-stage2.json]
     (= python tasks.py eval-stage2 --weights ...)
 
+--split golden 은 crops.csv 의 split=="golden" 전체(디듀프 후 golden colony 이미지 전부) — Stage-1
+eval.py·단일 스테이지 베이스라인이 쓰는 golden.json 300장보다 넓다(모집단 다름, 비교 시 명시).
+
 판정은 서빙과 동일: p = σ(a·logit + b) (vdi.yaml Platt) → p > τ.
 
 출력 JSON (스키마 고정):

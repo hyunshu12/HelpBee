@@ -80,3 +80,14 @@ def test_vdi_mae_overall_and_by_target():
     m = vdi_mae(rows)
     assert m["vdi_mae"] == (1 + 0 + 2 + 1) / 4
     assert m["vdi_mae_by_target"] == {"0": 0.5, "5": 1.5}
+
+
+def test_pseudo_frames_clear_error_without_positives():
+    import pytest
+
+    from training.eval_e2e import build_pseudo_frames
+
+    df = pd.DataFrame({"path": ["a", "b"], "label": [0, 0]})
+    with pytest.raises(ValueError, match="양성 크롭 0개"):
+        build_pseudo_frames(df, targets=(0, 5), n_bees=10, n_frames=1)
+    assert len(build_pseudo_frames(df, targets=(0,), n_bees=10, n_frames=2)) == 2

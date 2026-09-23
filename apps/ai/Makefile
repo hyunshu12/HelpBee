@@ -71,6 +71,8 @@ convert-data:
 # 자동 전략 분할 (farm/device/sequence 자동 감지)
 # ⚠️ golden 을 먼저 실행할 것 — manifest 기반으로 golden 이미지를 풀에서 제외(leakage 방지).
 # ⚠️ (2026-09-23) 레거시 v0.1.0 경로: 새 golden 은 golden/manifest.json 을 만들지 않음 — 2-stage 는 split_manifest.json 사용.
+# ⚠️ 레거시(v0.1.0): 구 golden 경로(training/datasets/golden/manifest.json) 기준.
+#    v0.2.0 은 `python tasks.py split` (make_split_manifest — golden/cal colony 동결) 을 쓴다.
 split-data:
 	$(PY) -m training.data.split_strategy \
 		--input training/datasets/varroa-v1-allraw \

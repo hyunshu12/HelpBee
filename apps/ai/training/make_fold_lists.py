@@ -33,7 +33,7 @@ def colony_fold(colony: str) -> str:
     return FOLDS[int(hashlib.sha1(str(colony).encode("utf-8")).hexdigest(), 16) % 2]
 
 
-def make_fold_lists(manifest: Path, labels_root: Path, out: Path) -> dict:
+def make_fold_lists(manifest: Path, labels_root: Path, out: Path, max_skip_frac: float = 0.05) -> dict:
     m = json.loads(Path(manifest).read_text(encoding="utf-8"))
     labels_root = Path(labels_root).resolve()
     out = Path(out)
@@ -58,6 +58,10 @@ def make_fold_lists(manifest: Path, labels_root: Path, out: Path) -> dict:
                                               encoding="utf-8")
     stats = {k: len(v) for k, v in lists.items()}
     stats["skipped_no_label"] = skipped
+    n = skipped + len(lists["all_train"]) + len(lists["all_val"])
+    if n and skipped / n > max_skip_frac:
+        raise ValueError(f"라벨 없는 train/val 이미지 {skipped}/{n} > {max_skip_frac:.0%} — --labels-root 확인. "
+                         "Validation+Training 을 함께 쓸 땐 두 aihub_to_yolo 변환이 같은 --output 에 써야 한다")
     return stats
 
 
@@ -67,7 +71,10 @@ def main() -> None:
     p.add_argument("--labels-root", type=Path, required=True)
     p.add_argument("--out", type=Path, default=Path("training/lists"))
     a = p.parse_args()
-    print(make_fold_lists(a.manifest, a.labels_root, a.out))
+    try:
+        print(make_fold_lists(a.manifest, a.labels_root, a.out))
+    except ValueError as e:
+        p.error(str(e))
 
 
 if __name__ == "__main__":

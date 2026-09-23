@@ -23,7 +23,9 @@ YOLO 학습 진입점 — 이어 학습(resume) 지원.
 
     5) Stage-1 2-fold (v0.2.0):
         python -m training.train --config training/configs/stage1.yaml --fold A
-       → data 를 training/lists/stage1_A.yaml (make_fold_lists.py 산출물) 로 교체.
+       → data 를 training/lists/stage1_A.yaml (make_fold_lists.py 산출물) 로 교체, --name 미지정 시
+         run 이름은 v0.2.0-stage1A (fold 접미). A·B·all 세 run 모두 labels/all.cache 를 공유하므로
+         run 마다 캐시 해시 불일치 → 재생성·덮어쓰기(결과는 정확, 시작만 느림 — 정상).
          data yaml 의 label_root 가 있으면 ultralytics 라벨 조회를 manifest 모드로 패치.
 
     학습 종료 시 <save_dir>/resolved_config.json 에 최종 설정(오버라이드·fold 반영)을 기록한다.
@@ -45,6 +47,18 @@ from pathlib import Path
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def apply_fold(cfg: dict, fold: str | None, name_given: bool) -> dict:
+    """--fold: data → training/lists/stage1_<fold>.yaml, --name 미지정이면 run 이름에 fold 접미
+    (v0.2.0-stage1 → v0.2.0-stage1A/B/all). 이름이 같으면 Ultralytics 가 stage12, stage13 … 으로
+    자동 증가시켜 make_crops --weights-A/B 를 헷갈리게 한다 (out-of-fold 배정이 조용히 깨짐)."""
+    if not fold:
+        return cfg
+    cfg = dict(cfg, data=f"training/lists/stage1_{fold}.yaml")
+    if not name_given and cfg.get("name"):
+        cfg["name"] = f"{cfg['name']}{fold}"
+    return cfg
 
 
 def _coerce(v: str):
@@ -117,8 +131,7 @@ def main():
         if v is not None:
             cfg[key] = v
     cfg = apply_overrides(cfg, args.set)
-    if args.fold:
-        cfg["data"] = f"training/lists/stage1_{args.fold}.yaml"
+    cfg = apply_fold(cfg, args.fold, name_given=args.name is not None)
     label_root = cfg.pop("label_root", None)
 
     # project 를 cwd 기준 절대경로로 고정.

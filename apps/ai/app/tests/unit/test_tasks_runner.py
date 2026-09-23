@@ -15,3 +15,4 @@ def test_unknown_target_fails():
     out = subprocess.run([sys.executable, "tasks.py", "nope"], cwd=ROOT,
                          capture_output=True, text=True, encoding="utf-8")
     assert out.returncode == 2
+    assert "targets:" in out.stdout  # tasks.py 자체가 없어서 난 rc 2 와 구분

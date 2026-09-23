@@ -1,5 +1,7 @@
 # YOLO 학습용 의존성. 추론 서버는 requirements.txt 사용.
 # pip install -r requirements-gpu.txt
+# 학습 박스에서 heavy 테스트(9b/11b/12b: torch·cv2 importorskip)를 돌리려면 pytest 도 필요:
+#   pip install -r requirements-dev.txt
 #
 # torch 핀 (학습 박스 RTX 4060 / CUDA 12.1 휠 — 별도 index 라 이 파일에 핀하지 않는다):
 #   torch==2.4.1+cu121 / torchvision==0.19.1

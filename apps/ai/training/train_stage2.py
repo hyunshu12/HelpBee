@@ -294,13 +294,18 @@ def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: i
     import torch
     from torch.utils.data import Dataset
 
+    from training.data.make_crops import _imread  # 비ASCII(Windows 한국어) 경로 안전
+
     class CropDataset(Dataset):
         def __len__(self):
             return len(rows)
 
         def __getitem__(self, i):
             r = rows[i]
-            img = cv2.cvtColor(cv2.imread(str(crops_dir / r["path"]), cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
+            bgr = _imread(crops_dir / r["path"])
+            if bgr is None:
+                raise FileNotFoundError(f"크롭 이미지 읽기 실패: {crops_dir / r['path']}")
+            img = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
             if img.shape[:2] != (224, 224):
                 img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_LINEAR)
             if train:

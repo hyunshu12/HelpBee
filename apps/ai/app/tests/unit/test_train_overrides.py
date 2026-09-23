@@ -50,3 +50,15 @@ def test_patch_label_lookup_uses_parent_prefixed_stem(tmp_path, monkeypatch):
     patch_label_lookup(root)
     assert utils.img2label_paths([str(img)]) == [str(root / expected_name)]
     assert dataset.img2label_paths([str(img)]) == [str(root / expected_name)]
+
+
+def test_apply_fold_suffixes_run_name_unless_name_given():
+    from training.train import apply_fold
+
+    cfg = {"name": "v0.2.0-stage1", "data": "x.yaml"}
+    assert apply_fold(cfg, None, False) == cfg
+    for f in ("A", "B", "all"):
+        out = apply_fold(cfg, f, name_given=False)
+        assert out["name"] == f"v0.2.0-stage1{f}" and out["data"] == f"training/lists/stage1_{f}.yaml"
+    assert apply_fold({**cfg, "name": "custom"}, "A", name_given=True)["name"] == "custom"
+    assert cfg["name"] == "v0.2.0-stage1"  # 원본 불변

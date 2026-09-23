@@ -1,10 +1,11 @@
 # v0.2.0 Stage-2 — 벌 단위 응애 감염 이진 분류기 (ShuffleNet-V2 x1.0, 스펙 §6).
+# 스펙 §6 대비 이탈(의도): batch 128→64 (8GB VRAM), '그림자' 증강 미구현 (train_stage2.augment 참조).
 # 실행: python tasks.py train-stage2 [--degrade none|90] [--set key=value ...]
 # 산출물: <project>/<name>/{best.pt,stage2.onnx,metadata.json,resolved_config.json},
 #         training/configs/vdi.yaml, training/eval_history/v0.2.0-stage2.json
 epochs: 50
 patience: 10
-batch: 64
+batch: 64          # 스펙 §6 은 128 — RTX 4060 8GB VRAM 여유 때문에 64 (의도적 이탈)
 lr: 3.0e-4
 weight_decay: 0.01
 label_smoothing: 0.05
