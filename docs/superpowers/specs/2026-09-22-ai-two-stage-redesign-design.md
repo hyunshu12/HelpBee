@@ -1,192 +1,194 @@
-# HelpBee AI 재설계 — 2-Stage 벌 단위 감염 분류 + VDI 지표 (v0.2.0 목표)
+# HelpBee AI 재설계 — 2-Stage 벌 단위 감염 분류 + VDI 지표 (v0.2.0 목표) — **v2**
 
-> **Status: DRAFT → 사용자 승인 시 ACCEPTED** | 작성: 2026-09-22 | Owner: AI팀
-> **문서 지위: 이 문서는 AI 도메인 재설계의 단일 기준이다.** 이후 모든 AI 작업(데이터·학습·서빙·스키마)은 이 문서를 따르며, 이 문서와 다른 결정은 §13 결정 로그에 날짜와 근거를 남기고 문서를 먼저 고친 뒤 코드를 바꾼다.
-> 근거 원문·조사 보고서: 세션 스크래치 `scratchpad/lit/SYNTHESIS.md` (요약은 §12에 수록)
-> 대체 대상: ADR-0001(단일 스테이지 v0.1.0), `2026-05-07-yolo-two-stage-design.md`(v0.2.0 구 설계), `training/configs/risk.yaml`
+> **Status: DRAFT v2 → 사용자 승인 시 ACCEPTED** | v1: 2026-09-22 | v2: 2026-09-23 (적대적 검증 반영) | Owner: AI팀
+> **문서 지위: 이 문서는 AI 도메인 재설계의 단일 기준이다.** 이후 모든 AI 작업(데이터·학습·서빙·스키마·모바일 캡처)은 이 문서를 따르며, 다른 결정은 §13 결정 로그에 날짜와 근거를 남기고 **문서를 먼저 고친 뒤 코드를 바꾼다.**
+> v1 → v2 변경 근거: [`2026-09-23-ai-two-stage-redesign-adversarial-review.md`](2026-09-23-ai-two-stage-redesign-adversarial-review.md) (차단 7 · 주요 16 · 기각 1)
+> 대체 대상: ADR-0001, `2026-05-07-yolo-two-stage-design.md`, `training/configs/risk.yaml`
 
 ---
 
 ## 0. 30초 요약
 
-- **무엇**: 폰으로 찍은 소비판 사진 → 벌 검출(Stage-1) → 벌 크롭을 원본 해상도에서 떠서 감염/비감염 분류(Stage-2) → **VDI(가시 감염 지수)** + 신뢰구간 + tier + 농진청 기준 권장 조치.
-- **왜 다시 설계하는가**: (a) 응애 개체는 폰 사진에서 15~25px 하한을 못 넘기고, 같은 데이터에서 벌 단위 분류가 응애 탐지보다 F1 +16%p(Bilik 2021); (b) 현재 v0.1.0은 레시피 유실·tier 경계 불일치·게이트 공백에 더해 **bbox xyxy 오독으로 12배 부푼 박스로 학습**된 상태; (c) 기존 3%/10% "감염률"은 워시 기준 수치를 이미지 지표에 붙인 범주 오류.
-- **목표 수준**: "인공지능으로 이런 게 가능하다"는 **시연**. 운영 지연·비용보다 눈에 보이는 정확한 결과가 우선.
-- **응애 위치 표시·응애 카운팅·히트맵은 범위 밖** (Phase 2).
+- **무엇**: 폰으로 찍은 소비판 사진 → 성충 검출(Stage-1) → 벌 크롭을 **원본 해상도**에서 떠서 감염/비감염 분류(Stage-2) → **VDI(가시 감염 지수, 분류기 오차 보정)** + 표본 신뢰구간 + tier + 시각 증거(감염 판정 크롭 갤러리 + 주목 영역) + 농진청 기준 권장 조치.
+- **왜 2-stage인가 (v2에서 명시)**: (a) 상용 가능한 외부 감염 라벨 데이터(VarroaDataset·EV2)는 **벌 크롭**이라 분류기만 학습시킬 수 있다; (b) 크롭을 원본에서 뜨면 Stage-2 입력 해상도 손실이 없다; (c) Bilik 2021에서 벌 단위 판정이 응애 개체 탐지보다 F1 +16%p. 단, **xyxy 수정 + 성충 2-class 단일 YOLO**도 같은 출력을 내므로 §7에 e2e 베이스라인으로 두고 이겨야 한다.
+- **왜 다시 만드는가**: v0.1.0은 bbox xyxy 오독(12배 부푼 박스), 레시피 유실, tier 경계 불일치, 게이트 공백. "감염률 3%/10%"는 워시 수치를 이미지 지표에 붙인 범주 오류.
+- **목표 수준**: "AI로 이런 게 가능하다"는 **시연**. 단, v2는 시연이 **거짓 양성으로 무너지지 않도록** 보정·게이트를 넣는다.
+- **범위 밖**: 응애 카운팅·워시 보정·유충 트랙(Phase 2).
 
-## 1. 가정 (바뀌면 §13에 기록하고 재검토)
+## 1. 가정
 
 | # | 가정 | 출처 |
 |---|---|---|
-| A1 | **비영리 포트폴리오 프로젝트**. AI Hub 이용약관 제15조②·제16조②(영리 금지)는 적용되지 않으며, 데이터 사용에 따른 책임은 프로젝트 소유자가 진다. **상용 전환 시 NIA 사전 승낙 재검토 필수** | 사용자 결정 2026-09-22 |
-| A2 | 입력은 **핸드헬드 폰 자유 촬영** + 앱 가이드. 고정 장비 없음 | 사용자 결정 |
-| A3 | 자체 현장 데이터 수집·라벨링 없음. **공개 데이터 + AI Hub만** | 사용자 결정 |
-| A4 | 학습: RTX 4060 8GB (`ssh beetrain`, C: 411GB 여유 — 사용자 "용량 충분"). 추론: CPU ONNX (기존 서빙 형상 유지) | 환경 |
-| A5 | OpenAI 폴백 경로·프롬프트는 이번 재설계에서 변경하지 않음 | 범위 결정 |
-| A6 | 71667 Training 셋(206GB)을 1차 데이터로 바로 사용 | 사용자 결정 |
+| A1 | **비영리 포트폴리오 프로젝트**. AI Hub 영리 금지 조항 비적용, 데이터 책임은 소유자. 상용 전환 시 NIA 사전 승낙 재검토. 레포의 유료 티어·가격 페이지는 **portfolio 모드 플래그로 비활성**(§8) | 사용자 2026-09-22 |
+| A2 | **핸드헬드 폰 자유 촬영 + 앱 가이드.** 앱은 **최대 해상도로 캡처하고 원본 크기로 업로드**(≥12MP 목표, 10MB 초과 시에만 긴 변 4000으로 축소). 현재 720p 캡처·1920 축소는 폐기 | 사용자 + 검증 B1 |
+| A3 | 자체 현장 데이터 수집·라벨링 없음. 공개 데이터 + AI Hub만 | 사용자 |
+| A4 | 학습: RTX 4060 8GB **네이티브 Windows**(WSL2 불가), C: 411GB + **D: ~444GB(미할당 영역 신설)**. 추론: CPU ONNX, beta EC2 t3.medium(ai `mem_limit 1536m`) | 환경 + 검증 M8 |
+| A5 | **OpenAI 폴백은 이번 범위에서 동결(shim)**: `risk.py`/`risk.yaml`을 OpenAI·부스 전용으로 남기고, OpenAI 결과는 `rate → vdi/tier` 매핑으로 새 계약을 채운다(`bees[]` 없음, `bee_total:null`). v1의 "변경 없음"은 철회 | 검증 B6 |
+| A6 | 71667 Training 셋(206GB)은 D:에 받되, **Stage-2와 파이프라인 검증은 Validation 셋(26GB)+외부 데이터로 먼저** 시작 | 검증 M16 |
 
 ## 2. 범위
 
-**포함**: Stage-1 성충 검출기, Stage-2 감염 분류기, 크롭 파이프라인(xyxy 수정 포함), VDI 집계·CI·tier, `vdi.yaml`, 서빙 엔진 교체, `AnalysisResponse` 스키마 변경과 API/모바일/어드민 동기, 평가셋·회귀 fixture 재구성, ADR-0002.
-**제외**: 응애 개체 탐지·위치·카운팅(Phase 2), 유충 감염 트랙(Phase 2), Grad-CAM 히트맵, 워시 보정계수, OpenAI 경로, 모바일 UI 재설계(스키마 동기만), 인프라.
+**포함**: 모바일 캡처·업로드 해상도(B1), API 이미지 패스스루, Stage-1/Stage-2, 크롭 파이프라인(xyxy), VDI 집계·보정·CI·tier, `vdi.yaml`, 서빙 엔진, 시각 증거, 스키마 이중 출력 이행(B7), 4개 앱 동기, 부스 앱 JSON 동결, 평가셋·회귀 fixture 재구성, Windows 툴체인, ADR-0002.
+**제외**: 응애 위치·카운팅, 워시 보정, 유충 트랙, OpenAI 프롬프트, 인프라 변경(단 §8의 시연 인스턴스 권고는 기록).
 
-## 3. 출력 계약 (사용자에게 보이는 것)
+## 3. 출력 계약
 
-| 필드 | 정의 | 비고 |
-|---|---|---|
-| `vdi` | Σ(감염 판정 성충) / Σ(탐지 성충) × 100, 사진 여러 장이면 **카운트 합산** 후 나눔 | "감염률" 아님. 이름·API·DB·DTO 전부 `vdi` |
-| `vdi_ci95` | Beta-Binomial 95% 신뢰구간 (Jeffreys prior Beta(0.5,0.5)) | 벌 수 적으면 구간이 넓어짐 — 표시만, 차단 없음 |
-| `bee_total` | 탐지 성충 수 | 항상 표시 |
-| `bees[]` | `{box(원본 좌표), p_infested, infested(bool)}` | 감염 판정 벌에 박스 |
-| `tier` | `low` / `elevated` / `high` — `vdi.yaml` 초기 경계 3 / 10, `calibrated: false` 명시 | "위험(danger)" 단어 사용 안 함 |
-| `recommendations` | 농진청 방제 시기 창(3월 중순~4월 초 / 6월 중순~7월 초 / 7월 하순~8월 중순 / 10월 하순~11월 초) + tier별 문구. `elevated`/`high`는 "가루설탕법(설탕 15g+일벌 100마리)으로 확인" | 치료 지시 아님 |
-| `model_versions` | `{stage1, stage2}` SemVer | 회귀 추적 |
-| `latency_ms` | 측정값 | 게이트 아님 |
+| 필드 | 정의 |
+|---|---|
+| `vdi` | **보정 지수**: `clip((raw − FPR) / (TPR − FPR), 0, 100)` (Rogan–Gladen). raw = Σ(τ 초과 성충) / Σ(탐지 성충) × 100, N장이면 카운트 합산. TPR/FPR은 cal split 측정값을 `vdi.yaml`에 고정 |
+| `vdi_raw` | 보정 전 값 (`raw_payload`) |
+| `sampling_ci95` | Jeffreys 이항 구간(표본 오차만). UI 라벨 **"표본 신뢰구간"** — 분류기 오차·봉개 유충방 미관측은 포함 안 됨을 문구로 명시 |
+| `bee_total` | 탐지 성충 수. `< 30`이면 "표본 적음" 배지 |
+| `bees[]` | `{box(원본 좌표), p_infested, infested(bool)}` |
+| `evidence[]` | 감염 판정 상위 k=6 크롭(원본 해상도 확대) + Grad-CAM++ 오버레이. UI 표기 **"주목 영역 (응애 위치 아님)"** |
+| `tier` | `low` [0,3) · `elevated` [3,10) · `high` [10,∞) — **반열림 구간, 표시값(소수 1자리) 기준** · `insufficient` = `bee_total == 0` 또는 품질 실패 |
+| `quality` | `{blur_score, exposure, resolution_px_per_mm_est, ok:bool}` |
+| `recommendations` | tier별 문구 + **"다음 권장 점검 시기"**(RDA 창) — `low`에는 방제 문구 없음. `elevated/high`는 "가루설탕법(설탕 15g+일벌 100마리)으로 확인" |
+| `model_versions` | `{stage1, stage2, vdi_config}` |
+| `latency_ms` | 측정값 |
 
-**제거**: `infestation_rate`, `risk_score`, `estimated_count`, `low_confidence` 강제 tier clamp, 히트맵.
-**게이트 없음**: 벌 수와 무관하게 항상 결과를 낸다(시연 우선). 벌 수 < 300이면 UI에 "표본 적음" 배지만.
+**항상 결과를 낸다**(박스·크롭은 표시). `insufficient`는 게이트가 아니라 0으로 나눌 수 없거나 사진이 판독 불가일 때의 tier다. 화면에 **"보정 전 시험 지표 — 사진은 봉개 유충방 속 응애를 볼 수 없습니다"** 고정 문구.
 
 ## 4. 아키텍처
 
 ```
-[원본 사진 1~N] ─ EXIF 회전만, 다운스케일 금지, 원본 보존
-   ▼ ① 품질 체크(해상도·블러·밝기) → 경고만
-   ▼ ② Stage-1 성충 검출: YOLO11s, 1-class `bee`, 입력 긴 변 1280 축소본, conf 0.15(recall 우선)
-        원본 > 20MP이거나 1차 패스 탐지 수 > 400이면 2×2 타일(SAHI) 재패스 + NMS 병합
-   ▼ ③ 박스 → 원본 좌표 역매핑 → 원본에서 크롭(여백 10% 랜덤 지터) → 종횡비 유지 패딩 → 224²
-   ▼ ④ Stage-2 감염 분류: ShuffleNet-V2 x1.0 (ImageNet 사전학습), 이진, temperature scaling 보정
-   ▼ ⑤ 집계 vdi / CI / bee_total
-   ▼ ⑥ tier (vdi.yaml) ▼ ⑦ recommendations (RDA 앵커)
-[응답 §3]
+[폰 캡처 ResolutionPreset.max → 원본 업로드(≤10MB, 초과 시만 긴 변 4000)]
+   ▼ API: sharp는 EXIF 회전·strip만, 치수 유지 (limitInputPixels 50MP)
+   ▼ ① 품질 체크: 블러(Laplacian var)·노출·해상도 → quality.ok; 실패 시 tier=insufficient (박스는 계속)
+   ▼ ② Stage-1 성충 검출: YOLO11s 1-class `bee`, 입력 1024, **≥8MP면 항상 2×2 타일(SAHI)**, max_det 1500, conf 0.15, 타일 병합은 IoMin NMS
+   ▼ ③ 박스 → 원본 좌표 → 원본 크롭(여백 10% 고정) → 종횡비 유지 패딩 → 224
+   ▼ ④ Stage-2 분류: ShuffleNet-V2 x1.0, 64개씩 청크 추론, p = Platt(bias 포함) 보정, infested = p > τ(vdi.yaml)
+   ▼ ⑤ 집계: raw → Rogan–Gladen 보정 vdi, Jeffreys CI, bee_total
+   ▼ ⑥ tier(반열림, 표시값 기준) ▼ ⑦ evidence (top-k 크롭 + Grad-CAM++) ▼ ⑧ recommendations
 ```
 
-**결정 근거**
-- 벌은 medium 객체라 1280 축소본으로 충분하고(Stage-1), 크롭만 원본에서 뜨면 Stage-2 입력 해상도 손실이 없다 — 해상도 보존과 CPU 예산을 동시에 만족.
-- **성충 1-class**: 71667을 xyxy로 바로 읽으면 유충_정상은 셀(116px)·유충_응애는 영역(489px)으로 같은 객체가 아니어서 분류기가 박스 크기로 답을 맞히는 지름길이 생긴다. 유충은 Phase 2.
-- Stage-2 백본은 Agronomy 2026(19개 백본 × 12 전처리, 3-fold)에서 ShuffleNet-V2 x1.0이 최고 안정(범위 1.41%p), VarroaNet(SE) 97.28%. MobileNetV3-Small은 대안.
-- 입력 224 패딩: 같은 논문에서 **리사이즈 방식이 최대 단일 효과**(d≈1.0), 종횡비 보존이 우세. "28×28 최적"은 feature map 크기 결론이며 입력 크기와 무관.
-- 기존 `orchestrator.py`(엔진 주입) 유지. `yolo_engine.py` → `two_stage_engine.py`, `risk.py` → `vdi.py`, `preprocess.py`는 EXIF/회전만.
+**결정 근거(v2)**
+- 벌은 medium 객체라 1024 축소본으로 찾고 크롭만 원본에서 뜬다. 서빙 벌 크기(≈100px @12MP → 1024에서 ≈30px)와 학습(71667 265px @FHD)의 **5× 스케일 갭**은 (i) ≥8MP 항상 타일, (ii) Stage-1 scale 증강 0.15, (iii) 밀집 데이터 71488 필수로 메운다.
+- 성충 1-class: 유충_정상(셀 116px)과 유충_응애(영역 489px)는 다른 객체. 유충은 Phase 2.
+- **Stage-2 크롭은 Stage-1 예측 박스에서 만든다**(GT 박스 아님): GT 응애 박스가 정상보다 크고(413 vs 325px) 이웃 벌을 포함(31/56)하는 지름길을 끊기 위해. 따라서 **Stage-1을 먼저 학습**한다.
+- 분류기 백본: Agronomy 2026에서 ShuffleNet-V2 x1.0이 전처리 변동에 가장 안정(범위 1.41%p, **가시 응애만 큐레이션한 인디스트리뷰션 결과**). 224 패딩: 리사이즈 표준화가 최대 효과(d≈1.0)이며 **MR/NR 방식 간 유의차는 없음(p=0.376)**. 28×28 feature map 결론은 응애가 224 입력에서 10~20px일 때의 결과 — 우리는 Gate 0에서 실제 px를 확인한다.
+- 기존 `orchestrator.py` 엔진 주입 유지. `two_stage_engine.py` 신설, `vdi.py` 신설, `risk.py`는 OpenAI·부스용 shim으로 동결.
 
 ## 5. 데이터
 
 ### 5.1 역할
 
-| 역할 | 데이터 | 규모 | 라이선스 |
-|---|---|---|---|
-| Stage-1 학습 | **AI Hub 71667** 성충 3클래스 박스 전부 → `bee` | Training 셋 전체(206GB, 312k장) | AI Hub (A1) |
-| Stage-1 보조(옵션) | AI Hub 71488 벌 개체 박스(여왕벌·한봉) | 274k장 | AI Hub |
-| Stage-2 학습 (주) | **71667** 성충 크롭: `성충_응애`=1, `성충_정상`+`성충_날개불구`=0 | 응애 ≈ 4.5% of 성충 (Sample 56/1,239) | AI Hub |
-| Stage-2 학습 (혼합, 결정됨) | **VarroaDataset** (Zenodo 4085044) train split, **EV2** (Zenodo 13771384) | 감염 3,947 / 정상 9,562 (160×280) ; 감염 3,183 / 정상 1,987 | CC BY 4.0 (둘 다 Zenodo 원본 기준; EV2 Kaggle 미러의 NC 표기는 무시) |
-| 평가 (인도메인) | 71667 golden 300장 (응애 100 + 정상 200), colony-disjoint, 학습 영구 제외 | 기존 `golden_holdout.py` | |
-| 평가 (혼합 도메인) | VarroaDataset 기본 **test split**(감염 942 / 정상 2,466), EV2 hold-out 15% | 학습에서 제외 | |
-| 평가 (야외 OOD) | VD2/Vit4V 프레임 — **평가 전용** (CC BY-NC-ND, 학습 금지) | | |
-| 제외 | Kaggle "varroa" 업로드 7종(VarroaDataset 복사본·라이선스 위조), Roboflow 재업로드 | | |
+| 역할 | 데이터 | 규모 · 비고 |
+|---|---|---|
+| Stage-1 학습 | **71667** 성충 3클래스 → `bee` **상한 2.5만 장**(colony·device 층화) + **71488 필수**(밀집·여왕벌·한봉) | 312k 전체는 4060에서 수 주 — 상한 |
+| Stage-2 학습 (인도메인) | 71667 성충 크롭 — **Stage-1 예측 박스(GT IoU≥0.5 매칭)** 기준. `성충_응애`=1, `성충_정상`=0. **`성충_날개불구`(DWV)는 제외**. **감염 이미지 안의 정상 박스는 학습 음성에서 제외**(미검증 음성) | 라벨 노이즈 차단 |
+| Stage-2 학습 (외부 혼합) | VarroaDataset train, EV2 train | **소스별 양성 prior를 균등 샘플링**, 71667과 같은 패딩·종횡비로 재크롭 |
+| **cal split** | 71667 colony-disjoint 15% — τ·TPR/FPR·Platt 보정 전용 | 구 설계 복원 |
+| golden (학습 영구 제외) | 71667 **colony × 날짜 블록 홀드아웃**, 선택은 원본 JSON `category_id==5`, colony·device당 **≥10분 디듀프**, 응애 100 + 정상(성충 포함) 200 | `has_varroa_label()` 재작성 |
+| 평가 (혼합) | VarroaDataset test split, EV2 hold-out 15% | |
+| 평가 (야외 OOD, 평가 전용) | VD2 프레임, BeeImage | 라이선스상 학습 금지 |
+| e2e 평가 | golden 이미지를 같은 colony·세션으로 합쳐 **≥300 성충 의사-프레임** 구성, 진짜 VDI로 층화(0 / 2~12 / >12%) | 이미지당 성충 중앙값 4마리라 단일 이미지 e2e는 무의미 |
 
 ### 5.2 71667 파싱 정정 (P0)
-- `bbox`는 **`[x1,y1,x2,y2]`**. `aihub_to_yolo.py:150` 수정 + `area` 필드 교차검증 테스트(4,208/4,210 일치 재현).
-- xyxy 기준 Sample 통계: 성충_정상 중앙값 263×269px(면적 3.4%), 성충_응애 400×354px(최소 153×139), 유충_정상 116×117, 유충_응애 489×500. → **응애 박스는 벌/영역 크기이며 응애 개체 크기(≈30px)가 아니다 = Q3=B 유지**.
-- 71667은 벌 1마리 ≈ 265px @FHD ≈ **22 px/mm**로 근접 촬영. 폰 소비판 한 컷(12MP)의 벌 ≈ 100px보다 2.5배 고해상도 → §6 스케일 증강 필수.
+- `bbox` = **`[x1,y1,x2,y2]`**. `aihub_to_yolo.py:150` 수정 + `area` 교차검증 테스트(4,208/4,210 재현).
+- xyxy Sample 통계: 성충_정상 263×269(면적 3.4%), 성충_응애 400×354(긴 변 하위 10% 338 > 정상 중앙값), 유충_정상 116×117, 유충_응애 489×500. 응애 박스는 벌 단위(다른 성충 50% 이상 포함 2/56)이나 느슨함.
+- 71667 = 벌 265px @FHD ≈ 22 px/mm 근접 촬영. 폰 12MP 소비판 한 컷 ≈ 9 px/mm.
+- **감염 벌 56/56 `state=정상`** — 형태 단서 없음. 분류기가 볼 수 있는 건 응애뿐 → §7 Gate 0.
 
-### 5.3 전처리·분할
-- `make_crops.py`(신규): xyxy 박스 → 원본 크롭(여백 0~15% 랜덤) → 종횡비 보존 패딩 224 → `crops/{split}/{label}/` + `crops.csv`(원본·colony·device·원 박스 크기). 박스 짧은 변 < 48px 제외.
-- 분할은 기존 **per_colony_time_block** 유지(colony 001 = 75%). Stage-1·Stage-2가 **동일 colony split**을 공유해 e2e 누수를 막는다.
-- VarroaDataset·EV2는 각자의 공식 split 유지. 학습 시 도메인 혼합 비율은 **실험 변수**(71667 : 외부 = 1:0 / 3:1 / 1:1)로 기록.
+### 5.3 전처리·분할·디스크
+- 원본 zip·해제: **D:**. 변환·split·golden은 **복사 대신 manifest(txt 이미지 목록)** — `copy_images=False` 기본화, Windows 개발자 모드 symlink 불필요.
+- 분할: 기존 `per_colony_time_block`은 **train/val용**으로만 쓰고, golden·cal은 colony 단위 홀드아웃. Stage-1·Stage-2·cal·golden이 **하나의 `split_manifest.json`**을 읽고 테스트가 disjoint를 검사.
+- Windows: `PYTHONUTF8=1`, 모든 `read_text/open`에 `encoding="utf-8"`, `make` 대신 `tasks.py`(PowerShell 호환), 7-Zip UTF-8 해제 후 `01.원천데이터` 폴더명 assert, `workers: 4`.
 
-## 6. 학습 레시피 (커밋 대상 — 레시피 유실 재발 방지)
+## 6. 학습 레시피 (커밋 대상)
 
 | 항목 | Stage-1 (검출) | Stage-2 (분류) |
 |---|---|---|
-| 모델 | YOLO11s, `yolo11s.pt` 사전학습 | ShuffleNet-V2 x1.0, ImageNet 사전학습, 이진 head |
-| 입력 | 1280 (batch 8, AMP) | 224 (batch 128) |
-| 최적화 | AdamW lr 1e-3 cos, 100 ep, patience 20 | AdamW lr 3e-4 cos, 50 ep, patience 10, label smoothing 0.05 |
-| 불균형 | — | 클래스 가중 CE + 양성 오버샘플(에폭당 1:3), 층화 split |
-| 증강 (기하) | mosaic, flip, ±15°, scale 0.5 | flip, ±15° 회전, **스케일 다운 증강: 크롭을 90~265px로 무작위 축소 후 224 재확대**(폰 해상도 모사) |
-| 증강 (광도) | hsv_s 0.4 / hsv_v 0.3 / **hsv_h 0.01**, 모션블러, 그림자 | 밝기·대비 ±0.3, CLAHE p0.3, 모션블러 p0.2, 그림자, JPEG 재압축 q50~95, **hue 최소** |
-| 금지 | copy_paste(bbox 전용 라벨에서 no-op, 2026-06-08 확인) | 원근·전단 왜곡(응애 형태 단서 손실) |
-| 재현성 | `train.py`에 **모든** 하이퍼파라미터 CLI 오버라이드 + run별 resolved config를 `eval_history/<ver>.json`에 동봉 | 동일 |
-| 보정 | — | validation으로 temperature scaling, ECE 보고 |
+| 모델 | YOLO11s, `yolo11s.pt` | ShuffleNet-V2 x1.0, ImageNet, 이진 head |
+| 입력 | 1024, `batch: -1`(autobatch), AMP | 224 패딩, batch 128 |
+| 데이터 | 71667 2.5만 + 71488 | §5.1 |
+| 최적화 | AdamW 1e-3 cos, 100 ep, patience 20 | AdamW 3e-4 cos, 50 ep, patience 10 |
+| 불균형 | — | **가중 샘플러만**(가중 CE·오버샘플 동시 사용 금지) |
+| 스케일 증강 | scale **0.15~1.0**, 다중 이미지 축소 모자이크 | **폰 열화 파이프라인**: 광학 블러 → 축소(벌 긴 변 **Gate 0 하한~265px**) → 센서 노이즈 → 언샤프 → JPEG q50~95 → 224 재확대 |
+| 광도 증강 | hsv_s 0.4 / hsv_v 0.3 / **hsv_h 0.01**, 모션블러, 그림자 | 밝기·대비 ±0.3, CLAHE p0.3, 그림자, **hue 최소** |
+| 기하 | mosaic, flip, ±15° | flip, ±15°, **약한 원근 ≤10°** (핸드헬드 사각) |
+| 금지 | copy_paste(bbox 라벨 no-op) | 강한 전단·원근 |
+| 보정 | — | **Platt(bias 포함)** on cal split(자연 유병률) → τ = FPR 1% 목표 지점, TPR/FPR 기록 → `vdi.yaml` |
+| 재현성 | `train.py` 전체 하이퍼파라미터 CLI + resolved config → `eval_history/<ver>.json` | `train_stage2.py` 동일 |
 
-순서: **Stage-2 먼저**(가볍고 빠름 → 조기 신호) → Stage-1 → e2e.
-4060 예산: Stage-2 5만 크롭 50ep ≈ 수십 분, Stage-1 5k 이미지 100ep ≈ 수 시간 → 50k 확장은 하룻밤.
+순서: **Stage-1 → 크롭(예측 박스) → Stage-2 → cal → e2e.** 4060 예산: Stage-1 2.5만장 100ep@1024 ≈ 하루 안팎(실측 후 갱신), Stage-2 ≈ 1시간.
 
 ## 7. 평가와 게이트
 
-| 수준 | 셋 | 지표 | 게이트 |
+| 게이트 | 내용 | 통과 기준 |
+|---|---|---|
+| **Gate 0 (선행)** | (a) 실제 앱 업로드 이미지 5장에서 벌 px 실측; (b) 원본 크롭 학습 후 px/mm 22→15→12→9 시뮬 recall 곡선; (c) DINOv2 클릭 프로브 | recall 붕괴 지점을 **촬영 가이드 하한**으로 확정하고 §6 축소 하한을 그 값으로 고정. 12MP 한 컷이 하한 미달이면 "반 소비판 촬영"을 가이드 기본으로 |
+| Stage-1 | golden mAP@0.5, `bee` recall; 밀집 폰 프레임(손 카운트 5장) recall 보고 | mAP ≥0.85, recall ≥0.90 |
+| Stage-2 | golden 크롭 감염 recall, **specificity**, AUROC, ECE; **소스·기기·colony별 분리 보고**; 크기·종횡비만 로지스틱 베이스라인 AUROC; 임베딩→소스 선형 프로브; leave-one-device-out | recall ≥0.90 **& specificity ≥0.985** @τ; 크기 베이스라인 AUROC <0.7; 100 양성 기준 CI(±0.06) 명시 |
+| e2e | 의사-프레임 VDI MAE, **tier 혼동행렬**, 사소 베이스라인(전부 low) 병기; **0% 감염 의사-프레임 → VDI<3 in ≥95%**; **단일 스테이지(xyxy 수정·2-class·1024 타일) 베이스라인 대비** | tier 일치율 ≥0.85 **and** 베이스라인 대비 우세 |
+| OOD | VD2·BeeImage에서 recall·**FPR** 하락폭 | 보고만(−10~15%p 예산) |
+| 회귀 | `regression_manifest.json` v2: 경계권·저벌수·`varroa_visible=no`·0마리·블러 케이스 | tier 변동 0 |
+
+`vdi.py` 단일 tier 함수 + 경계 테스트(2.949/2.95/3.0/9.95/10.0, 표시값 기준). `_needs_fallback`은 VDI·quality 기준으로 재작성.
+
+## 8. 서빙·스키마·이행 (B7 순서)
+
+1. **API/DB 관용화 먼저**: `failed`는 `engine_used===null`로만; tier 매핑에 `low/elevated/high/insufficient` 추가(`overall_health`: low→healthy, elevated→warning, high→critical, insufficient→null; severity 동일 규칙); `analyses`에 `vdi numeric, vdi_ci_low, vdi_ci_high, bee_total int` 추가(nullable); `ai_models`에 `('yolo','helpbee-two-stage','0.2.0')` row; `varroaInfectionRisk` 트렌드는 `coalesce(vdi, varroaInfectionRisk)`.
+2. **AI 이중 출력**: 새 필드 + `risk_score := round(vdi)`, `tier` 구 이름 병기(`tier_legacy`) 한 릴리스.
+3. **소비자 이전**: mobile DTO·화면(`elevated` 화면 정의), admin 진단 뷰, booth는 **JSON 동결**(`make_booth_cases.py`는 `risk.py` shim 사용).
+4. **구 필드 제거** 마이그레이션.
+
+- 서빙: Stage-1 ONNX(INT8 허용) → 크롭 → Stage-2 ONNX FP32 **64개 청크**; 소프트 크롭 상한 1,500(초과 시 랜덤 샘플, `raw_payload`에 기록); Grad-CAM++는 top-k에만. ai-client 타임아웃 two-stage 경로 **90s**. 시연 인스턴스는 **T3 Unlimited 또는 c6i.large** 권고.
+- **N장 합산**: 저장은 이미지당 row 유지, **읽기 시 집계** `GET /v1/analyses/aggregate?ids=…`(Σ/Σ + CI). 동일 면 중복 촬영은 UI 문구로 안내.
+- 가중치: `s3://helpbee-models/two-stage/v0.2.0/{stage1.onnx,stage2.onnx,vdi.yaml,metadata.json}`; 로더에 `TWO_STAGE_MODEL_VERSION` 추가.
+- portfolio 모드: `PORTFOLIO_MODE=true`면 유료 플랜·402 쿼터 비활성.
+
+## 9. 이행 순서 (크리티컬 패스 명시)
+
+| # | 작업 | 병렬 | 의존 |
 |---|---|---|---|
-| Stage-1 | 71667 golden | mAP@0.5, recall(`bee`) | mAP@0.5 ≥ 0.85, recall ≥ 0.90 |
-| Stage-2 | 71667 golden 크롭 / VarroaDataset test / EV2 hold-out | 감염 recall, 정상 precision, AUROC, ECE | golden 감염 recall ≥ 0.90 & 정상 precision ≥ 0.90 |
-| **e2e** | 71667 golden 이미지 | **VDI MAE**, **tier 일치율**, 경계권(2~12%) 부분집합 MAE | tier 일치율 ≥ 0.85 (초기값, 첫 측정 후 고정) |
-| OOD | VD2 프레임, BeeImage | Stage-2 recall 하락폭 | 보고만 (−10~15%p 예산) |
+| 0 | D: 파티션, Python 환경(Windows), `PYTHONUTF8`, `tasks.py` | — | — |
+| 1a | 71667 **Validation 셋** + VarroaDataset + EV2 다운로드 | 1b와 병렬 | 0 |
+| 1b | 71667 Training 셋(206GB) → D: | 백그라운드 | 0 |
+| 2 | `aihub_to_yolo.py` xyxy + area 테스트 + 1-class + manifest 모드 | | 0 |
+| 3 | `split_manifest.json`(train/val/cal/golden colony 홀드아웃) + golden 재작성 | | 1a, 2 |
+| 4 | **모바일 캡처 max + 원본 업로드 + API 패스스루 + AI 축소 우회** (B1) → **Gate 0(a)** 실측 | 3과 병렬 | — |
+| 5 | Stage-1 학습(Validation 셋 5k로 파이프라인 검증 → 1b 도착 후 2.5만+71488) | | 3 |
+| 6 | 예측 박스 크롭 + Stage-2 학습 + cal(τ/TPR/FPR/Platt) + **Gate 0(b)(c)** | | 5 |
+| 7 | e2e 의사-프레임 평가 + 단일 스테이지 베이스라인 + 회귀 fixture v2 | | 6 |
+| 8 | API/DB 관용화(§8-1) | 5~7과 병렬 | — |
+| 9 | `two_stage_engine.py` + `vdi.py` + evidence + 이중 출력(§8-2) | | 7, 8 |
+| 10 | 소비자 이전(§8-3) + 구 필드 제거(§8-4) | | 9 |
+| 11 | ADR-0002 + `AIHUB_71667.md`·`apps/ai/CLAUDE.md` 정정 + v0.1.0 태그 — **코드 전 문서 갱신 원칙에 따라 각 단계 PR에 포함** | | — |
 
-- 회귀 fixture(`regression_manifest.json`) 전면 재구성: 경계권·저벌수·`varroa_visible=no`(EV2) 케이스 포함. 기존 24개는 `v0.1.0-single-stage` 태그에 보존.
-- 기존 `tier_from_rate`/`tier_from_score` 이중 정의 제거 → `vdi.py` 단일 함수 + 경계 근처 단위 테스트(2.9, 3.0, 3.1, 9.9, 10.0, 10.1).
-
-## 8. 서빙·스키마
-
-- `apps/ai/app/services/two_stage_engine.py`: Stage-1 ONNX(INT8 허용) → 크롭 → Stage-2 ONNX(**FP32 유지**, 소형 특징 보호) 배치 추론. 크롭 수 상한 없음.
-- `apps/ai/app/services/vdi.py`: 집계·CI·tier·recommendations. 설정 `training/configs/vdi.yaml`(`thresholds: {elevated: 3, high: 10}, calibrated: false, rda_windows: [...]`).
-- `AnalysisResponse`(Pydantic) 변경 → `apps/api/src/services/ai-client.ts`, `packages/types`, `apps/mobile/lib/features/analyses/` DTO, `apps/admin` 진단 뷰 동기. `analyses` 테이블: `vdi numeric`, `vdi_ci_low/high`, `bee_total int` 추가, `varroa_infection_risk`·`estimated_varroa_count`는 nullable 유지 후 다음 마이그레이션에서 제거.
-- 가중치: `s3://helpbee-models/yolo/v0.2.0/{stage1,stage2}.onnx` + `metadata.json`(resolved config 포함).
-
-## 9. 이행 순서 (마일스톤)
-
-| # | 작업 | 산출물 | 의존 |
-|---|---|---|---|
-| 1 | 71667 Training 셋 다운로드 (aihubshell, 사용자 API 키) → `training/datasets/aihub-71667/` | 레이아웃 확인 로그 | 사용자 키 |
-| 2 | `aihub_to_yolo.py` xyxy 수정 + area 교차검증 테스트; 성충 1-class 매핑 | PR | — |
-| 3 | `make_crops.py` + VarroaDataset·EV2 다운로드·정규화 | `crops/`, `crops.csv` | 1,2 |
-| 4 | golden 재추출(xyxy) + colony split | `golden/`, split manifest | 3 |
-| 5 | **Stage-2 학습** + 보정 + 평가(golden/VarroaDataset test/EV2) | `eval_history/v0.2.0-stage2.json` | 3,4 |
-| 6 | **Stage-1 학습** + 평가 | `eval_history/v0.2.0-stage1.json` | 2,4 |
-| 7 | e2e 평가 + 회귀 fixture 재구성 | `regression_manifest.json` v2 | 5,6 |
-| 8 | ONNX export + `two_stage_engine.py` + `vdi.py` + 스키마 + 단위 테스트 | PR | 7 |
-| 9 | API·types·mobile·admin 스키마 동기 | PR | 8 |
-| 10 | ADR-0002 + `apps/ai/CLAUDE.md`·`AIHUB_71667.md` 정정 + v0.1.0 태그 | PR | 8 |
-
-## 10. 리스크
+## 10. 리스크 (v2 잔여)
 
 | 리스크 | 완화 |
 |---|---|
-| 리그(22px/mm)→폰(≈9px/mm) 스케일·조명 갭 미측정 | §6 스케일 다운 증강 + 광도 증강, VD2 OOD 보고, 시연 촬영 조건(밝은 그늘, 반 소비판, 12MP+) 사전 고정 |
-| 71667 응애 4.5% 불균형 | 가중 CE + 오버샘플 + 외부 양성 혼합(결정됨) |
-| 응애 박스가 정상 벌 박스보다 큼(400 vs 263) → 크기 지름길 | 여백 랜덤 지터 + 스케일 증강으로 절대 크기 정보 제거; 검증에서 박스 크기별 recall 분해 |
-| 206GB 다운로드·해제 (학교망 속도, 디스크) | 순차 zip 처리·해제 후 zip 삭제; 사용자가 용량 충분 판단 |
-| 스키마 변경 파급(4개 앱) | `packages/types` 단일 소스에서 시작, 필드 추가 먼저·제거는 다음 마이그레이션 |
-| tier 경계가 미보정 초기값 | UI·API에 `calibrated: false` 노출, "확인하세요" 문구 |
+| Gate 0에서 12MP 한 컷이 하한 미달 | 반 소비판 촬영 가이드 기본화; 시연 촬영 조건 사전 고정 |
+| 예측 박스 기반 크롭이 Stage-1 품질에 종속 | Stage-1 recall 게이트 선행; GT 매칭 실패 박스는 학습 제외 |
+| 소스·colony 지름길 잔존 | 소스 프로브·분리 지표가 게이트 |
+| 학교망 206GB 다운로드 시간 | Validation 셋 우선 경로(1a) |
+| t3.medium 메모리·크레딧 | 청크·상한·시연 인스턴스 권고 |
 
-## 11. Phase 2 후보 (범위 밖, 기록만)
-- 약지도 응애 위치: `성충_응애` 크롭 = MIL 양성 bag → Grad-CAM++ 피크 → P2BNet(point→box) → 크기 prior(응애 = 벌 장축 8~13%) → VarroaDataset 응애 박스 4,628개와 결합.
-- 유충 트랙(셀 단위 vs 영역 단위 라벨 정합 후).
-- DINOv2 클릭 프로브: 폰 해상도에서 응애 특징 존재 여부 go/no-go.
+## 11. Phase 2 후보
+약지도 응애 위치(MIL → Grad-CAM++ → P2BNet → VarroaDataset 4,628 박스) · 유충 트랙 · 워시 보정 · 응애 카운팅.
 
-## 12. 근거 요약 (검증 등급: ✅ 원문 확인 / 🟡 보고서)
-
-- ✅ Bilik 2021 (Sensors 21:2764): 응애 15~25px@640 설계 기준; 감염 벌 F1 0.874 vs 응애 F1 0.714; "감염은 몸 변형과 연결되고 응애가 항상 보이지 않아 벌 단위 분류가 더 강건할 수 있다".
-- ✅ Lee et al. 2025 (Agriculture 15:1221, 강원대·농과원): FLIR 2048×1536 @300mm 고정, 640 ROI, YOLOv7; 감염 벌 98.2% ≈ 응애 개체 98.0%; 증강 = 정규화+CLAHE, 층화 split; 데이터 비공개.
-- ✅ Agronomy 2026 16:1292 (같은 팀): 20봉군 3,400 ROI(1,700/1,700), 원본 ROI 40×39~344×302, 224 패딩; 리사이즈 최대 효과(d≈1.0), 디블러 비유의; ShuffleNet-V2 최고 안정, VarroaNet 97.28%.
-- ✅ JKSCI 2024: Stage-2(91%)는 Zenodo 입구터널 크롭 학습·평가, 집계 미정의, e2e 없음.
-- ✅ Liu/Bilik 2023 (AgriEngineering 5:102): 입구 4K 고정, FCN→YOLOX+CA, 응애 100마리 합성; 야외 조명에서 취약한 건 분할(Stage-1) 단계.
-- ✅ VarroaDataset gt.csv: 라벨 0/1/3, 1+3 = 3,947 감염, 응애 박스 4,628(중앙값 32×31).
-- ✅ 71667 Sample xyxy 재계산: §5.2.
-- 🟡 이미지 지표↔워시 대조 검증 논문 0편; 육아기 응애 ~2/3 봉개 유충방 내; n≥300에서 3% 구분(±1.9%p) — infestation-rate 보고서.
-- 🟡 농진청 방제 시기·월동 전 10%·가루설탕법 — RDA 보도자료.
-- 🟡 BeeSion(농진청×강원대) 97.8%, ₩400만 장비 — 고정 리그 경쟁 제품.
+## 12. 근거 요약 (검증 등급 ✅ 원문 / 🟡 보고서)
+- ✅ Bilik 2021: 응애 15~25px@640; 감염 벌 F1 0.874 vs 응애 0.714.
+- ✅ Lee 2025 (Agriculture 15:1221): FLIR 2048×1536 @300mm 고정, 640 ROI, YOLOv7, 감염 벌 98.2 ≈ 응애 98.0, 정규화+CLAHE, 층화 split, 데이터 비공개.
+- ✅ Agronomy 2026 16:1292: 20봉군 3,400 ROI(가시 응애만 큐레이션), 원본 ROI 40~344px, 224 패딩; 리사이즈 표준화 최대 효과(d≈1.0), **MR vs NR 유의차 없음(p=0.376)**; **응애가 224 입력에서 10~20px일 때 28×28 feature map 최적**; ShuffleNet-V2 x1.0 전처리 민감도 최저(1.41%p), VarroaNet 97.28%. 3-fold random CV(colony 비분리).
+- ✅ JKSCI 2024: Stage-2는 Zenodo 입구 크롭 학습·평가, 집계 미정의.
+- ✅ **Liu et al. 2023** (AgriEngineering 5:102): **벌통 입구** 4K 고정, FCN→YOLOX+CA, 응애 100마리 합성, 야외 조명 취약 단계 = 분할.
+- ✅ VarroaDataset gt.csv: 라벨 0/1/3, 감염 3,947, 응애 박스 4,628.
+- ✅ 71667 Sample xyxy: §5.2 + 감염 벌 `state=정상` 56/56 + 연속 촬영 간격 중앙값 4초.
+- ✅ 코드: 캡처 720p, 업로드 1920 축소, AI 1024 축소, API `risk_score` null → failed, `max_det` 기본 300(문서).
+- 🟡 이미지↔워시 검증 논문 0편; 육아기 응애 ~2/3 봉개 유충방; n≥300에서 3% 구분; RDA 방제 창·월동 전 10%·가루설탕법; BeeSion 97.8%(고정 리그).
 
 ## 13. 결정 로그
 
 | 날짜 | 결정 | 근거 |
 |---|---|---|
-| 2026-09-22 | 목표 = 실제 벌 개체별 응애 감염 판정(실전 진단 시연) | 사용자 |
-| 2026-09-22 | 응애 bbox 탐지가 아니라 **벌 크롭 → 감염 분류** | 사용자 제안 + Bilik 2021 |
-| 2026-09-22 | 핸드헬드 폰 자유 촬영 | 사용자 |
-| 2026-09-22 | 비영리 포트폴리오 전제, 데이터 책임 소유자 부담 | 사용자 |
-| 2026-09-22 | 벌 수 게이트 제거(시연 우선), 히트맵 제외 | 사용자 |
-| 2026-09-22 | `infestation_rate`→`vdi`, tier `low/elevated/high` | 승인 |
-| 2026-09-22 | VarroaDataset·EV2를 Stage-2 학습에 혼합; 1차 데이터 = Training 셋; 평가 = Zenodo test split + 71667 golden | 사용자 |
-| 2026-09-22 | Stage-1 성충 1-class, 유충 Phase 2 | xyxy 재계산(§5.2) |
+| 2026-09-22 | 목표 = 실제 벌 개체별 감염 판정 시연; 벌 크롭 → 분류; 핸드헬드 폰; 비영리; 게이트 제거; `vdi`·tier 이름 변경; 외부 데이터 혼합; Training 셋 1차; Stage-1 성충 1-class | 사용자 + xyxy 재계산 |
+| 2026-09-23 | **적대적 검증 반영 v2**: 모바일 캡처·업로드 범위 포함; `insufficient` tier(0마리·품질 실패); **시각 증거 포함**(Grad-CAM++ 표시 전용 + 크롭 갤러리); DWV 제외; Stage-1 2.5만 상한 + 71488 필수; N장 합산은 읽기 시 집계; D: 파티션; Rogan–Gladen 보정 + specificity 게이트 + cal split 복원; 예측 박스 크롭; golden colony 홀드아웃; 이중 출력 이행 순서; OpenAI shim; 인용 2건 정정 | 검증 기록 문서 |
 
 ## 14. 미해결
-- 71667 Training 셋 다운로드 소요 시간(학교망) — 1차 실행에서 측정.
-- 도메인 혼합 비율(§5.3) — 실험으로 결정, 결과를 §13에 기록.
-- tier 경계 3/10의 유지 여부 — e2e 첫 측정 후 결정.
-- 4개 앱 스키마 동기 PR 분할 단위.
+- Gate 0 결과에 따른 촬영 가이드 하한(px/mm) — 측정 후 확정.
+- 소스 혼합 비율 — 소스별 분리 지표로 결정, §13 기록.
+- 학교망 다운로드 시간 — 1b 실측.
+- `elevated` 모바일 화면 문안 — 소비자 이전(10단계) PR에서.
