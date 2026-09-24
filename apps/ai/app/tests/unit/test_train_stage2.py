@@ -127,7 +127,8 @@ def test_stage2_yaml_loads():
     cfg = yaml.safe_load((root / "training/configs/stage2.yaml").read_text(encoding="utf-8"))
     assert cfg == {"epochs": 50, "patience": 10, "batch": 64, "lr": 3e-4, "weight_decay": 0.01,
                    "label_smoothing": 0.05, "degrade": "none", "img_size": 224, "seed": 42,
-                   "crops": "training/crops", "project": "training/runs/stage2", "name": "v0.2.0-stage2"}
+                   "crops": "training/crops", "project": "training/runs/stage2", "name": "v0.2.0-stage2",
+                   "workers": 0}
 
 
 def test_parse_degrade():
