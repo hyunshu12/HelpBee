@@ -2,7 +2,8 @@
 import numpy as np
 import pandas as pd
 
-from training.eval_stage2 import by_group, lodo_probe, overall_metrics, size_only_auroc, source_probe_acc
+from training.eval_stage2 import (by_group, lodo_probe, overall_metrics, size_only_auroc, size_only_auroc_by_source,
+                                  source_probe_acc)
 
 
 def test_size_only_auroc_detects_size_shortcut_and_chance_without_it():
@@ -55,3 +56,21 @@ def test_lodo_probe_reports_each_device():
     r = lodo_probe(emb, y, dev)
     assert set(r) == {"d1", "d2", "d3"}
     assert all(v["auroc"] > 0.9 and v["n"] == 60 for v in r.values())
+
+
+def test_size_only_auroc_by_source_per_group_and_skips_small_or_single_class():
+    rng = np.random.default_rng(7)
+    y1 = np.array([0, 1] * 100)
+    w1 = np.where(y1 == 1, 300, 150) + rng.normal(0, 10, len(y1))  # 71667: 크기 지름길 있음
+    y2 = np.array([0, 1] * 100)
+    w2 = rng.normal(200, 30, len(y2))  # varroadataset: 없음
+    y3 = np.array([0, 1] * 5)  # ev2: 10행 < 20 → 생략
+    w3 = rng.normal(200, 30, len(y3))
+    y4 = np.zeros(30, int)  # extra: 단일 클래스 → 생략
+    w4 = rng.normal(200, 30, len(y4))
+    w = np.r_[w1, w2, w3, w4]
+    y = np.r_[y1, y2, y3, y4]
+    src = ["71667-val"] * 100 + ["71667-train"] * 100 + ["varroadataset"] * 200 + ["ev2"] * 10 + ["extra"] * 30
+    r = size_only_auroc_by_source(w, w * 1.1, y, src)
+    assert set(r) == {"71667", "varroadataset"}
+    assert r["71667"] > 0.95 and abs(r["varroadataset"] - 0.5) < 0.15

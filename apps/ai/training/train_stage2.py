@@ -65,11 +65,45 @@ def phone_degrade(img, rng, lo_px, hi_px=265):
     return cv2.resize(jpg, (224, 224), interpolation=cv2.INTER_LINEAR)
 
 
-def augment(img, rng, degrade_lo: int | None):
-    """학습 증강: [폰 열화] + 좌우/상하 flip · ±15° 회전 · 밝기/대비 ±0.3 · CLAHE p0.3 · 약한 원근(≤~10°)."""
+def size_jitter(img, rng, lo: float = 0.7, hi: float = 1.3):
+    """크기 지터: 224 크롭 내용 전체를 s~U(lo,hi) 배로 리사이즈 → s<1 이면 가운데 두고 검정 패딩
+    (make_crops.crop_pad_224 와 같은 검정), s>1 이면 가운데 224 를 잘라낸다.
+
+    2026-09-24 shakedown: [native_w, native_h, w/h] 만으로 라벨 AUROC 0.82~0.85 (게이트 < 0.7) — 71667 양성은
+    "감염 벌 영역" 박스라 크게 나와 겉보기 크기가 라벨 지름길이 된다. 학습에서 겉보기 크기를 흔들어 끊는다."""
     import cv2
 
-    x = phone_degrade(img, rng, degrade_lo) if degrade_lo else img
+    h, w = img.shape[:2]
+    s = float(rng.uniform(lo, hi))
+    nh, nw = max(1, int(round(h * s))), max(1, int(round(w * s)))
+    if (nh, nw) == (h, w):
+        return img
+    r = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_LINEAR)
+    if nh <= h and nw <= w:
+        out = np.zeros_like(img)
+        y0, x0 = (h - nh) // 2, (w - nw) // 2
+        out[y0:y0 + nh, x0:x0 + nw] = r
+        return out
+    y0, x0 = (nh - h) // 2, (nw - w) // 2
+    return np.ascontiguousarray(r[y0:y0 + h, x0:x0 + w])
+
+
+def parse_size_jitter(v) -> tuple[float, float] | None:
+    """config `size_jitter: [lo, hi]` → (lo, hi). None/빈 값/`none` → 끔."""
+    if v is None or (isinstance(v, str) and v.lower() == "none") or (isinstance(v, (list, tuple)) and not v):
+        return None
+    lo, hi = (float(t) for t in v)
+    if not 0 < lo <= hi:
+        raise ValueError(f"size_jitter 는 0 < lo <= hi 인 [lo, hi]: {v!r}")
+    return lo, hi
+
+
+def augment(img, rng, degrade_lo: int | None, jitter: tuple[float, float] | None = None):
+    """학습 증강: [크기 지터] + [폰 열화] + 좌우/상하 flip · ±15° 회전 · 밝기/대비 ±0.3 · CLAHE p0.3 · 약한 원근(≤~10°)."""
+    import cv2
+
+    x = size_jitter(img, rng, *jitter) if jitter else img
+    x = phone_degrade(x, rng, degrade_lo) if degrade_lo else x
     if rng.random() < 0.5:
         x = x[:, ::-1]
     if rng.random() < 0.5:
@@ -186,6 +220,24 @@ def measure_rates(p, y, tau):
     return float(pred[y == 1].mean()), float(pred[y == 0].mean())
 
 
+def rates_by_source(p, y, sources, tau) -> dict:
+    """소스 그룹(`source_group`: 71667 태그 → `71667`, varroadataset, ev2)별 τ 에서의 TPR/FPR.
+    한 클래스가 없는 소스는 그 지표 None. shakedown(2026-09-24)에서 71667 cal-A 로 정한 τ 가
+    VarroaDataset/EV2 에서 recall ≈ 0 이었다 — 전체 cal-B 한 숫자로는 안 보여 소스별로 남긴다."""
+    p = np.asarray(p, np.float64)
+    y = np.asarray(y).astype(int)
+    groups = np.array([source_group(s) for s in sources])
+    out = {}
+    for g in sorted(set(groups)):
+        m = groups == g
+        pred, yy = p[m] > tau, y[m]
+        pos, neg = yy == 1, yy == 0
+        out[str(g)] = {"tpr": float(pred[pos].mean()) if pos.any() else None,
+                       "fpr": float(pred[neg].mean()) if neg.any() else None,
+                       "n_pos": int(pos.sum()), "n_neg": int(neg.sum())}
+    return out
+
+
 def auroc(p, y) -> float:
     """Mann-Whitney U (동점은 평균 순위)."""
     p = np.asarray(p, np.float64)
@@ -266,7 +318,7 @@ def write_metadata(path: Path, model, platt: tuple[float, float], tau: float) ->
 
 
 def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: float, platt: tuple[float, float],
-                   capture_floor_px_per_mm: float | None = None) -> Path:
+                   capture_floor_px_per_mm: float | None = None, by_source: dict | None = None) -> Path:
     data = {
         "version": version,
         "tau": float(tau),
@@ -278,6 +330,7 @@ def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: flo
         "quality": {"blur_laplacian_min": 100, "exposure_mean": [40, 215]},
         "capture_floor_px_per_mm": capture_floor_px_per_mm,
         "recommendations": RECOMMENDATIONS,
+        "by_source": by_source,  # cal-B 소스별 {tpr, fpr, n_pos, n_neg} @τ (진단용, 서빙은 읽지 않음)
     }
     path = Path(path)
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -290,7 +343,8 @@ def read_crops(crops_dir: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: int):
+def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: int,
+             jitter: tuple[float, float] | None = None):
     import cv2
     import torch
     from torch.utils.data import Dataset
@@ -312,7 +366,7 @@ def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: i
             if train:
                 info = torch.utils.data.get_worker_info()
                 rng = np.random.default_rng([seed, i, torch.initial_seed() % (2**32), info.id if info else 0])
-                img = augment(img, rng, degrade_lo)
+                img = augment(img, rng, degrade_lo, jitter)
             x = (img.astype(np.float32) / 255 - IMAGENET_MEAN) / IMAGENET_STD
             return torch.from_numpy(x.transpose(2, 0, 1).copy()), torch.tensor(float(r["label"]))
 
@@ -341,6 +395,7 @@ def train(cfg: dict) -> dict:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     crops_dir = Path(cfg["crops"])
     degrade_lo = parse_degrade(cfg.get("degrade"))
+    jitter = parse_size_jitter(cfg.get("size_jitter"))
     save_dir = Path(cfg["project"]) / cfg["name"]
     save_dir.mkdir(parents=True, exist_ok=True)
     dump_resolved(cfg, save_dir)
@@ -355,7 +410,7 @@ def train(cfg: dict) -> dict:
                                     replacement=True, generator=torch.Generator().manual_seed(cfg["seed"]))
     # Windows(spawn)는 _dataset 안의 로컬 클래스를 피클할 수 없어 워커 0 (2026-09-24 박스 실측: EOFError in spawn).
     workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
-    train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"]), batch_size=cfg["batch"],
+    train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"], jitter), batch_size=cfg["batch"],
                           sampler=sampler, num_workers=workers, pin_memory=True, drop_last=True)
 
     def eval_dl(rows):
@@ -400,16 +455,21 @@ def train(cfg: dict) -> dict:
     pa, pb = sigmoid(platt[0] * za + platt[1]), sigmoid(platt[0] * zb + platt[1])
     tau = choose_tau(pa, ya, 0.01)
     tpr, fpr = measure_rates(pb, yb, tau)
+    zv, yv = _predict_logits(model, val_loader, device)
+    pv = sigmoid(platt[0] * zv + platt[1])
+    by_source_at_tau = {"cal_b": rates_by_source(pb, yb, [r["source"] for r in sp["cal_b"]], tau),
+                        "val": rates_by_source(pv, yv, [r["source"] for r in sp["val"]], tau)}
 
     model_cpu = model.to("cpu")
     export_onnx(model_cpu, save_dir / "stage2.onnx")
     write_metadata(save_dir / "metadata.json", model_cpu, platt, tau)
     vdi = write_vdi_yaml(Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), version="v0.2.0", tau=tau, tpr=tpr,
-                         fpr=fpr, platt=platt)
+                         fpr=fpr, platt=platt, by_source=by_source_at_tau["cal_b"])
     report = {
         "version": "v0.2.0-stage2", "model": "shufflenet_v2_x1_0", "degrade": cfg.get("degrade"),
         "best_epoch": best_ep, "val_auroc": best_auc, "platt": {"a": platt[0], "b": platt[1]},
         "tau": tau, "target_fpr": 0.01, "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
+        "by_source_at_tau": by_source_at_tau, "size_jitter": list(jitter) if jitter else None,
         "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
         "ece15": {"cal_a": ece(pa, ya), "cal_b": ece(pb, yb), "cal_b_uncalibrated": ece(sigmoid(zb), yb)},
         "counts": {k: {"n": len(v), "pos": sum(int(r["label"]) for r in v)} for k, v in sp.items()},

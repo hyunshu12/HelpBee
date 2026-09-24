@@ -14,6 +14,7 @@ eval.py·단일 스테이지 베이스라인이 쓰는 golden.json 300장보다 
     {"overall": {recall, specificity, auroc, ece},
      "by_source": {...}, "by_device": {...}, "by_colony": {...},   # 그룹별 {recall, specificity, n_pos, n_neg}
      "size_only_auroc": float,     # [native_w, native_h, w/h] 만의 5-fold 로지스틱 AUROC — 게이트 < 0.7
+     "size_only_auroc_by_source": {source: float},  # 같은 프로브를 소스 그룹별로 (n<20 또는 단일 클래스 소스 제외)
      "source_probe_acc": float,    # penultimate 임베딩 → source 5-fold LogisticRegression 정확도
      "lodo": {device: {auroc, n}}} # leave-one-device-out 선형 프로브 (임베딩 고정)
 
@@ -92,6 +93,22 @@ def size_only_auroc(native_w, native_h, y, seed: int = 0) -> float:
     return float(roc_auc_score(y, prob))
 
 
+def size_only_auroc_by_source(native_w, native_h, y, source, min_rows: int = 20, seed: int = 0) -> dict:
+    """size_only_auroc 를 소스 그룹(`source_group`)별로. 행 < min_rows 이거나 한 클래스뿐인 소스는 생략.
+    전체 값은 소스 간 크기 분포 차이(소스 = 라벨 prior)까지 섞이므로, 소스 안에서도 크기가 라벨을 맞히는지 본다."""
+    w = np.asarray(native_w, np.float64)
+    h = np.asarray(native_h, np.float64)
+    y = np.asarray(y).astype(int)
+    groups = np.array([source_group(s) for s in source])
+    out = {}
+    for g in sorted(set(groups)):
+        m = groups == g
+        if m.sum() < min_rows or len(set(y[m])) < 2 or np.bincount(y[m]).min() < 2:
+            continue  # 소수 클래스 1개면 StratifiedKFold 가 ValueError — 생략
+        out[str(g)] = size_only_auroc(w[m], h[m], y[m], seed)
+    return out
+
+
 def source_probe_acc(emb, source, seed: int = 0) -> float:
     """임베딩 → source 선형 프로브 5-fold 정확도 — 높을수록 임베딩이 촬영 소스를 담고 있음."""
     emb = np.asarray(emb, np.float64)
@@ -130,6 +147,8 @@ def build_report(df: pd.DataFrame, logits, emb, tau: float, platt: tuple[float, 
         "by_device": by_group(df, "device", p, y, tau),
         "by_colony": by_group(df, "colony", p, y, tau),
         "size_only_auroc": size_only_auroc(df["native_w"].astype(float), df["native_h"].astype(float), y),
+        "size_only_auroc_by_source": size_only_auroc_by_source(df["native_w"].astype(float),
+                                                               df["native_h"].astype(float), y, df["source"]),
         "source_probe_acc": source_probe_acc(emb, df["source"]),
         "lodo": lodo_probe(emb, y, df["device"]),
     }

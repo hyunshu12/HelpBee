@@ -10,6 +10,7 @@ lr: 3.0e-4
 weight_decay: 0.01
 label_smoothing: 0.05
 degrade: none
+size_jitter: [0.7, 1.3]   # 학습 전용 크기 지터 (크롭 겉보기 크기 지름길 차단 — shakedown size_only_auroc 0.82~0.85)
 img_size: 224
 seed: 42
 crops: training/crops
