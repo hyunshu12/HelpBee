@@ -256,7 +256,8 @@ def list_zip_members(zip_path: Path, sevenzip: Path | None = None) -> list[str]:
     if sevenzip is None:
         with zipfile.ZipFile(zip_path) as zf:
             return [decode_member_name(i) for i in zf.infolist() if not i.is_dir()]
-    out = subprocess.run([str(sevenzip), "l", "-slt", "-ba", "-mcp=65001", str(zip_path)],
+    # -sccUTF-8: 7z 콘솔 출력 문자셋 (없으면 OEM 코드페이지로 나와 한글 멤버명이 깨진다 — 2026-09-24 박스 실측)
+    out = subprocess.run([str(sevenzip), "l", "-slt", "-ba", "-mcp=65001", "-sccUTF-8", str(zip_path)],
                          capture_output=True, check=True)
     names, cur, is_dir = [], None, False
     for line in out.stdout.decode("utf-8", errors="replace").splitlines() + [""]:
@@ -276,7 +277,7 @@ def extract_images(ts_zip: Path, list_path: Path, out_root: Path, sevenzip: Path
     목록 중 실제로 추출된 파일 수를 반환한다 (7z 비정상 종료 시 CalledProcessError)."""
     dest = out_root / IMAGE_DIR_NAME
     dest.mkdir(parents=True, exist_ok=True)
-    cmd = [str(sevenzip), "x", "-mcp=65001", "-scsUTF-8", "-y", f"-o{dest}", str(ts_zip), f"@{list_path}"]
+    cmd = [str(sevenzip), "x", "-mcp=65001", "-scsUTF-8", "-sccUTF-8", "-y", f"-o{dest}", str(ts_zip), f"@{list_path}"]
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
     members = [m for m in list_path.read_text(encoding="utf-8").splitlines() if m.strip()]
