@@ -85,10 +85,44 @@ def eval_e2e(args: list[str]) -> int:
     """합성 e2e tier 일치율 + 단일 스테이지 베이스라인 → training/eval_history/v0.2.0-e2e.json. --onnx/--crops 등 인자는 그대로 전달."""
     return _run([sys.executable, "-m", "training.eval_e2e", *args])
 
+def subset(args: list[str]) -> int:
+    """71667 Training 서브셋 (TL.zip 스트리밍 index → select → materialize) — DOWNLOAD.md §4-1.
+    --tl-zip/--ts-zip/--out-root 필수. --work(기본 <out-root>/_subset), --n, --seed, --per-colony-cap,
+    --limit, --sevenzip, --verify-listing, --reindex(기존 index.jsonl 무시), --dry(명령만 출력)."""
+    import argparse
+    ap = argparse.ArgumentParser(prog="tasks.py subset")
+    ap.add_argument("--tl-zip", required=True); ap.add_argument("--ts-zip", required=True)
+    ap.add_argument("--out-root", required=True); ap.add_argument("--work")
+    ap.add_argument("--n", default="25000"); ap.add_argument("--seed", default="42")
+    ap.add_argument("--per-colony-cap", default="0.15"); ap.add_argument("--limit")
+    ap.add_argument("--sevenzip", default=shutil.which("7z") or r"C:\Program Files\7-Zip\7z.exe")
+    ap.add_argument("--verify-listing", action="store_true"); ap.add_argument("--reindex", action="store_true")
+    ap.add_argument("--dry", action="store_true")
+    a = ap.parse_args(args)
+    work = Path(a.work or Path(a.out_root) / "_subset")
+    index, selected = work / "index.jsonl", work / "selected.jsonl"
+    mod = [sys.executable, "-m", "training.data.aihub_subset"]
+    steps = []
+    if a.reindex or not index.exists():
+        steps.append([*mod, "index", "--tl-zip", a.tl_zip, "--out", str(index), *(["--limit", a.limit] if a.limit else [])])
+    else:
+        print(f"= index 재사용: {index} (--reindex 로 다시 생성)")
+    steps.append([*mod, "select", "--index", str(index), "--n", a.n, "--seed", a.seed,
+                  "--per-colony-cap", a.per_colony_cap, "--out", str(selected)])
+    steps.append([*mod, "materialize", "--selected", str(selected), "--ts-zip", a.ts_zip, "--out-root", a.out_root,
+                  "--sevenzip", a.sevenzip, *(["--verify-listing"] if a.verify_listing else [])])
+    for cmd in steps:
+        if a.dry:
+            print("+", " ".join(cmd)); continue
+        rc = _run(cmd)
+        if rc: return rc
+    return 0
+
 TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
                                                   "train-stage1": train_stage1, "crops": crops,
                                                   "train-stage2": train_stage2, "gate0": gate0,
-                                                  "eval-stage2": eval_stage2, "eval-e2e": eval_e2e}
+                                                  "eval-stage2": eval_stage2, "eval-e2e": eval_e2e,
+                                                  "subset": subset}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:

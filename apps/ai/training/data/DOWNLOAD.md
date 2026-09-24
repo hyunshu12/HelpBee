@@ -73,6 +73,62 @@ tail -f download.log   # Ctrl+C 로 tail 만 빠져나온다 (다운로드는 �
   다시 붙어서 `download.log` 가 계속 늘어나는지 확인한다. 멈췄다면 원격 데스크톱 세션의 Git Bash
   창에서 같은 명령을 실행한다. 중단된 경우 같은 폴더에서 다시 실행하면 `curl -C -` 로 이어받는다.
 
+## 4-1. 71667 Training 서브셋 (TL.zip 을 풀지 않는다)
+
+Training 셋은 §5 처럼 전부 풀 수 없다. 라벨 `TL.zip`(16.3 GB)은 풀면 **~620 GB** 다 — JSON 1개가 ~2 MB
+인데 그중 ~1.36 MB 가 `environment` 센서 시계열이다. 그래서 `training/data/aihub_subset.py` 로
+**zip 안에서 스트리밍**해 필요한 필드만 뽑고, 고른 ~25k 장만 최소 JSON + 이미지로 만든다.
+
+- 이미지 `TS` 는 3볼륨 zip (`TS.zip` 6.6 GB + `TS.z01`/`TS.z02` 각 100 GiB). 세 파일이 **같은 폴더**
+  (`vols/`, 심링크 가능)에 있어야 7z 가 `vols/TS.zip` 하나로 연다.
+- 선택 규칙: 성충 응애 이미지(`has_varroa_adult`) **전부** + 나머지 성충 이미지를 colony 층화로 채움
+  (colony 당 총량 ≤ `n × 0.15`), 유충 전용 이미지는 제외. seed 고정이라 재실행 결과가 같다.
+  colony 수가 적으면 cap 에 막혀 `n` 에 못 미칠 수 있다 — `select` 가 WARN 을 찍는다.
+- 결과 트리는 VL 과 같은 구조 (`<ROOT>/02.라벨링데이터/성충/성충_응애/NNN/x.json` + `01.원천데이터/...x.jpg`).
+  최소 JSON 에는 `categories`·`image{width,height,filename}`·`annotations{category_id,bbox,area}`·
+  `collection{device,datetime}`·`colony{id}` 만 있다 (`environment`·`state`·`symptoms` 등 제거).
+
+한 번에 (index → select → materialize, 중간 산출물은 `<out-root>/_subset/`):
+
+```bash
+cd /c/path/to/apps/ai
+python tasks.py subset \
+  --tl-zip /d/helpbee-data/aihub-71667-train/<...>/TL.zip \
+  --ts-zip /d/helpbee-data/aihub-71667-train/vols/TS.zip \
+  --out-root /d/helpbee-data/aihub-71667-train-sub \
+  --n 25000 --verify-listing
+# 먼저 --dry 로 명령만 확인할 수 있다. index.jsonl 이 이미 있으면 재사용한다(--reindex 로 다시 생성).
+```
+
+단계별로:
+
+```bash
+M="python -m training.data.aihub_subset"
+W=/d/helpbee-data/aihub-71667-train-sub/_subset
+$M index --tl-zip <TL.zip> --out $W/index.jsonl            # 312k 멤버 스트리밍, 수십 분. --limit 2000 으로 먼저 시험
+$M select --index $W/index.jsonl --n 25000 --out $W/selected.jsonl
+$M materialize --selected $W/selected.jsonl --ts-zip <vols/TS.zip> \
+  --out-root /d/helpbee-data/aihub-71667-train-sub \
+  --sevenzip "/c/Program Files/7-Zip/7z.exe" --verify-listing
+```
+
+- `index` 는 `index.jsonl.part` 에 쓰고 끝나야 rename 한다 — 중간에 끊기면 처음부터 다시 돈다.
+  출력의 `n_fail` 이 0 이 아니면 stderr 의 `[index] FAIL` 줄을 확인한다.
+- `--verify-listing` 은 7z 로 TS 목록(312k 줄)을 읽어 고른 이미지가 모두 있는지 먼저 본다. 빠지면 rc 2.
+- 7z 추출은 `-mcp=65001 -scsUTF-8` (한국어 멤버명·UTF-8 listfile). 25k 장 ≈ 25 GB. 라벨 수와 추출된
+  이미지 수가 다르면 rc 2.
+- 멤버명에 UTF-8 플래그가 없는 zip 도 처리한다 (cp437 로 읽힌 이름을 원 바이트 → UTF-8/cp949 로 복원).
+
+다음 단계 — 기존 파이프라인이 그대로 읽는다:
+
+```bash
+python -m training.data.make_split_manifest \
+  --roots /d/helpbee-data/aihub-71667-val /d/helpbee-data/aihub-71667-train-sub \
+  --tags 71667-val 71667-train --refreeze          # 재동결은 이번 한 번만 허용
+python -m training.data.aihub_to_yolo --source /d/helpbee-data/aihub-71667-train-sub \
+  --output <기존 bee-adult1 output> --mapping adult1 --manifest
+```
+
 ## 5. zip 해제 (7-Zip)
 
 AI Hub 파일은 tar 안에 zip 으로 들어 있다. 원천 zip(`VS_*`/`TS_*`)과 라벨 zip(`VL_*`/`TL_*`)을
@@ -118,7 +174,7 @@ test -d "$ROOT/01.원천데이터" && test -d "$ROOT/02.라벨링데이터" && e
 cd /c/path/to/apps/ai && python -c "from pathlib import Path; from training.data.aihub_to_yolo import collect_samples; collect_samples(Path(r'$ROOT'), mapping='adult1')"
 ```
 
-Training 폴더(`aihub-71667-train`)도 `ROOT` 만 바꿔 같은 방식으로 푼다. 다 풀고 검증까지 통과한 뒤에만 zip 을 정리한다.
+Training 셋은 이 방식으로 **풀지 않는다** (~620 GB) — §4-1 서브셋 추출기를 쓴다. Validation 은 다 풀고 검증까지 통과한 뒤에만 zip 을 정리한다.
 
 ## 6. 외부 데이터 — VarroaDataset · EV2 (Zenodo, CC BY 4.0)
 
@@ -175,7 +231,8 @@ D:\helpbee-data\
 ├── aihub-71667-filetree.txt
 ├── aihub-71488-filetree.txt
 ├── aihub-71667-val\      # 01.원천데이터\ + 02.라벨링데이터\ 바로 아래 형제 (§5)
-├── aihub-71667-train\    # 같은 구조
+├── aihub-71667-train\    # TL.zip·vols\TS.zip(+z01,z02) 원본 zip 만 (풀지 않음)
+├── aihub-71667-train-sub\  # §4-1 서브셋: 01.원천데이터\ + 02.라벨링데이터\ (+ _subset\ 중간 산출물)
 └── external\
     ├── varroadataset\    # gt.csv, train\, val\, test\
     └── ev2\              # labels.txt, dataset_free\, dataset_infested\
