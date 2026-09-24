@@ -45,7 +45,9 @@ def make_fold_lists(manifest: Path, labels_root: Path, out: Path, max_skip_frac:
         if split not in ("train", "val"):
             continue
         if not label_path_for(img, labels_root).exists():
-            skipped += 1
+            # 성충 박스가 없는(유충 전용) 이미지는 변환기가 라벨을 만들지 않으므로 '누락'이 아니다.
+            if int(meta.get("n_adult", 1)) > 0:
+                skipped += 1
             continue
         lists[f"all_{split}"].append(img)
         lists[f"{colony_fold(meta.get('colony'))}_{split}"].append(img)
@@ -60,7 +62,7 @@ def make_fold_lists(manifest: Path, labels_root: Path, out: Path, max_skip_frac:
     stats["skipped_no_label"] = skipped
     n = skipped + len(lists["all_train"]) + len(lists["all_val"])
     if n and skipped / n > max_skip_frac:
-        raise ValueError(f"라벨 없는 train/val 이미지 {skipped}/{n} > {max_skip_frac:.0%} — --labels-root 확인. "
+        raise ValueError(f"성충 박스가 있는데 라벨 없는 train/val 이미지 {skipped}/{n} > {max_skip_frac:.0%} — --labels-root 확인. "
                          "Validation+Training 을 함께 쓸 땐 두 aihub_to_yolo 변환이 같은 --output 에 써야 한다")
     return stats
 

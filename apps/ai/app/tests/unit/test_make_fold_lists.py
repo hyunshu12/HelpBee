@@ -67,3 +67,18 @@ def test_make_fold_lists_fails_when_most_labels_missing(tmp_path):
     empty.mkdir()
     with pytest.raises(ValueError, match="같은 --output"):
         make_fold_lists(mf, empty, tmp_path / "lists")
+
+
+def test_make_fold_lists_ignores_larvae_only_images(tmp_path):
+    """n_adult==0 이미지는 라벨이 없어도 '누락'으로 세지 않는다 (71667 Validation 의 70% 가 유충 전용)."""
+    import json
+    mf, labels, _ = _fake(tmp_path)
+    m = json.loads(mf.read_text(encoding="utf-8"))
+    for i in range(40):
+        m["images"][str(tmp_path / f"larvae_{i}.jpg")] = {"split": "train", "colony": "L", "device": "d",
+                                                           "ts": "2023-08-20T09:00:00", "source": "71667-val",
+                                                           "has_varroa_adult": False, "n_adult": 0}
+    mf.write_text(json.dumps(m), encoding="utf-8")
+    stats = make_fold_lists(mf, labels, tmp_path / "lists")   # 예외 없어야 한다
+    assert stats["skipped_no_label"] == 1
+
