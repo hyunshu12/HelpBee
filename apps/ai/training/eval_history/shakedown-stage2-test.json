@@ -1,0 +1,40 @@
+{
+  "overall": {
+    "recall": 0.0010615711252653928,
+    "specificity": 1.0,
+    "auroc": 0.9480850393375382,
+    "ece": 0.24164428555632675
+  },
+  "by_source": {
+    "varroadataset": {
+      "recall": 0.0010615711252653928,
+      "specificity": 1.0,
+      "n_pos": 942,
+      "n_neg": 2466
+    }
+  },
+  "by_device": {
+    "": {
+      "recall": 0.0010615711252653928,
+      "specificity": 1.0,
+      "n_pos": 942,
+      "n_neg": 2466
+    }
+  },
+  "by_colony": {
+    "": {
+      "recall": 0.0010615711252653928,
+      "specificity": 1.0,
+      "n_pos": 942,
+      "n_neg": 2466
+    }
+  },
+  "size_only_auroc": 0.49920102351642637,
+  "source_probe_acc": 1.0,
+  "lodo": {
+    "": {
+      "auroc": null,
+      "n": 3408
+    }
+  }
+}
