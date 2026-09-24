@@ -29,14 +29,91 @@ def test_manifest_colony_disjoint():
 
 
 def test_golden_dedupes_10min_bursts():
+    """디듀프 키 = (colony, device, has_varroa_adult). 음성 10분, 양성 1분 창."""
     m = build_manifest(_items(), seed=42)
     kept = [v for v in m["images"].values() if v["split"] == "golden"]
     by = {}
     for v in kept:
-        by.setdefault((v["colony"], v["device"]), []).append(datetime.fromisoformat(v["ts"]))
-    for ts in by.values():
+        by.setdefault((v["colony"], v["device"], v["has_varroa_adult"]), []).append(datetime.fromisoformat(v["ts"]))
+    assert any(k[2] for k in by) and any(not k[2] for k in by)
+    for (_, _, pos), ts in by.items():
         ts.sort()
-        assert all((ts[i + 1] - ts[i]).total_seconds() >= 600 for i in range(len(ts) - 1))
+        gap = 60 if pos else 600
+        assert all((ts[i + 1] - ts[i]).total_seconds() >= gap for i in range(len(ts) - 1))
+
+
+def test_golden_positive_burst_keeps_one_per_minute():
+    """양성 버스트(4초 간격 3분) → 1분 창이라 3~4장 유지 (10분 창이면 1장)."""
+    items = []
+    for c in range(12):
+        t0 = datetime(2023, 8, 20, 9, 0, 0)
+        for i in range(46):  # 0..180초
+            items.append({"image": f"/d/{c:03d}/{i}.jpg", "colony": f"{c:03d}", "device": "소비판촬영기",
+                          "ts": t0 + timedelta(seconds=4 * i), "has_varroa_adult": True, "n_adult": 3, "source": "71667-val"})
+    m = build_manifest(items, seed=42)
+    per_col: dict[str, int] = {}
+    for v in m["images"].values():
+        if v["split"] == "golden":
+            per_col[v["colony"]] = per_col.get(v["colony"], 0) + 1
+    assert per_col and all(3 <= n <= 4 for n in per_col.values())
+
+
+def _varroa_items():
+    """30 colony. 001/002/003 에 응애 대부분 (120/70/60), 나머지 0~5."""
+    varroa = {0: 120, 1: 70, 2: 60, 3: 5, 4: 3, 5: 2}
+    out = []
+    for c in range(30):
+        t0 = datetime(2023, 8, 20, 9, 0, 0)
+        nv = varroa.get(c, 0)
+        for i in range(200):
+            out.append({"image": f"/d/{c:03d}/{i}.jpg", "colony": f"{c + 1:03d}", "device": "소비판촬영기",
+                        "ts": t0 + timedelta(minutes=15 * i), "has_varroa_adult": i < nv, "n_adult": 4,
+                        "source": "71667-val"})
+    return out
+
+
+def _varroa_by_split(m):
+    out: dict[str, int] = {}
+    for v in m["images"].values():
+        if v["has_varroa_adult"]:
+            out[v["split"]] = out.get(v["split"], 0) + 1
+    return out
+
+
+def test_varroa_aware_draw_meets_targets():
+    items = _varroa_items()
+    m = build_manifest(items, seed=42)
+    fz = m["frozen_colonies"]
+    assert "001" in fz["golden"]
+    assert "002" in fz["cal_a"] + fz["cal_b"] and "003" in fz["cal_a"] + fz["cal_b"]
+    raw = {}
+    col_split = {c: s for s in ("golden", "cal_a", "cal_b") for c in fz[s]}
+    for it in items:
+        if it["has_varroa_adult"] and it["colony"] in col_split:
+            raw[col_split[it["colony"]]] = raw.get(col_split[it["colony"]], 0) + 1
+    assert raw["golden"] >= 100 and raw["cal_a"] >= 50 and raw["cal_b"] >= 50
+    n_g, half = 3, 2  # max(3, round(30*.1)), max(1, round(30*.15)//2)
+    assert len(fz["golden"]) == n_g and len(fz["cal_a"]) == half and len(fz["cal_b"]) == half
+    g, a, b = (set(fz[k]) for k in ("golden", "cal_a", "cal_b"))
+    assert not (g & a) and not (g & b) and not (a & b)
+    assert build_manifest(items, seed=42)["frozen_colonies"] == fz  # 결정적
+
+
+def test_varroa_aware_draw_unreachable_targets_takes_best():
+    items = [dict(it, has_varroa_adult=it["has_varroa_adult"] and int(it["image"].split("/")[-1][:-4]) < 10)
+             for it in _varroa_items()]  # 001~006 모두 응애 ≤10 → 목표 불가
+    m = build_manifest(items, seed=42)
+    fz = m["frozen_colonies"]
+    held = set(fz["golden"]) | set(fz["cal_a"]) | set(fz["cal_b"])
+    assert {"001", "002", "003"} <= held
+    assert "001" in fz["golden"]
+
+
+def test_holdout_share_cap_respected():
+    items = _varroa_items()
+    m = build_manifest(items, seed=42, max_holdout_share=0.1)  # 6000*0.1 = 600장 = 3 colony
+    n_held = sum(v["split"] in ("golden", "cal_a", "cal_b", "dropped_dup") for v in m["images"].values())
+    assert n_held <= 600
 
 
 def test_frozen_colonies_stable_when_superset_added():
@@ -124,6 +201,19 @@ def test_collect_samples_fails_over_5pct_missing(tmp_path):
     _write_tree(tmp_path / "bad", 40, 10)
     with pytest.raises(MissingImagesError):
         collect_samples(tmp_path / "bad", mapping="adult1")
+
+
+def test_main_prints_split_summary(tmp_path, monkeypatch, capsys):
+    import training.data.make_split_manifest as msm
+
+    monkeypatch.setattr(msm, "load_items_from_aihub", lambda roots, tags: _varroa_items())
+    out, fz = tmp_path / "split_manifest.json", tmp_path / "frozen_colonies.json"
+    assert msm.main(["--roots", str(tmp_path), "--tags", "71667-val", "--output", str(out),
+                     "--frozen-colonies", str(fz), "--dedupe-min-pos", "2", "--golden-varroa-target", "50"]) == 0
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("[split]")]
+    splits = {ln.split()[1] for ln in lines}
+    assert {"train", "val", "golden", "cal_a", "cal_b"} <= splits
+    assert all("images=" in ln and "varroa=" in ln and "n_adult>0=" in ln for ln in lines)
 
 
 def test_main_refuses_to_refreeze_without_flag(tmp_path, monkeypatch):
