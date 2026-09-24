@@ -15,3 +15,4 @@ seed: 42
 crops: training/crops
 project: training/runs/stage2
 name: v0.2.0-stage2
+workers: 0        # Windows 학습 박스: DataLoader 워커 0 (spawn 피클 불가). Linux 는 4 권장

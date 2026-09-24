@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 import logging
 from pathlib import Path
 
@@ -352,7 +353,8 @@ def train(cfg: dict) -> dict:
     weights = sample_weights(labels, np.array([source_group(r["source"]) for r in sp["train"]]))
     sampler = WeightedRandomSampler(torch.as_tensor(weights, dtype=torch.double), num_samples=len(weights),
                                     replacement=True, generator=torch.Generator().manual_seed(cfg["seed"]))
-    workers = int(cfg.get("workers", 4))
+    # Windows(spawn)는 _dataset 안의 로컬 클래스를 피클할 수 없어 워커 0 (2026-09-24 박스 실측: EOFError in spawn).
+    workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
     train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"]), batch_size=cfg["batch"],
                           sampler=sampler, num_workers=workers, pin_memory=True, drop_last=True)
 
