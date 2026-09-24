@@ -23,7 +23,8 @@ EV2 감염 영상의 응애 안 보이는 프레임(label 1 & varroa_visible Fal
 crops.csv `source` 는 71667 이면 manifest 태그(`71667-val`/`71667-train`) 그대로 — 소비자는
 `make_split_manifest.is_71667` 로 판정한다. stats.json `by_source_split` = {"<source>/<split>/<label>": n}.
 stats.json 의 match_rate = 매칭된 성충 GT(cat 4·5·6) / 전체 성충 GT — 50% 미만이면 warning
-(Stage-1 이 GT 를 놓치면 양성 크롭이 조용히 사라진다).
+(Stage-1 이 GT 를 놓치면 양성 크롭이 조용히 사라진다). manifest 에서 `n_adult == 0`(유충 전용, 71667 의
+~70%)인 이미지는 JSON 을 열거나 예측하기 전에 건너뛰고 stats.json `skipped_no_adult` 로 센다.
 """
 from __future__ import annotations
 
@@ -198,11 +199,16 @@ def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer) -> 
     from ultralytics import YOLO
 
     models: dict[str, object] = {}
-    matched = total = zero_match_images = n_crops = 0
+    matched = total = zero_match_images = n_crops = skipped_no_adult = 0
     by_source_split: dict[str, int] = {}
     for image, meta in sorted(manifest["images"].items()):
         key = model_key_for(meta.get("split"), str(meta.get("colony")))
         if key is None:
+            continue
+        # 유충 전용(n_adult == 0) 이미지는 성충 GT 가 없어 매칭 크롭이 나올 수 없다 → JSON(~2 MB)·예측 모두 생략.
+        # n_adult 가 없는 옛 manifest 는 알 수 없으므로 기존대로 처리한다.
+        if "n_adult" in meta and int(meta["n_adult"]) == 0:
+            skipped_no_adult += 1
             continue
         lj = label_json_for(Path(image))
         if not lj.exists():
@@ -231,7 +237,7 @@ def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer) -> 
             count_crop(by_source_split, meta.get("source", "71667"), meta["split"], label)
             n_crops += 1
     return {"matched": matched, "total": total, "zero_match_images": zero_match_images, "crops_71667": n_crops,
-            "by_source_split": by_source_split}
+            "skipped_no_adult": skipped_no_adult, "by_source_split": by_source_split}
 
 
 def crops_external(rows: list[dict], root: Path, splits: dict[str, str], out: Path, writer,

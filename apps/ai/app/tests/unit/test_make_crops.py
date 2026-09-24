@@ -101,3 +101,28 @@ def test_crop_pad_empty_box_raises_clearly():
     from training.data.make_crops import crop_pad_224
     with pytest.raises(ValueError, match="빈 크롭"):
         crop_pad_224(np.zeros((300, 260, 3), np.uint8), (1000, 900, 1200, 1000))
+
+
+def test_crops_71667_skips_no_adult_images_before_loading(tmp_path, monkeypatch):
+    """manifest 의 n_adult == 0 (유충 전용) 이미지는 라벨 JSON·이미지·Stage-1 모델 어느 것도 건드리지 않는다.
+    경로가 존재하지 않아도 예외 없이 skipped_no_adult 로만 센다."""
+    import sys
+    import types
+
+    import training.data.make_crops as mc
+
+    touched: list = []
+    fake_ultra = types.ModuleType("ultralytics")
+    fake_ultra.YOLO = lambda *a, **k: touched.append(("YOLO", a)) or pytest.fail("모델 로드 금지")
+    monkeypatch.setitem(sys.modules, "ultralytics", fake_ultra)
+    monkeypatch.setattr(mc, "_imread", lambda p: touched.append(("imread", p)) or pytest.fail("이미지 읽기 금지"))
+    orig_label_json_for = mc.label_json_for
+    monkeypatch.setattr(mc, "label_json_for", lambda p: touched.append(("json", p)) or orig_label_json_for(p))
+
+    missing = str(tmp_path / "nope" / "01.원천데이터" / "유충" / "유충_정상" / "001" / "x.jpg")
+    manifest = {"images": {missing: {"split": "train", "colony": "001", "n_adult": 0,
+                                     "has_varroa_adult": False, "source": "71667-val"}}}
+    stats = mc.crops_71667(manifest, {"A": Path("a"), "B": Path("b"), "all": Path("c")}, tmp_path, writer=None)
+    assert touched == []
+    assert stats["skipped_no_adult"] == 1
+    assert stats["crops_71667"] == 0 and stats["total"] == 0
