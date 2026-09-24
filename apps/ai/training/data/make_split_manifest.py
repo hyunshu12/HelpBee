@@ -192,7 +192,7 @@ def split_external(rows: list[dict], seed: int, holdout_frac: float = 0.15) -> d
 
 def load_items_from_aihub(roots: list[Path], source_tags: list[str]) -> list[dict]:
     """루트별 02.라벨링데이터/*.json → manifest 항목. 이미지 누락은 루트별로 세어 로그하고,
-    5% 초과면 MissingImagesError (압축 해제 레이아웃 오류 — DOWNLOAD.md §5)."""
+    5% 초과면 MissingImagesError (압축 해제 레이아웃 오류 — DOWNLOAD.md §6)."""
     from training.data.aihub_to_yolo import _resolve_image_path, check_missing_images, parse_annotations
     items = []
     for root, tag in zip(roots, source_tags):

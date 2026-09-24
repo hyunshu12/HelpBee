@@ -181,7 +181,7 @@ def check_missing_images(missing: int, total: int, where: str) -> None:
     if total and missing / total > MAX_MISSING_IMAGE_FRAC:
         raise MissingImagesError(
             f"이미지 누락 {missing}/{total} ({missing / total:.1%}) > {MAX_MISSING_IMAGE_FRAC:.0%} — "
-            f"{where} 아래 {IMAGE_DIR_NAME}/{LABEL_DIR_NAME} 가 같은 루트의 형제인지 확인 (DOWNLOAD.md §5)")
+            f"{where} 아래 {IMAGE_DIR_NAME}/{LABEL_DIR_NAME} 가 같은 루트의 형제인지 확인 (DOWNLOAD.md §6)")
 
 
 def _parse_one_json(json_path: Path, mapping: str = DEFAULT_MAPPING,

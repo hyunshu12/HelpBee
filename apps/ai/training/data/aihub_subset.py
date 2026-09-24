@@ -9,7 +9,7 @@ AI Hub 71667 Training 서브셋 추출기 — TL.zip 을 풀지 않고 스트리
                    7z 로 TS.zip(멀티볼륨)에서 그 이미지만 `<out>/01.원천데이터/...` 로 추출.
 
 결과 트리는 VL 과 같은 구조라 기존 파이프라인(make_split_manifest, aihub_to_yolo)이 그대로 읽는다.
-상세 절차: training/data/DOWNLOAD.md §4-1.
+상세 절차: training/data/DOWNLOAD.md §7.
 
 Usage:
     python -m training.data.aihub_subset index --tl-zip <TL.zip> --out index.jsonl [--limit N]
