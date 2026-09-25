@@ -2,27 +2,25 @@
   "version": "v0.2.0-stage2",
   "model": "resnet18",
   "img_size": 320,
-  "degrade": "none",
-  "select_metric": "cal_a_auroc",
-  "best_cal_a_auroc": 0.8723745332597033,
-  "best_epoch": 8,
-  "val_auroc": 0.9560382220035477,
   "platt": {
     "a": 0.7148284816990116,
     "b": -0.7103914061976415
   },
-  "tau": 0.6359625163837628,
+  "tau": 0.6390129125617522,
+  "tau_policy": "youden",
+  "fpr_cap": 0.01,
   "target_fpr": 0.01,
+  "cal_a_fpr_at_tau": 0.00959409594095941,
   "cal_b": {
-    "tpr": 0.5195729537366548,
-    "fpr": 0.0025173753625567777,
+    "tpr": 0.5160142348754448,
+    "fpr": 0.002462649811196848,
     "corrected": true
   },
   "by_source_at_tau": {
     "cal_b": {
       "71667": {
-        "tpr": 0.5195729537366548,
-        "fpr": 0.0025173753625567777,
+        "tpr": 0.5160142348754448,
+        "fpr": 0.002462649811196848,
         "n_pos": 562,
         "n_neg": 18273
       }
@@ -42,10 +40,6 @@
       }
     }
   },
-  "size_jitter": [
-    0.7,
-    1.3
-  ],
   "auroc": {
     "cal_a": 0.8723745332597033,
     "cal_b": 0.8328490803672961
@@ -73,123 +67,7 @@
       "pos": 562
     }
   },
-  "history": [
-    {
-      "epoch": 0,
-      "train_loss": 0.2851245094228674,
-      "val_auroc": 0.9562686934341538,
-      "cal_a_auroc": 0.866579529620866
-    },
-    {
-      "epoch": 1,
-      "train_loss": 0.1904721211714299,
-      "val_auroc": 0.9639545272098714,
-      "cal_a_auroc": 0.8646313071654007
-    },
-    {
-      "epoch": 2,
-      "train_loss": 0.16482570168202515,
-      "val_auroc": 0.9584012015589192,
-      "cal_a_auroc": 0.8429549552185314
-    },
-    {
-      "epoch": 3,
-      "train_loss": 0.15252522970475849,
-      "val_auroc": 0.9677327049318296,
-      "cal_a_auroc": 0.8686841306470547
-    },
-    {
-      "epoch": 4,
-      "train_loss": 0.14587254609380448,
-      "val_auroc": 0.9745665712842956,
-      "cal_a_auroc": 0.8719846108272777
-    },
-    {
-      "epoch": 5,
-      "train_loss": 0.13674840325821433,
-      "val_auroc": 0.9606567140988955,
-      "cal_a_auroc": 0.8378461009585318
-    },
-    {
-      "epoch": 6,
-      "train_loss": 0.1356455800788743,
-      "val_auroc": 0.9684370670568281,
-      "cal_a_auroc": 0.8319977764693405
-    },
-    {
-      "epoch": 7,
-      "train_loss": 0.13608481808577055,
-      "val_auroc": 0.9701837297528259,
-      "cal_a_auroc": 0.8314810981608329
-    },
-    {
-      "epoch": 8,
-      "train_loss": 0.13171070666960727,
-      "val_auroc": 0.9560382220035477,
-      "cal_a_auroc": 0.8723745332597033
-    },
-    {
-      "epoch": 9,
-      "train_loss": 0.12915646969431083,
-      "val_auroc": 0.9712881799230899,
-      "cal_a_auroc": 0.8601963874941029
-    },
-    {
-      "epoch": 10,
-      "train_loss": 0.12718675187025122,
-      "val_auroc": 0.9677430631983738,
-      "cal_a_auroc": 0.8553016212025352
-    },
-    {
-      "epoch": 11,
-      "train_loss": 0.13077919425630063,
-      "val_auroc": 0.9647106806675902,
-      "cal_a_auroc": 0.8022309911899912
-    },
-    {
-      "epoch": 12,
-      "train_loss": 0.12389063761558061,
-      "val_auroc": 0.9641370916577111,
-      "cal_a_auroc": 0.8386944071621093
-    },
-    {
-      "epoch": 13,
-      "train_loss": 0.12760145770389147,
-      "val_auroc": 0.9528180958916526,
-      "cal_a_auroc": 0.8405708037258767
-    },
-    {
-      "epoch": 14,
-      "train_loss": 0.12359299826085883,
-      "val_auroc": 0.943151243639377,
-      "cal_a_auroc": 0.8322847874663087
-    },
-    {
-      "epoch": 15,
-      "train_loss": 0.12120881224645719,
-      "val_auroc": 0.95562648090842,
-      "cal_a_auroc": 0.8188660725061165
-    },
-    {
-      "epoch": 16,
-      "train_loss": 0.12452197095914702,
-      "val_auroc": 0.9605583105667267,
-      "cal_a_auroc": 0.855388075585414
-    },
-    {
-      "epoch": 17,
-      "train_loss": 0.12510363921864742,
-      "val_auroc": 0.9572695609389769,
-      "cal_a_auroc": 0.827512973643116
-    },
-    {
-      "epoch": 18,
-      "train_loss": 0.12083909625098818,
-      "val_auroc": 0.9672898890370697,
-      "cal_a_auroc": 0.8285603736116648
-    }
-  ],
   "weights": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\best.pt",
-  "onnx": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\stage2.onnx",
-  "vdi": "training\\configs\\vdi.yaml"
+  "vdi": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\vdi.yaml",
+  "recalibrated_from": "training\\runs\\stage2\\v0.2.0-stage2v3-E3"
 }

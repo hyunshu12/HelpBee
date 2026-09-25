@@ -51,6 +51,34 @@
   "size_only_auroc_by_source": {
     "71667": 0.7912562684839912
   },
+  "recall_by_size_tercile": {
+    "71667": {
+      "edges": [
+        592.0,
+        712.6666666666666
+      ],
+      "terciles": [
+        {
+          "size_lo": 291.0,
+          "size_hi": 592.0,
+          "recall": 0.34210526315789475,
+          "n_pos": 38
+        },
+        {
+          "size_lo": 602.0,
+          "size_hi": 712.0,
+          "recall": 0.3142857142857143,
+          "n_pos": 35
+        },
+        {
+          "size_lo": 713.0,
+          "size_hi": 912.0,
+          "recall": 0.5405405405405406,
+          "n_pos": 37
+        }
+      ]
+    }
+  },
   "source_probe_acc": 1.0,
   "lodo": {
     "소문촬영기": {
