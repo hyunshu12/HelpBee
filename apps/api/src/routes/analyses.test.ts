@@ -458,6 +458,112 @@ describe('POST /v1/analyses', () => {
     expect(body.data.vdiCiHigh).toBeNull();
   });
 
+  // ── fix round 1: AI 정규화 결과를 raw_response에 보존 → 재조회 시 tier/vdiDisplay 복원 ──
+  it('round-trip: elevated result POST → stored raw_response → GET returns tier/vdiDisplay', async () => {
+    const db = new Map<string, Record<string, unknown>>();
+    const aiResult = {
+      engine_used: 'yolo',
+      tier: 'elevated',
+      tier_legacy: 'watch' as const,
+      vdi: 4.2,
+      vdi_display: '4.2',
+      vdi_raw: 3.1,
+      corrected: true,
+      bee_total: 310,
+      bee_infested: 14,
+      sampling_ci95: [2.4, 6.9] as [number, number],
+      quality: { ok: true, blur_score: 210, exposure_mean: 120, px_per_mm_est: 4.1 },
+      bees: [{ box: [1, 2, 3, 4] as [number, number, number, number], p_infested: 0.9, infested: true }],
+      evidence: [{ crop_url: 'https://s3/crop?sig=1', p_infested: 0.9 }],
+      recommendations: ['가루설탕법으로 확인하세요'],
+      model_version: 'two-stage-v0.2.0',
+      model_versions: { stage1: 's1', stage2: 's2', vdi_config: 'v' },
+      risk_score: 45,
+      raw_payload: { crops_sampled: false },
+    };
+    // 실제 DB 왕복 흉내: jsonb는 JSON 직렬화, numeric은 문자열로 되돌아온다.
+    const storeAnalysis = vi.fn(async (input: Parameters<AnalysesDeps['storeAnalysis']>[0]) => {
+      const a = input.analysis as Record<string, unknown>;
+      const row = {
+        id: 'an-rt',
+        ...a,
+        rawResponse: JSON.parse(JSON.stringify(a.rawResponse)),
+        vdi: a.vdi == null ? null : Number(a.vdi).toFixed(3),
+        vdiCiLow: a.vdiCiLow == null ? null : Number(a.vdiCiLow).toFixed(3),
+        vdiCiHigh: a.vdiCiHigh == null ? null : Number(a.vdiCiHigh).toFixed(3),
+      };
+      db.set('an-rt', row);
+      return row;
+    });
+    const deps = baseDeps({
+      storeAnalysis,
+      analyze: async () => aiResult,
+      getByIdForUser: async (id) => db.get(id),
+      listForUser: async () => [...db.values()],
+      getRecommendations: async () => [{ order: 0, content: '가루설탕법으로 확인하세요', severity: 'warn' }],
+    });
+    const app = makeApp(deps);
+    const postRes = await post(app, { hiveId: HIVE, imageId: IMAGE });
+    expect(postRes.status).toBe(201);
+
+    const stored = storeAnalysis.mock.calls[0][0].analysis as Record<string, any>;
+    expect(stored.rawResponse.tier).toBe('elevated');
+    expect(stored.rawResponse.vdi_display).toBe('4.2');
+    expect(stored.rawResponse.raw_payload).toEqual({ crops_sampled: false });
+    expect(JSON.parse(JSON.stringify(stored.rawResponse))).not.toHaveProperty('bees');
+    expect(JSON.parse(JSON.stringify(stored.rawResponse))).not.toHaveProperty('evidence');
+
+    for (const body of [
+      (await (await app.request('/v1/analyses/an-rt')).json()).data,
+      (await (await app.request('/v1/analyses')).json()).data[0],
+      (await postRes.json()).data,
+    ]) {
+      expect(body.tier).toBe('elevated');
+      expect(body.vdiDisplay).toBe('4.2');
+      expect(body.vdi).toBe(4.2);
+      expect(body.corrected).toBe(true);
+      expect(body.beeTotal).toBe(310);
+      expect(body.beeInfested).toBe(14);
+      expect(body.samplingCi95).toEqual([2.4, 6.9]);
+      expect(body.quality).toEqual({ ok: true, blur_score: 210, exposure_mean: 120, px_per_mm_est: 4.1 });
+      expect(body.modelVersions).toEqual({ stage1: 's1', stage2: 's2', vdi_config: 'v' });
+      expect(body.overallHealth).toBe('warning');
+      expect(body.varroaInfectionRisk).toBe(45);
+    }
+  });
+
+  it('legacy row (pre-two-stage, raw_response = old raw_payload) keeps old fields, new ones null', async () => {
+    const legacy = {
+      id: 'an-old',
+      status: 'success',
+      varroaInfectionRisk: 35,
+      overallHealth: 'warning',
+      rawResponse: { engine: 'yolo', boxes: [], tier: 'watch-ish' }, // 구 raw_payload — 새 필드로 오인 금지
+      vdi: null,
+      vdiCiLow: null,
+      vdiCiHigh: null,
+      beeTotal: null,
+      beeInfested: null,
+    };
+    const res = await makeApp(baseDeps({ getByIdForUser: async () => legacy })).request('/v1/analyses/an-old');
+    const body = (await res.json()).data;
+    expect(body.varroaInfectionRisk).toBe(35);
+    expect(body.overallHealth).toBe('warning');
+    expect(body.rawResponse).toEqual(legacy.rawResponse);
+    for (const k of ['vdi', 'vdiDisplay', 'tier', 'corrected', 'beeTotal', 'beeInfested', 'samplingCi95', 'quality', 'modelVersions']) {
+      expect(body[k]).toBeNull();
+    }
+  });
+
+  it('failure path still stores the error raw_response unchanged', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    await post(
+      makeApp(baseDeps({ storeAnalysis, analyze: async () => { throw new AppError('AI_UNAVAILABLE'); } })),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(storeAnalysis.mock.calls[0][0].analysis.rawResponse).toEqual({ error_reason: 'ai_unavailable' });
+  });
+
   it('rejects unknown body keys (.strict, mass assignment)', async () => {
     const res = await post(makeApp(baseDeps()), {
       hiveId: HIVE,

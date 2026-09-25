@@ -117,12 +117,47 @@ function toRecommendations(tier: string, list: string[]): Recommendation[] {
 // 값 자체는 AI가 준 그대로 — 재반올림하지 않는다(표시값은 AI의 vdi_display가 단일 소스).
 const NUMERIC_KEYS = ['vdi', 'vdiCiLow', 'vdiCiHigh'] as const;
 
+function toNum(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === 'string' ? Number(v) : (v as number);
+  return typeof n === 'number' && Number.isFinite(n) ? n : null;
+}
+
+/**
+ * raw_response가 이 라우트가 저장한 "AI 정규화 결과"인지 판별.
+ * 구 row의 raw_response는 AI raw_payload(engine_used 키 없음)라 새 필드로 오인하지 않는다.
+ */
+function normalizedResult(raw: unknown): Record<string, unknown> | null {
+  return raw && typeof raw === 'object' && !Array.isArray(raw) && 'engine_used' in raw
+    ? (raw as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * 응답 row 정규화 + two-stage 표시 필드 투영 (스펙 §3; 구 row는 전부 null).
+ * - 숫자(vdi·beeTotal·beeInfested·samplingCi95)는 컬럼에서,
+ * - AI 문자열/객체(vdiDisplay·tier·corrected·quality·modelVersions)는 raw_response에서 읽는다.
+ */
 function normalizeRow(row: unknown): Record<string, unknown> {
   const r = { ...(row as Record<string, unknown>) };
   for (const k of NUMERIC_KEYS) {
     if (typeof r[k] === 'string') r[k] = Number(r[k]);
   }
-  return r;
+  const raw = normalizedResult(r.rawResponse);
+  const ciLow = toNum(r.vdiCiLow);
+  const ciHigh = toNum(r.vdiCiHigh);
+  return {
+    ...r,
+    vdi: toNum(r.vdi),
+    vdiDisplay: (raw?.vdi_display as string | null | undefined) ?? null,
+    tier: (raw?.tier as string | undefined) ?? null,
+    corrected: (raw?.corrected as boolean | undefined) ?? null,
+    beeTotal: toNum(r.beeTotal),
+    beeInfested: toNum(r.beeInfested),
+    samplingCi95: ciLow !== null && ciHigh !== null ? [ciLow, ciHigh] : null,
+    quality: (raw?.quality as Record<string, unknown> | undefined) ?? null,
+    modelVersions: (raw?.model_versions as Record<string, unknown> | undefined) ?? null,
+  };
 }
 
 /** 분석 row에 recommendations 배열을 실어 응답 페이로드로 만든다(계약: §4). */
@@ -235,7 +270,9 @@ export function analysesRoutes(deps: AnalysesDeps) {
       vdiCiHigh: res.sampling_ci95?.[1] ?? null,
       beeTotal: res.bee_total ?? null,
       beeInfested: res.bee_infested ?? null,
-      rawResponse: res.raw_payload ?? null,
+      // AI 정규화 결과 전체를 보존(tier·vdi_display·quality·model_versions 등 재조회용).
+      // 부피 큰 벌 단위/CAM 배열만 제외 — evidence엔 크롭 URL도 있어 저장하지 않는다.
+      rawResponse: { ...res, bees: undefined, evidence: undefined, raw_payload: res.raw_payload },
       latencyMs: res.latency_ms ?? null,
       error: null,
       analyzedAt,
