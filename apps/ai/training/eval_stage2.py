@@ -154,18 +154,22 @@ def build_report(df: pd.DataFrame, logits, emb, tau: float, platt: tuple[float, 
     }
 
 
-def predict(weights: Path, crops_dir: Path, rows: list[dict], batch: int = 64) -> tuple[np.ndarray, np.ndarray]:
-    """best.pt → (logits (N,), penultimate 임베딩 (N,1024) = featmap 공간 평균). gate0_pxmm 과 같은 로드 방식."""
+def predict(weights: Path, crops_dir: Path, rows: list[dict], batch: int = 64, backbone: str | None = None,
+            img_size: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """best.pt → (logits (N,), penultimate 임베딩 (N,C) = featmap 공간 평균). gate0_pxmm 과 같은 로드 방식.
+    backbone/img_size: 명시값 > weights 옆 metadata.json > 기본(shufflenet, 224)."""
     import torch
     from torch.utils.data import DataLoader
 
-    from training.train_stage2 import _dataset, build_model
+    from training.train_stage2 import _dataset, build_model, model_spec
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(pretrained=False).to(device)
+    backbone, img_size = model_spec(weights, backbone, img_size)
+    model = build_model(pretrained=False, backbone=backbone).to(device)
     model.load_state_dict(torch.load(weights, map_location=device, weights_only=True))
     model.eval()
-    loader = DataLoader(_dataset(rows, crops_dir, train=False, degrade_lo=None, seed=0), batch_size=batch)
+    loader = DataLoader(_dataset(rows, crops_dir, train=False, degrade_lo=None, seed=0, img_size=img_size),
+                        batch_size=batch)
     zs, es = [], []
     with torch.no_grad():
         for x, _ in loader:
@@ -175,14 +179,15 @@ def predict(weights: Path, crops_dir: Path, rows: list[dict], batch: int = 64) -
     return np.concatenate(zs), np.concatenate(es)
 
 
-def evaluate(weights: Path, crops_dir: Path, split: str, vdi_path: Path) -> dict:
+def evaluate(weights: Path, crops_dir: Path, split: str, vdi_path: Path, backbone: str | None = None,
+             img_size: int | None = None) -> dict:
     from app.services.vdi import load_vdi_config
 
     cfg = load_vdi_config(vdi_path)
     rows = [r for r in read_crops(crops_dir) if r["split"] == split]
     if not rows:
         raise SystemExit(f"crops.csv 에 split={split!r} 크롭이 없음: {crops_dir}")
-    logits, emb = predict(weights, Path(crops_dir), rows)
+    logits, emb = predict(weights, Path(crops_dir), rows, backbone=backbone, img_size=img_size)
     return build_report(pd.DataFrame(rows), logits, emb, cfg.tau, cfg.platt)
 
 
@@ -194,8 +199,10 @@ def main() -> None:
     p.add_argument("--split", default="golden")
     p.add_argument("--vdi", type=Path, default=Path("training/configs/vdi.yaml"))
     p.add_argument("--out", type=Path, default=Path("training/eval_history/v0.2.0-stage2.json"))
+    p.add_argument("--backbone", default=None, help="기본: weights 옆 metadata.json → shufflenet_v2_x1_0")
+    p.add_argument("--img-size", dest="img_size", type=int, default=None, help="기본: metadata.json → 224")
     a = p.parse_args()
-    res = evaluate(a.weights, a.crops, a.split, a.vdi)
+    res = evaluate(a.weights, a.crops, a.split, a.vdi, backbone=a.backbone, img_size=a.img_size)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info(f"overall={res['overall']} size_only_auroc={res['size_only_auroc']:.3f} → {a.out}")

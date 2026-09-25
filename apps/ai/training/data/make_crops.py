@@ -195,14 +195,19 @@ def _crop_name(image: str, i: int) -> str:
     return f"{hashlib.sha1(image.encode('utf-8')).hexdigest()[:8]}_{Path(image).stem}_{i:03d}.png"
 
 
-def _save(out: Path, img, box, split: str, label: int, image_key: str, i: int) -> tuple[str, tuple]:
-    crop, native = crop_pad_224(img, box)
+DEFAULT_CROP_SIZE = 224
+
+
+def _save(out: Path, img, box, split: str, label: int, image_key: str, i: int,
+          crop_size: int = DEFAULT_CROP_SIZE) -> tuple[str, tuple]:
+    crop, native = crop_pad_224(img, box, size=crop_size)
     rel = Path(split, str(label), _crop_name(image_key, i))
     _imwrite(out / rel, crop)
     return rel.as_posix(), native.shape[:2]
 
 
-def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer) -> dict:
+def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer,
+                crop_size: int = DEFAULT_CROP_SIZE) -> dict:
     from ultralytics import YOLO
 
     models: dict[str, object] = {}
@@ -239,7 +244,7 @@ def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer) -> 
             label = label_for(cat, bool(meta.get("has_varroa_adult")))
             if label is None:
                 continue
-            rel, (nh, nw) = _save(out, img, box, meta["split"], label, image, i)
+            rel, (nh, nw) = _save(out, img, box, meta["split"], label, image, i, crop_size)
             writer.writerow(row_71667(rel, label, meta, cat, image, nw, nh))
             count_crop(by_source_split, meta.get("source", "71667"), meta["split"], label)
             n_crops += 1
@@ -248,7 +253,7 @@ def crops_71667(manifest: dict, weights: dict[str, Path], out: Path, writer) -> 
 
 
 def crops_external(rows: list[dict], root: Path, splits: dict[str, str], out: Path, writer,
-                   counter: dict | None = None) -> dict:
+                   counter: dict | None = None, crop_size: int = DEFAULT_CROP_SIZE) -> dict:
     """외부 크롭 저장. 반환: {n, excluded_not_visible, unreadable, image_sizes(첫 3장 h×w — 8b 확인용)}."""
     n = excluded = unreadable = 0
     sizes: list[str] = []
@@ -264,7 +269,7 @@ def crops_external(rows: list[dict], root: Path, splits: dict[str, str], out: Pa
             sizes.append(f"{img.shape[0]}x{img.shape[1]}")
         split = splits[str(r["image"])]
         key = f"{r['source']}/{Path(r['image']).as_posix()}"
-        rel, (nh, nw) = _save(out, img, external_crop_box(r, img.shape), split, r["label"], key, 0)
+        rel, (nh, nw) = _save(out, img, external_crop_box(r, img.shape), split, r["label"], key, 0, crop_size)
         writer.writerow(row_external(rel, r, split, nw, nh))
         if counter is not None:
             count_crop(counter, r["source"], split, r["label"])
@@ -285,7 +290,11 @@ def main() -> None:
     p.add_argument("--external-varroa", type=Path, default=None, help="VarroaDataset 압축 해제 루트 (gt.csv 포함)")
     p.add_argument("--external-ev2", type=Path, default=None, help="EV2 dataset.zip 압축 해제 루트 (labels.txt 포함)")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--crop-size", dest="crop_size", type=int, default=DEFAULT_CROP_SIZE,
+                   help="크롭 PNG 한 변(px). 기본 224; v3 E2 는 320 (71667 native 벌 크롭 ~260–400px)")
     a = p.parse_args()
+    if a.crop_size < 32:
+        p.error(f"--crop-size 가 너무 작음: {a.crop_size}")
 
     manifest = json.loads(a.manifest.read_text(encoding="utf-8"))
     weights = {"A": a.weights_A, "B": a.weights_B, "all": a.weights_all}
@@ -293,7 +302,7 @@ def main() -> None:
     with (a.out / "crops.csv").open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(CSV_COLUMNS)
-        stats = crops_71667(manifest, weights, a.out, w)
+        stats = crops_71667(manifest, weights, a.out, w, a.crop_size)
         ext_rows: list[tuple[list[dict], Path]] = []
         if a.external_varroa:
             ext_rows.append((parse_varroa_gt(a.external_varroa / "gt.csv"), a.external_varroa))
@@ -302,9 +311,10 @@ def main() -> None:
         splits = split_external([r for rows, _ in ext_rows for r in rows], a.seed) if ext_rows else {}
         for rows, root in ext_rows:
             src = rows[0]["source"] if rows else "external"
-            res = crops_external(rows, root, splits, a.out, w, stats["by_source_split"])
+            res = crops_external(rows, root, splits, a.out, w, stats["by_source_split"], a.crop_size)
             stats[f"crops_{src}"] = res.pop("n")
             stats[f"external_{src}"] = res
+    stats["crop_size"] = a.crop_size
     sp = write_stats(a.out, stats.pop("matched"), stats.pop("total"), extra=stats)
     print(sp.read_text(encoding="utf-8"))
 

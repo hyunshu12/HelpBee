@@ -7,8 +7,10 @@ import numpy as np
 import pytest
 import yaml
 
-from training.train_stage2 import (auroc, check_splits, choose_tau, ece, fit_platt, measure_rates,
-                                   parse_size_jitter, rates_by_source, sample_weights, select_splits, write_vdi_yaml)
+from training.train_stage2 import (auroc, check_splits, choose_tau, ece, fit_platt, is_improvement, measure_rates,
+                                   model_spec, onnx_input_size, parse_backbone, parse_select_metric,
+                                   parse_size_jitter, pick_metric, rates_by_source, sample_weights, select_splits,
+                                   write_vdi_yaml)
 
 
 def test_phone_degrade_shape_and_range():
@@ -179,13 +181,15 @@ def test_write_metadata(tmp_path):
     d = json.loads(Path(p).read_text(encoding="utf-8"))
     assert len(d["fc_weight"]) == 1024 and all(isinstance(v, float) for v in d["fc_weight"])
     assert d["platt"] == {"a": 1.13, "b": -0.42} and d["tau"] == 0.62
+    assert d["backbone"] == "shufflenet_v2_x1_0" and d["feat_channels"] == 1024 and d["img_size"] == 224
 
 
 def test_stage2_yaml_loads():
     root = Path(__file__).resolve().parents[3]
     cfg = yaml.safe_load((root / "training/configs/stage2.yaml").read_text(encoding="utf-8"))
     assert cfg == {"epochs": 50, "patience": 10, "batch": 64, "lr": 3e-4, "weight_decay": 0.01,
-                   "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 224, "seed": 42,
+                   "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 224,
+                   "backbone": "shufflenet_v2_x1_0", "select_metric": "val_auroc", "seed": 42,
                    "crops": "training/crops", "project": "training/runs/stage2", "name": "v0.2.0-stage2",
                    "workers": 0}
 
@@ -206,3 +210,100 @@ def test_check_splits_fails_fast_on_empty_or_single_class():
         check_splits({**ok, "cal_a": []})
     with pytest.raises(ValueError, match="val"):
         check_splits({**ok, "val": [{"label": "0"}]})
+
+
+def test_pick_metric_and_select_metric_validation():
+    row = {"epoch": 3, "train_loss": 0.4, "val_auroc": 0.93, "cal_a_auroc": 0.81, "cal_b_auroc": 0.99}
+    assert pick_metric(row, "val_auroc") == 0.93
+    assert pick_metric(row, "cal_a_auroc") == 0.81
+    assert parse_select_metric(None) == "val_auroc"
+    with pytest.raises(ValueError):
+        pick_metric(row, "cal_b_auroc")  # cal-B 는 선택 금지 (불편 TPR/FPR 셋)
+
+
+def test_selection_over_history_differs_by_metric():
+    """v2 실측 모양: val 은 epoch 1 이 최고지만 cal_a 는 뒤 epoch 이 최고 → 선택 epoch 이 갈린다."""
+    hist = [{"val_auroc": 0.90, "cal_a_auroc": 0.70}, {"val_auroc": 0.95, "cal_a_auroc": 0.75},
+            {"val_auroc": 0.94, "cal_a_auroc": 0.86}, {"val_auroc": 0.93, "cal_a_auroc": float("nan")}]
+
+    def best(metric):
+        b, be = -1.0, -1
+        for ep, r in enumerate(hist):
+            v = pick_metric(r, metric)
+            if is_improvement(v, b):
+                b, be = v, ep
+        return be, b
+
+    assert best("val_auroc") == (1, 0.95)
+    assert best("cal_a_auroc") == (2, 0.86)  # NaN 은 개선 아님
+
+
+def test_parse_backbone():
+    assert parse_backbone(None) == "shufflenet_v2_x1_0" and parse_backbone("resnet18") == "resnet18"
+    with pytest.raises(ValueError):
+        parse_backbone("resnet50")
+
+
+def test_model_spec_reads_metadata_and_explicit_overrides(tmp_path):
+    assert model_spec(None) == ("shufflenet_v2_x1_0", 224)
+    w = tmp_path / "best.pt"
+    assert model_spec(w) == ("shufflenet_v2_x1_0", 224)  # metadata 없음 → 기본
+    (tmp_path / "metadata.json").write_text(json.dumps({"backbone": "resnet18", "img_size": 320}), encoding="utf-8")
+    assert model_spec(w) == ("resnet18", 320)
+    assert model_spec(w, backbone="shufflenet_v2_x1_0", img_size=224) == ("shufflenet_v2_x1_0", 224)
+
+
+def test_onnx_input_size():
+    assert onnx_input_size(["b", 3, 320, 320]) == 320
+    assert onnx_input_size(["b", 3, "h", "w"], default=256) == 256
+    assert onnx_input_size(None) == 224
+
+
+def test_to_input_size_resizes_any_crop():
+    pytest.importorskip("cv2")
+    from training.train_stage2 import to_input_size
+
+    img = np.zeros((224, 224, 3), np.uint8)
+    assert to_input_size(img, 224) is img
+    assert to_input_size(img, 320).shape == (320, 320, 3)
+    assert to_input_size(np.zeros((320, 320, 3), np.uint8), 224).shape == (224, 224, 3)
+
+
+def test_augment_and_degrade_keep_320():
+    pytest.importorskip("cv2")
+    from training.train_stage2 import augment, phone_degrade, size_jitter
+
+    img = np.full((320, 320, 3), 120, np.uint8)
+    rng = np.random.default_rng(7)
+    assert phone_degrade(img, rng, lo_px=90).shape == (320, 320, 3)
+    assert size_jitter(img, rng, 0.7, 0.8).shape == (320, 320, 3)
+    assert size_jitter(img, rng, 1.2, 1.3).shape == (320, 320, 3)
+    assert augment(img, rng, 90, (0.7, 1.3)).shape == (320, 320, 3)
+
+
+def test_resnet18_shapes_and_metadata(tmp_path):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    from training.train_stage2 import build_model, write_metadata
+
+    m = build_model(pretrained=False, backbone="resnet18").eval()
+    with torch.no_grad():
+        logit, feat = m(torch.zeros(2, 3, 320, 320))
+    assert tuple(logit.shape) == (2,) and tuple(feat.shape) == (2, 512, 10, 10)
+    d = json.loads(Path(write_metadata(tmp_path / "m.json", m, (1.0, 0.0), 0.5, 320)).read_text(encoding="utf-8"))
+    assert d["backbone"] == "resnet18" and d["feat_channels"] == 512 and len(d["fc_weight"]) == 512
+    assert d["img_size"] == 320
+
+
+def test_onnx_two_outputs_resnet18_320(tmp_path):
+    pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    ort = pytest.importorskip("onnxruntime")
+    from training.train_stage2 import build_model, export_onnx
+
+    p = export_onnx(build_model(pretrained=False, backbone="resnet18"), tmp_path / "s2.onnx", img_size=320)
+    s = ort.InferenceSession(str(p), providers=["CPUExecutionProvider"])
+    assert [o.name for o in s.get_outputs()] == ["logit", "featmap"]
+    assert onnx_input_size(s.get_inputs()[0].shape) == 320
+    logit, feat = s.run(None, {"image": np.zeros((2, 3, 320, 320), np.float32)})
+    assert logit.shape == (2,) and feat.shape == (2, 512, 10, 10)

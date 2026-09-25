@@ -47,3 +47,9 @@ def test_collapse_target_first_drop_of_15pp():
     res = {"22": {"recall": 0.80}, "15": {"recall": 0.70}, "12": {"recall": 0.64}, "9": {"recall": 0.30}}
     assert collapse_target(res, reference="22", drop=0.15) == 12.0
     assert collapse_target({"22": {"recall": 0.8}, "15": {"recall": 0.7}}, reference="22") is None
+
+
+def test_simulate_respects_size():
+    pytest.importorskip("cv2")
+    out = simulate_px_per_mm(np.full((300, 260, 3), 100, np.uint8), 22, 12, np.random.default_rng(0), size=320)
+    assert out.shape == (320, 320, 3)

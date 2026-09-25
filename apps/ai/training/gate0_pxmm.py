@@ -12,7 +12,8 @@ round(long · target/native) px 로 고정해 Task 9 의 phone_degrade(lo=hi=tgt
 
 크롭 재구성: crops.csv 의 PNG 는 crop_pad_224 결과(긴 변 224 + 검정 패딩)라 native 픽셀이 없다.
 native_w/native_h 로 패딩을 벗겨 native 크기로 되돌린 뒤(native_from_padded) 시뮬레이션한다.
-모델 입력이 어차피 224 라 긴 변 > 224 의 디테일은 원래도 모델에 닿지 않는다.
+모델 입력이 어차피 img_size(기본 224) 라 긴 변 > img_size 의 디테일은 원래도 모델에 닿지 않는다.
+backbone/img_size 는 --backbone/--img-size 또는 weights 옆 metadata.json 에서 읽는다(train_stage2.model_spec).
 
 출력 JSON: {"22": {"recall", "specificity", "n_pos", "n_neg"}, ..., "_meta": {...}}.
 붕괴 지점 = recall 이 reference(native) 대비 15%p 이상 떨어지는 첫 target (collapse_target).
@@ -28,7 +29,8 @@ from pathlib import Path
 
 import numpy as np
 
-from training.train_stage2 import IMAGENET_MEAN, IMAGENET_STD, build_model, phone_degrade, read_crops, sigmoid
+from training.train_stage2 import (DEFAULT_IMG_SIZE, IMAGENET_MEAN, IMAGENET_STD, build_model, model_spec,
+                                   phone_degrade, read_crops, sigmoid)
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +42,15 @@ def scale_for_target(native_px_per_mm: float, target: float) -> float:
     return target / native_px_per_mm
 
 
-def simulate_px_per_mm(native_crop: np.ndarray, native_px_per_mm: float, target: float, rng) -> np.ndarray:
-    """native 크롭 → target px/mm 폰 촬영 모사 224×224×3."""
+def simulate_px_per_mm(native_crop: np.ndarray, native_px_per_mm: float, target: float, rng,
+                       size: int = DEFAULT_IMG_SIZE) -> np.ndarray:
+    """native 크롭 → target px/mm 폰 촬영 모사 size×size×3."""
     from training.data.make_crops import crop_pad_224
 
     h, w = native_crop.shape[:2]
     tgt = max(MIN_TGT_PX, int(round(max(h, w) * scale_for_target(native_px_per_mm, target))))
-    img224, _ = crop_pad_224(native_crop, (0, 0, w, h), margin=0.0)
-    return phone_degrade(img224, rng, lo_px=tgt, hi_px=tgt)
+    padded, _ = crop_pad_224(native_crop, (0, 0, w, h), margin=0.0, size=size)
+    return phone_degrade(padded, rng, lo_px=tgt, hi_px=tgt)
 
 
 def native_from_padded(img224: np.ndarray, native_w: int, native_h: int) -> np.ndarray:
@@ -92,7 +95,8 @@ def _fmt(t: float) -> str:
 
 
 def evaluate(weights: Path, crops_dir: Path, split: str, targets: list[float], vdi_path: Path,
-             native_px_per_mm: float, seed: int, batch: int = 64) -> dict:
+             native_px_per_mm: float, seed: int, batch: int = 64, backbone: str | None = None,
+             img_size: int | None = None) -> dict:
     import cv2
     import torch
 
@@ -103,7 +107,8 @@ def evaluate(weights: Path, crops_dir: Path, split: str, targets: list[float], v
     if not rows:
         raise SystemExit(f"crops.csv 에 split={split!r} 크롭이 없음: {crops_dir}")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(pretrained=False).to(device)
+    backbone, img_size = model_spec(weights, backbone, img_size)
+    model = build_model(pretrained=False, backbone=backbone).to(device)
     model.load_state_dict(torch.load(weights, map_location=device, weights_only=True))
     model.eval()
 
@@ -120,7 +125,7 @@ def evaluate(weights: Path, crops_dir: Path, split: str, targets: list[float], v
         zs = []
         with torch.no_grad():
             for i in range(0, len(natives), batch):
-                xs = [simulate_px_per_mm(n, native_px_per_mm, t, rng) for n in natives[i:i + batch]]
+                xs = [simulate_px_per_mm(n, native_px_per_mm, t, rng, img_size) for n in natives[i:i + batch]]
                 x = (np.stack(xs).astype(np.float32) / 255 - IMAGENET_MEAN) / IMAGENET_STD
                 z, _ = model(torch.from_numpy(x.transpose(0, 3, 1, 2).copy()).to(device))
                 zs.append(z.float().cpu().numpy())
@@ -131,6 +136,7 @@ def evaluate(weights: Path, crops_dir: Path, split: str, targets: list[float], v
     results["_meta"] = {
         "weights": str(weights), "split": split, "n": len(rows), "native_px_per_mm": native_px_per_mm,
         "tau": cfg.tau, "platt": {"a": cfg.platt[0], "b": cfg.platt[1]}, "seed": seed, "reference": ref,
+        "backbone": backbone, "img_size": img_size,
         "collapse_px_per_mm": collapse_target(results, ref),
     }
     return results
@@ -147,9 +153,12 @@ def main() -> None:
     p.add_argument("--out", type=Path, default=Path("training/eval_history/v0.2.0-gate0.json"))
     p.add_argument("--native-px-per-mm", dest="native_px_per_mm", type=float, default=NATIVE_PX_PER_MM)
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--backbone", default=None, help="기본: weights 옆 metadata.json → shufflenet_v2_x1_0")
+    p.add_argument("--img-size", dest="img_size", type=int, default=None, help="기본: metadata.json → 224")
     a = p.parse_args()
     targets = [float(t) for t in a.targets.split(",") if t.strip()]
-    res = evaluate(a.weights, a.crops, a.split, targets, a.vdi, a.native_px_per_mm, a.seed)
+    res = evaluate(a.weights, a.crops, a.split, targets, a.vdi, a.native_px_per_mm, a.seed,
+                   backbone=a.backbone, img_size=a.img_size)
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(res, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info(f"collapse={res['_meta']['collapse_px_per_mm']} → {a.out}")

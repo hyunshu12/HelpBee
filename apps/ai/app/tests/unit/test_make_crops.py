@@ -126,3 +126,49 @@ def test_crops_71667_skips_no_adult_images_before_loading(tmp_path, monkeypatch)
     assert touched == []
     assert stats["skipped_no_adult"] == 1
     assert stats["crops_71667"] == 0 and stats["total"] == 0
+
+
+def test_crop_pad_custom_size():
+    pytest.importorskip("cv2")
+    from training.data.make_crops import crop_pad_224
+    out, _ = crop_pad_224(np.zeros((1080, 1920, 3), np.uint8), (100, 100, 500, 400), size=320)
+    assert out.shape == (320, 320, 3)
+
+
+def test_crops_external_passes_crop_size(tmp_path, monkeypatch):
+    import training.data.make_crops as mc
+
+    sizes: list = []
+    monkeypatch.setattr(mc, "_imread", lambda p: np.zeros((50, 40, 3), np.uint8))
+    monkeypatch.setattr(mc, "crop_pad_224", lambda img, box, margin=0.10, size=224: sizes.append(size)
+                        or (np.zeros((size, size, 3), np.uint8), img))
+    monkeypatch.setattr(mc, "_imwrite", lambda p, img: None)
+    rows = [{"source": "varroadataset", "image": Path("a.png"), "label": 1, "varroa_visible": True, "boxes": []}]
+
+    class W:
+        def writerow(self, r):
+            pass
+    res = mc.crops_external(rows, tmp_path, {"a.png": "train"}, tmp_path, W(), crop_size=320)
+    assert res["n"] == 1 and sizes == [320]
+
+
+def test_main_crop_size_arg_reaches_71667_and_stats(tmp_path, monkeypatch):
+    import sys
+
+    import training.data.make_crops as mc
+
+    got: dict = {}
+
+    def fake_71667(manifest, weights, out, writer, crop_size=224):
+        got["crop_size"] = crop_size
+        return {"matched": 1, "total": 1, "by_source_split": {}}
+
+    monkeypatch.setattr(mc, "crops_71667", fake_71667)
+    man = tmp_path / "m.json"
+    man.write_text(json.dumps({"images": {}}), encoding="utf-8")
+    out = tmp_path / "crops"
+    monkeypatch.setattr(sys, "argv", ["make_crops", "--manifest", str(man), "--weights-A", "a", "--weights-B", "b",
+                                      "--weights-all", "c", "--out", str(out), "--crop-size", "320"])
+    mc.main()
+    assert got["crop_size"] == 320
+    assert json.loads((out / "stats.json").read_text(encoding="utf-8"))["crop_size"] == 320

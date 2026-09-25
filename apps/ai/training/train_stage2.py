@@ -7,8 +7,12 @@ Usage (apps/ai 에서, 학습 박스):
 데이터: training/crops/crops.csv (make_crops.py 산출물). split 라우팅은 select_splits 참조 —
 VarroaDataset `test` 와 EV2 `holdout` 은 Task 12 평가용이라 여기서 절대 쓰지 않는다.
 
-모델: ShuffleNet-V2 x1.0 (ImageNet) → GAP → Linear(1024,1). ONNX 출력은 `logit`(B,) + `featmap`(B,1024,7,7);
-계획 2(서빙)는 featmap 과 metadata.json 의 fc_weight 로 CAM 을 계산한다.
+모델: config `backbone` — ShuffleNet-V2 x1.0(기본, featmap 1024ch) 또는 ResNet-18(512ch), ImageNet 가중치 →
+GAP → Linear(C,1). ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
+계획 2(서빙)는 featmap 과 metadata.json 의 fc_weight 로 CAM 을 계산한다. 입력 크기는 config `img_size`(기본 224).
+
+모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
+cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 음성 FPR 1% 에서 τ 선택 →
 cal-B 에서 TPR/FPR 측정(독립 추정). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
@@ -37,6 +41,11 @@ logger = logging.getLogger(__name__)
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
+SELECT_METRICS = ("val_auroc", "cal_a_auroc")
+BACKBONES = {"shufflenet_v2_x1_0": 1024, "resnet18": 512}  # 이름 → featmap 채널 수 (= fc_weight 길이)
+DEFAULT_BACKBONE = "shufflenet_v2_x1_0"
+DEFAULT_IMG_SIZE = 224
+
 # 계획 2가 읽는 제품 문구 (스펙 §3) — 한 글자도 바꾸지 말 것.
 RECOMMENDATIONS = {
     "low": ["응애 감염 징후가 낮게 관찰됐습니다. 다음 점검 시기에 재촬영하세요."],
@@ -48,10 +57,64 @@ RECOMMENDATIONS = {
 
 
 # ── 증강 ──────────────────────────────────────────────────────────────────────
-def phone_degrade(img, rng, lo_px, hi_px=265):
-    """고해상 크롭을 폰 촬영 품질로 열화: 블러 → 폰 스케일 축소 → 센서 노이즈 → ISP 언샤프 → JPEG → 224 복원."""
+def parse_select_metric(v) -> str:
+    """config `select_metric` 검증. None → `val_auroc`(v2 동작)."""
+    v = "val_auroc" if v is None else str(v)
+    if v not in SELECT_METRICS:
+        raise ValueError(f"select_metric 은 {SELECT_METRICS} 중 하나: {v!r}")
+    return v
+
+
+def parse_backbone(v) -> str:
+    v = DEFAULT_BACKBONE if v is None else str(v)
+    if v not in BACKBONES:
+        raise ValueError(f"backbone 은 {tuple(BACKBONES)} 중 하나: {v!r}")
+    return v
+
+
+def pick_metric(row: dict, select_metric: str) -> float:
+    """epoch history 행에서 모델 선택 지표 값. cal_b 계열 키는 선택에 쓰지 않는다(불편 추정 셋)."""
+    return float(row[parse_select_metric(select_metric)])
+
+
+def is_improvement(value: float, best: float) -> bool:
+    """NaN(한 클래스뿐인 split 등)은 개선으로 치지 않는다."""
+    return bool(np.isfinite(value) and value > best)
+
+
+def model_spec(weights: Path | None = None, backbone: str | None = None, img_size: int | None = None) -> tuple[str, int]:
+    """평가 스크립트용 (backbone, img_size). 명시값 > weights 옆 metadata.json > 기본값(shufflenet, 224)."""
+    meta = {}
+    if weights is not None:
+        mp = Path(weights).parent / "metadata.json"
+        if mp.exists():
+            meta = json.loads(mp.read_text(encoding="utf-8"))
+    bb = parse_backbone(backbone if backbone is not None else meta.get("backbone"))
+    size = int(img_size if img_size is not None else meta.get("img_size", DEFAULT_IMG_SIZE))
+    return bb, size
+
+
+def onnx_input_size(shape, default: int = DEFAULT_IMG_SIZE) -> int:
+    """ONNX 입력 shape [b,3,H,W] → H (정수가 아니면 default). 정사각 입력 가정."""
+    h = shape[2] if shape is not None and len(shape) == 4 else None
+    return int(h) if isinstance(h, (int, np.integer)) and h > 0 else default
+
+
+def to_input_size(img, size: int):
+    """크롭 PNG(make_crops --crop-size 로 224/320 등) → 모델 입력 size×size. 같으면 그대로."""
     import cv2
 
+    if img.shape[:2] == (size, size):
+        return img
+    interp = cv2.INTER_AREA if max(img.shape[:2]) > size else cv2.INTER_LINEAR
+    return cv2.resize(img, (size, size), interpolation=interp)
+
+
+def phone_degrade(img, rng, lo_px, hi_px=265):
+    """고해상 크롭을 폰 촬영 품질로 열화: 블러 → 폰 스케일 축소 → 센서 노이즈 → ISP 언샤프 → JPEG → 입력 크기 복원."""
+    import cv2
+
+    h, w = img.shape[:2]
     tgt = int(rng.integers(lo_px, hi_px + 1))
     k = int(rng.choice([0, 3, 5]))
     x = img
@@ -62,12 +125,12 @@ def phone_degrade(img, rng, lo_px, hi_px=265):
     sharp = cv2.addWeighted(small, 1.5, cv2.GaussianBlur(small, (0, 0), 1.0), -0.5, 0)  # ISP 언샤프
     _ok, buf = cv2.imencode(".jpg", sharp, [cv2.IMWRITE_JPEG_QUALITY, int(rng.integers(50, 96))])
     jpg = cv2.imdecode(buf, 1)
-    return cv2.resize(jpg, (224, 224), interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(jpg, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
 def size_jitter(img, rng, lo: float = 0.7, hi: float = 1.3):
-    """크기 지터: 224 크롭 내용 전체를 s~U(lo,hi) 배로 리사이즈 → s<1 이면 가운데 두고 검정 패딩
-    (make_crops.crop_pad_224 와 같은 검정), s>1 이면 가운데 224 를 잘라낸다.
+    """크기 지터: 크롭(임의 정사각 크기) 내용 전체를 s~U(lo,hi) 배로 리사이즈 → s<1 이면 가운데 두고 검정 패딩
+    (make_crops.crop_pad_224 와 같은 검정), s>1 이면 가운데 원래 크기를 잘라낸다.
 
     2026-09-24 shakedown: [native_w, native_h, w/h] 만으로 라벨 AUROC 0.82~0.85 (게이트 < 0.7) — 71667 양성은
     "감염 벌 영역" 박스라 크게 나와 겉보기 크기가 라벨 지름길이 된다. 학습에서 겉보기 크기를 흔들어 끊는다."""
@@ -276,42 +339,52 @@ def _stage2_class():
     global _STAGE2_CLS
     if _STAGE2_CLS is None:
         import torch.nn as nn
-        from torchvision.models import ShuffleNet_V2_X1_0_Weights, shufflenet_v2_x1_0
+        from torchvision.models import (ResNet18_Weights, ShuffleNet_V2_X1_0_Weights, resnet18,
+                                        shufflenet_v2_x1_0)
 
         class Stage2(nn.Module):
-            def __init__(self, pretrained=True):
+            def __init__(self, pretrained=True, backbone=DEFAULT_BACKBONE):
                 super().__init__()
-                b = shufflenet_v2_x1_0(weights=ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1 if pretrained else None)
-                self.features = nn.Sequential(b.conv1, b.maxpool, b.stage2, b.stage3, b.stage4, b.conv5)
-                self.fc = nn.Linear(1024, 1)
+                backbone = parse_backbone(backbone)
+                if backbone == "resnet18":
+                    b = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
+                    self.features = nn.Sequential(b.conv1, b.bn1, b.relu, b.maxpool,
+                                                  b.layer1, b.layer2, b.layer3, b.layer4)
+                else:
+                    b = shufflenet_v2_x1_0(weights=ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1 if pretrained else None)
+                    self.features = nn.Sequential(b.conv1, b.maxpool, b.stage2, b.stage3, b.stage4, b.conv5)
+                self.backbone = backbone
+                self.fc = nn.Linear(BACKBONES[backbone], 1)
 
             def forward(self, x):
-                f = self.features(x)  # (B,1024,7,7)
+                f = self.features(x)  # (B,C,h,w) — shufflenet C=1024, resnet18 C=512, h=w=img_size/32
                 return self.fc(f.mean((2, 3))).squeeze(1), f
 
         _STAGE2_CLS = Stage2
     return _STAGE2_CLS
 
 
-def build_model(pretrained=True):
-    return _stage2_class()(pretrained)
+def build_model(pretrained=True, backbone: str = DEFAULT_BACKBONE):
+    return _stage2_class()(pretrained, backbone)
 
 
-def export_onnx(model, path: Path) -> Path:
+def export_onnx(model, path: Path, img_size: int = DEFAULT_IMG_SIZE) -> Path:
     import torch
 
     model.eval()
-    dummy = torch.zeros(1, 3, 224, 224)
+    dummy = torch.zeros(1, 3, int(img_size), int(img_size))
     torch.onnx.export(model, dummy, str(path), input_names=["image"], output_names=["logit", "featmap"],
                       opset_version=17, dynamic_axes={"image": {0: "b"}, "logit": {0: "b"}, "featmap": {0: "b"}})
     return Path(path)
 
 
-def write_metadata(path: Path, model, platt: tuple[float, float], tau: float) -> Path:
-    """계획 2 CAM 계산용: fc 가중치(1024) + Platt + τ."""
+def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
+                   img_size: int = DEFAULT_IMG_SIZE) -> Path:
+    """계획 2 CAM 계산용: fc 가중치(featmap 채널 수 길이) + Platt + τ + backbone/feat_channels/img_size."""
     fc = model.fc.weight.detach().cpu().numpy().reshape(-1)
     data = {"fc_weight": [float(v) for v in fc], "platt": {"a": float(platt[0]), "b": float(platt[1])},
-            "tau": float(tau)}
+            "tau": float(tau), "backbone": getattr(model, "backbone", DEFAULT_BACKBONE),
+            "feat_channels": int(fc.shape[0]), "img_size": int(img_size)}
     path = Path(path)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
@@ -344,7 +417,7 @@ def read_crops(crops_dir: Path) -> list[dict]:
 
 
 def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: int,
-             jitter: tuple[float, float] | None = None):
+             jitter: tuple[float, float] | None = None, img_size: int = DEFAULT_IMG_SIZE):
     import cv2
     import torch
     from torch.utils.data import Dataset
@@ -361,8 +434,7 @@ def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: i
             if bgr is None:
                 raise FileNotFoundError(f"크롭 이미지 읽기 실패: {crops_dir / r['path']}")
             img = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            if img.shape[:2] != (224, 224):
-                img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_LINEAR)
+            img = to_input_size(img, img_size)
             if train:
                 info = torch.utils.data.get_worker_info()
                 rng = np.random.default_rng([seed, i, torch.initial_seed() % (2**32), info.id if info else 0])
@@ -396,6 +468,9 @@ def train(cfg: dict) -> dict:
     crops_dir = Path(cfg["crops"])
     degrade_lo = parse_degrade(cfg.get("degrade"))
     jitter = parse_size_jitter(cfg.get("size_jitter"))
+    select_metric = parse_select_metric(cfg.get("select_metric"))
+    backbone = parse_backbone(cfg.get("backbone"))
+    img_size = int(cfg.get("img_size", DEFAULT_IMG_SIZE))
     save_dir = Path(cfg["project"]) / cfg["name"]
     save_dir.mkdir(parents=True, exist_ok=True)
     dump_resolved(cfg, save_dir)
@@ -410,20 +485,22 @@ def train(cfg: dict) -> dict:
                                     replacement=True, generator=torch.Generator().manual_seed(cfg["seed"]))
     # Windows(spawn)는 _dataset 안의 로컬 클래스를 피클할 수 없어 워커 0 (2026-09-24 박스 실측: EOFError in spawn).
     workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
-    train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"], jitter), batch_size=cfg["batch"],
+    train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"], jitter, img_size),
+                          batch_size=cfg["batch"],
                           sampler=sampler, num_workers=workers, pin_memory=True, drop_last=True)
 
     def eval_dl(rows):
-        return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"]), batch_size=cfg["batch"],
+        return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"], img_size=img_size), batch_size=cfg["batch"],
                           shuffle=False, num_workers=workers, pin_memory=True)
 
-    model = build_model(pretrained=True).to(device)
+    model = build_model(pretrained=True, backbone=backbone).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["epochs"])
     loss_fn = torch.nn.BCEWithLogitsLoss()  # 가중 없음 (불균형은 sampler 가 처리)
     eps = float(cfg["label_smoothing"])
     val_loader = eval_dl(sp["val"])
-    best_auc, best_ep, history = -1.0, -1, []
+    cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
+    best_score, best_ep, history = -1.0, -1, []
     for ep in range(cfg["epochs"]):
         model.train()
         tot, n = 0.0, 0
@@ -437,14 +514,17 @@ def train(cfg: dict) -> dict:
             tot, n = tot + loss.item() * len(y), n + len(y)
         sched.step()
         zv, yv = _predict_logits(model, val_loader, device)
-        auc = auroc(zv, yv)
-        history.append({"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auc})
-        logger.info(f"epoch {ep}: loss={tot / max(n, 1):.4f} val_auroc={auc:.4f}")
-        if auc > best_auc:
-            best_auc, best_ep = auc, ep
+        zca, yca = _predict_logits(model, cal_a_loader, device)
+        row = {"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(zca, yca)}
+        history.append(row)
+        logger.info(f"epoch {ep}: loss={row['train_loss']:.4f} val_auroc={row['val_auroc']:.4f} "
+                    f"cal_a_auroc={row['cal_a_auroc']:.4f} (select={select_metric})")
+        score = pick_metric(row, select_metric)
+        if is_improvement(score, best_score):
+            best_score, best_ep = score, ep
             torch.save(model.state_dict(), save_dir / "best.pt")
         elif ep - best_ep >= cfg["patience"]:
-            logger.info(f"early stop @ {ep} (best {best_ep}, auroc {best_auc:.4f})")
+            logger.info(f"early stop @ {ep} (best {best_ep}, {select_metric} {best_score:.4f})")
             break
     torch.save(model.state_dict(), save_dir / "last.pt")
 
@@ -461,13 +541,15 @@ def train(cfg: dict) -> dict:
                         "val": rates_by_source(pv, yv, [r["source"] for r in sp["val"]], tau)}
 
     model_cpu = model.to("cpu")
-    export_onnx(model_cpu, save_dir / "stage2.onnx")
-    write_metadata(save_dir / "metadata.json", model_cpu, platt, tau)
+    export_onnx(model_cpu, save_dir / "stage2.onnx", img_size)
+    write_metadata(save_dir / "metadata.json", model_cpu, platt, tau, img_size)
     vdi = write_vdi_yaml(Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), version="v0.2.0", tau=tau, tpr=tpr,
                          fpr=fpr, platt=platt, by_source=by_source_at_tau["cal_b"])
     report = {
-        "version": "v0.2.0-stage2", "model": "shufflenet_v2_x1_0", "degrade": cfg.get("degrade"),
-        "best_epoch": best_ep, "val_auroc": best_auc, "platt": {"a": platt[0], "b": platt[1]},
+        "version": "v0.2.0-stage2", "model": backbone, "img_size": img_size, "degrade": cfg.get("degrade"),
+        "select_metric": select_metric, f"best_{select_metric}": best_score,
+        "best_epoch": best_ep, "val_auroc": history[best_ep]["val_auroc"] if best_ep >= 0 else None,
+        "platt": {"a": platt[0], "b": platt[1]},
         "tau": tau, "target_fpr": 0.01, "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
         "by_source_at_tau": by_source_at_tau, "size_jitter": list(jitter) if jitter else None,
         "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
@@ -494,6 +576,8 @@ def main():
     if a.degrade is not None:
         cfg["degrade"] = a.degrade
     parse_degrade(cfg.get("degrade"))  # 조기 검증
+    parse_select_metric(cfg.get("select_metric"))
+    parse_backbone(cfg.get("backbone"))
     cfg["config"] = str(a.config)
     train(cfg)
 

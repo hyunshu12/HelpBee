@@ -162,13 +162,15 @@ def make_single2_data_yaml(src: Path, out: Path) -> Path:
 
 # ── 학습 박스 실행부 ──────────────────────────────────────────────────────────
 def onnx_logits(onnx_path: Path, crops_dir: Path, paths: list[str], batch: int = 64) -> dict:
-    """고유 크롭 경로별 Stage-2 logit (ONNX 출력 'logit'). 전처리는 train_stage2._dataset 과 동일."""
+    """고유 크롭 경로별 Stage-2 logit (ONNX 출력 'logit'). 전처리는 train_stage2._dataset 과 동일.
+    입력 크기는 ONNX 입력 shape(없으면 옆 metadata.json img_size → 224)에서 읽는다."""
     import cv2
     import onnxruntime as ort
 
-    from training.train_stage2 import IMAGENET_MEAN, IMAGENET_STD
+    from training.train_stage2 import IMAGENET_MEAN, IMAGENET_STD, model_spec, onnx_input_size, to_input_size
 
     sess = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    size = onnx_input_size(sess.get_inputs()[0].shape, default=model_spec(Path(onnx_path))[1])
     uniq = sorted(set(paths))
     out: dict = {}
     for i in range(0, len(uniq), batch):
@@ -176,8 +178,7 @@ def onnx_logits(onnx_path: Path, crops_dir: Path, paths: list[str], batch: int =
         for p in uniq[i:i + batch]:
             img = cv2.imdecode(np.fromfile(str(Path(crops_dir) / p), np.uint8), cv2.IMREAD_COLOR)
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            if img.shape[:2] != (224, 224):
-                img = cv2.resize(img, (224, 224), interpolation=cv2.INTER_LINEAR)
+            img = to_input_size(img, size)
             xs.append(((img.astype(np.float32) / 255 - IMAGENET_MEAN) / IMAGENET_STD).transpose(2, 0, 1))
         (z,) = sess.run(["logit"], {"image": np.stack(xs).astype(np.float32)})
         out.update(zip(uniq[i:i + batch], (float(v) for v in np.asarray(z).reshape(-1))))
