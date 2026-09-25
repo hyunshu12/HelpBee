@@ -16,7 +16,7 @@ img_size: 320      # 모델 입력(정사각). crops 는 make_crops --crop-size 
 backbone: resnet18 # resnet18 (v0.2.0 최종 E3, featmap 512ch) | shufflenet_v2_x1_0 (v2, 1024ch)
 select_metric: cal_a_auroc     # cal_a_auroc (71667 cal-A 만) | val_auroc (v2: 71667+VarroaDataset val). cal-B 는 선택에 절대 안 씀
 tau_policy: youden # youden = cal-A FPR ≤ fpr_cap 안에서 TPR−FPR 최대 | fpr = cal-A 음성 FPR 1% (target_fpr) 분위수 (구 동작)
-fpr_cap: 0.10      # Youden τ 의 cal-A FPR 상한
+fpr_cap: 0.01      # Youden τ 의 cal-A FPR 상한 (스펙 v2.2 정정: 0.10→0.01 — colony 간 FPR 편차로 cap≥2%는 건강 벌통 오경보, 2026-09-25 스윕)
 seed: 42
 crops: training/crops-320
 project: training/runs/stage2
