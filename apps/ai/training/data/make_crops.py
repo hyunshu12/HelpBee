@@ -172,7 +172,11 @@ def count_crop(counter: dict, source: str, split: str, label: int) -> None:
 
 def _imread(path: Path):
     import cv2  # cv2.imread 는 Windows 에서 비ASCII(한국어) 경로를 못 읽음 → fromfile+imdecode
-    return cv2.imdecode(np.fromfile(str(path), np.uint8), cv2.IMREAD_COLOR)
+    buf = np.fromfile(str(path), np.uint8)
+    if buf.size == 0:  # 0바이트 파일(추출 불량) — imdecode 가 assert 로 죽으므로 None 으로 건너뛴다 (2026-09-25 박스 실측)
+        logger.warning(f"빈 이미지 파일 건너뜀: {path}")
+        return None
+    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
 
 
 def _imwrite(path: Path, img) -> None:
