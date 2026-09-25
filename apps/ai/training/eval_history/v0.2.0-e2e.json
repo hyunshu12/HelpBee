@@ -27,5 +27,39 @@
     "12": 2.020781094753768,
     "20": 4.411566588545815
   },
-  "single_stage_baseline": null
+  "single_stage_baseline": {
+    "tier_confusion": {
+      "low": {
+        "low": 51,
+        "elevated": 1,
+        "high": 1,
+        "insufficient": 1
+      },
+      "elevated": {
+        "low": 7,
+        "elevated": 18,
+        "high": 0,
+        "insufficient": 0
+      },
+      "high": {
+        "low": 26,
+        "elevated": 19,
+        "high": 26,
+        "insufficient": 0
+      },
+      "insufficient": {
+        "low": 0,
+        "elevated": 0,
+        "high": 0,
+        "insufficient": 0
+      }
+    },
+    "tier_agreement": 0.6333333333333333,
+    "trivial_all_low": 0.36,
+    "healthy_frames_under_3_pct": 0.9629629629629629,
+    "n_images": 150,
+    "weights": "training\\runs\\yolo\\v0.2.0-baseline-single\\weights\\best.pt",
+    "imgsz": 1024,
+    "conf": 0.25
+  }
 }
