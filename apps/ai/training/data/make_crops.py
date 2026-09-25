@@ -32,12 +32,15 @@ import argparse
 import csv
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from training.data.aihub_to_yolo import IMAGE_DIR_NAME, LABEL_DIR_NAME, parse_annotations
 from training.make_fold_lists import colony_fold
+
+logger = logging.getLogger(__name__)
 
 CSV_COLUMNS = ("path", "label", "source", "colony", "device", "split", "native_w", "native_h", "cat71667",
                "image", "varroa_visible", "ext_box")
