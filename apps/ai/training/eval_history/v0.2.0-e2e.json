@@ -1,0 +1,31 @@
+{
+  "tier_confusion": {
+    "low": {
+      "low": 79,
+      "elevated": 1,
+      "high": 0
+    },
+    "elevated": {
+      "low": 34,
+      "elevated": 6,
+      "high": 0
+    },
+    "high": {
+      "low": 18,
+      "elevated": 62,
+      "high": 0
+    }
+  },
+  "tier_agreement": 0.425,
+  "trivial_all_low": 0.4,
+  "healthy_frames_under_3_pct": 1.0,
+  "vdi_mae": 5.87,
+  "vdi_mae_by_target": {
+    "0": 1.1666666666666667,
+    "2": 0.7416666666666666,
+    "5": 3.083333333333333,
+    "12": 8.866666666666665,
+    "20": 15.491666666666665
+  },
+  "single_stage_baseline": null
+}

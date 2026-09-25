@@ -1,0 +1,43 @@
+{
+  "overall": {
+    "recall": 0.04424778761061947,
+    "specificity": 1.0,
+    "auroc": 0.9297417955578071,
+    "ece": 0.17913224110163434
+  },
+  "by_source": {
+    "ev2": {
+      "recall": 0.04424778761061947,
+      "specificity": 1.0,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "by_device": {
+    "": {
+      "recall": 0.04424778761061947,
+      "specificity": 1.0,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "by_colony": {
+    "": {
+      "recall": 0.04424778761061947,
+      "specificity": 1.0,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "size_only_auroc": 0.8523833647315844,
+  "size_only_auroc_by_source": {
+    "ev2": 0.8523833647315844
+  },
+  "source_probe_acc": 1.0,
+  "lodo": {
+    "": {
+      "auroc": null,
+      "n": 785
+    }
+  }
+}
