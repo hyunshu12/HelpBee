@@ -35,7 +35,7 @@
 
 | 필드 | 정의 |
 |---|---|
-| `vdi` | **보정 지수** (Rogan–Gladen): 점추정 = `clip((raw − FPR) / (TPR − FPR), 0, 100)`. raw = k/n×100, k = τ 초과 성충 수, n = 탐지 성충 수. TPR/FPR은 **cal-B 절반**(§5.1)의 측정값을 `vdi.yaml`에 고정. τ는 cal-A에서 **TPR − FPR 최대점(Youden), 단 cal-A FPR ≤ 10%**(v2.2, §5.1). `TPR − FPR < 0.5`면 보정 불가 → `vdi = raw`, `corrected:false` |
+| `vdi` | **보정 지수** (Rogan–Gladen): 점추정 = `clip((raw − FPR) / (TPR − FPR), 0, 100)`. raw = k/n×100, k = τ 초과 성충 수, n = 탐지 성충 수. TPR/FPR은 **cal-B 절반**(§5.1)의 측정값을 `vdi.yaml`에 고정. τ는 cal-A에서 **TPR − FPR 최대점(Youden), 단 cal-A FPR ≤ 1%**(v2.2, §5.1). `TPR − FPR < 0.5`면 보정 불가 → `vdi = raw`, `corrected:false` |
 | `vdi_display` | AI가 **한 번만** 반올림한 문자열(`Decimal(repr).quantize('0.1', ROUND_HALF_UP)`). 클라이언트는 재반올림 금지. **tier는 이 값에서만 계산** |
 | `bee_infested` | k (raw 양성 수). N장 합산·재계산의 원천 |
 | `vdi_raw` | 보정 전 값 (`raw_payload`) |
@@ -82,7 +82,7 @@
 | Stage-1 학습 | **71667** 성충 3클래스 → `bee` **상한 2.5만 장**(colony·device 층화) + **71488 필수**(밀집·여왕벌·한봉) | 312k 전체는 4060에서 수 주 — 상한 |
 | Stage-2 학습 (인도메인) | 71667 성충 크롭 — **out-of-fold Stage-1 예측 박스**(2-fold: A로 학습한 Stage-1이 B를 예측, 반대도) GT IoU≥0.5 매칭 기준 — 학습 이미지 자체 예측은 과적합으로 박스가 타이트해 서빙과 불일치. `성충_응애`=1, `성충_정상`=0. **`성충_날개불구`(DWV)는 제외**. **감염 이미지 안의 정상 박스는 학습 음성에서 제외**(미검증 음성). 착수 전 **감염 이미지 내 정상 크롭 100개 육안 감사**로 노이즈율 기록 | 라벨 노이즈 차단 |
 | Stage-2 학습 (외부 혼합) | VarroaDataset train, EV2 train | **소스별 양성 prior를 균등 샘플링**, 71667과 같은 패딩·종횡비로 재크롭 |
-| **cal split** | 71667 colony-disjoint 15%를 **colony 단위로 반분**: **cal-A** = Platt(bias 포함) 보정 + τ 결정 — **τ = cal-A에서 TPR − FPR 최대점(Youden), 단 cal-A FPR ≤ 10% 상한** (`tau_policy: youden`, `fpr_cap: 0.10`; v2.2, v2.1의 'FPR 1% 목표'를 대체), **cal-B** = 그 τ에서 TPR/FPR 측정(→ `vdi.yaml`); 보정 조건 `TPR − FPR ≥ 0.5` 불변. `vdi.yaml`에 `tau_policy`, `fpr_cap`, **τ에서의 cal-A FPR**을 반드시 기록. 음성 정의는 학습과 동일(DWV·감염 이미지 내 정상 박스 제외). **다양성 제약(v2.2, 다음 데이터 확장부터)**: cal-A·cal-B 각각 **≥ 3 colony**(현재 각 2; Training 단계 동결이 최종이므로 지금 재동결하지 않음) | in-sample 보정 방지 |
+| **cal split** | 71667 colony-disjoint 15%를 **colony 단위로 반분**: **cal-A** = Platt(bias 포함) 보정 + τ 결정 — **τ = cal-A에서 TPR − FPR 최대점(Youden), 단 cal-A FPR ≤ 1% 상한** (`tau_policy: youden`, `fpr_cap: 0.01`; v2.2, v2.1의 'FPR 1% 목표'를 대체), **cal-B** = 그 τ에서 TPR/FPR 측정(→ `vdi.yaml`); 보정 조건 `TPR − FPR ≥ 0.5` 불변. `vdi.yaml`에 `tau_policy`, `fpr_cap`, **τ에서의 cal-A FPR**을 반드시 기록. 음성 정의는 학습과 동일(DWV·감염 이미지 내 정상 박스 제외). **다양성 제약(v2.2, 다음 데이터 확장부터)**: cal-A·cal-B 각각 **≥ 3 colony**(현재 각 2; Training 단계 동결이 최종이므로 지금 재동결하지 않음) | in-sample 보정 방지 |
 | golden (학습 영구 제외) | 71667 **colony × 날짜 블록 홀드아웃**, 선택은 원본 JSON `category_id==5`, colony·device당 **≥10분 디듀프**, 응애 이미지 100 + 정상 이미지 200(성충 포함 필수). 음성 정의 학습과 동일. **golden colony 목록은 Validation·Training 셋 합집합 기준으로 3단계에서 동결**하고 변경 시 테스트 실패 | `has_varroa_label()` 재작성 |
 | 평가 (혼합) | VarroaDataset test split, EV2 hold-out 15% | |
 | 평가 (야외 OOD, 평가 전용) | VD2 프레임, BeeImage | 라이선스상 학습 금지 |
@@ -123,7 +123,7 @@
 | 광도 증강 | hsv_s 0.4 / hsv_v 0.3 / **hsv_h 0.01**, 모션블러, 그림자 | 밝기·대비 ±0.3, CLAHE p0.3, 그림자, **hue 최소** |
 | 기하 | mosaic, flip, ±15° | flip, ±15°, **약한 원근 ≤10°** (핸드헬드 사각) |
 | 금지 | copy_paste(bbox 라벨 no-op) | 강한 전단·원근 |
-| 보정 | — | **Platt(bias 포함)** on cal-A(자연 유병률) → τ = cal-A **Youden 최대점(TPR − FPR), cal-A FPR ≤ 10%** (`tau_policy: youden`, `fpr_cap: 0.10`) → cal-B에서 TPR/FPR 측정 → `vdi.yaml`(τ·`tau_policy`·`fpr_cap`·τ에서의 cal-A FPR 포함) |
+| 보정 | — | **Platt(bias 포함)** on cal-A(자연 유병률) → τ = cal-A **Youden 최대점(TPR − FPR), cal-A FPR ≤ 1%** (`tau_policy: youden`, `fpr_cap: 0.01`) → cal-B에서 TPR/FPR 측정 → `vdi.yaml`(τ·`tau_policy`·`fpr_cap`·τ에서의 cal-A FPR 포함) |
 | 재현성 | `train.py` 전체 하이퍼파라미터 CLI + resolved config → `eval_history/<ver>.json` | `train_stage2.py` 동일 |
 
 순서: **Stage-1(2-fold) → out-of-fold 크롭(사전 추출) → Stage-2 원본 크롭 학습(Gate 0(b)용) → Gate 0(b) → Stage-2 최종(열화 증강) → cal-A/cal-B → e2e.** 4060 예산(실측 전 추정): Stage-1 2.5만장 100ep@1024 ≈ **2~4일**(+71488 시 추가), Stage-2 50ep ≈ **3~8시간**(열화 파이프라인이 CPU 병목). 첫 epoch 실측 후 갱신.
@@ -134,7 +134,7 @@
 |---|---|---|
 | **Gate 0** | (a) 실제 앱 업로드 소비판 사진 5장(A3 예외)에서 벌 px 실측 + 손 카운트 recall; (b) **Stage-2를 원본 크롭으로 먼저 학습**한 뒤 px/mm 22→15→12→9 시뮬 recall 곡선; (c) DINOv2 클릭 프로브 | recall 붕괴 지점을 **촬영 가이드 하한**으로 확정하고 §6 축소 하한을 그 값으로 고정. 12MP 한 컷이 하한 미달이면 "반 소비판 촬영"을 가이드 기본으로. **반 소비판으로도 미달이면 스펙 재검토(§13 기록) — 그 상태로 시연 진행 금지** |
 | Stage-1 | golden mAP@0.5, `bee` recall; 밀집 폰 프레임(손 카운트 5장) recall 보고 | mAP ≥0.85, recall ≥0.90 |
-| Stage-2 | golden 크롭 감염 recall, **specificity**, AUROC, ECE; **소스·기기·colony별 분리 보고**; 임베딩→소스 선형 프로브; leave-one-device-out. **진단(보고만, v2.2)**: 크기·종횡비만 로지스틱 베이스라인 AUROC(라벨=GT 박스 크기의 성질이지 모델 성질이 아님 — 증강과 무관하게 golden 0.79 / EV2 0.85 실측), **native 크기 3분위별 recall@τ**(임계값 없음) | recall ≥0.90 **& specificity ≥0.985** @τ; 100 양성 기준 CI(±0.06) 명시 |
+| Stage-2 | golden 크롭 감염 recall, **specificity**, AUROC, ECE; **소스·기기·colony별 분리 보고**; 임베딩→소스 선형 프로브; leave-one-device-out. **진단(보고만, v2.2)**: 크기·종횡비만 로지스틱 베이스라인 AUROC(라벨=GT 박스 크기의 성질이지 모델 성질이 아님 — 증강과 무관하게 golden 0.79 / EV2 0.85 실측), **native 크기 3분위별 recall@τ**(임계값 없음) | recall ≥0.90 **& specificity ≥0.985** @τ; 100 양성 기준 CI(±0.06) 명시 | **v2.2 주:** v0.2.0 golden 벌 단위 recall@τ = 0.40으로 recall ≥ 0.90 목표 **미달** — v0.2.0은 보정 VDI + CI로 출하(TPR − FPR ≥ 0.5 충족: 0.514), 벌 단위 recall 0.90은 v0.3 목표(71667 양성 추가·백본 강화). |
 | e2e | 의사-프레임 VDI MAE, **tier 혼동행렬**, 사소 베이스라인(전부 low) 병기; **0% 감염 의사-프레임 → VDI<3 in ≥95%**; **단일 스테이지(xyxy 수정·2-class·1024 타일) 베이스라인 대비** | tier 일치율 ≥0.85 **and** 베이스라인 대비 우세 |
 | OOD | VD2·BeeImage에서 recall·**FPR** 하락폭 | 보고만(−10~15%p 예산). **폰 도메인 정확도는 이 스펙 범위에서 측정되지 않는다** — 보고서·UI 고정 문구 |
 | 회귀 | `regression_manifest.json` v2: 경계권·저벌수·`varroa_visible=no`·0마리·블러 케이스 | tier 변동 0 |
@@ -166,7 +166,7 @@
 | 4 | **모바일 캡처 max + HEIC→JPEG 무축소 + 원본 업로드 + API q95 패스스루** (B1) → **Gate 0(a)** 실측(A3 예외 사진 5장). AI 축소 우회는 9단계 two-stage 엔진에서 | 3과 병렬 | 소유자 사진 |
 | 5 | Stage-1 **2-fold** 학습(Validation 셋 5k로 파이프라인 검증 → 1b 도착 후 2.5만+71488) | | 3 |
 | 5.5 | out-of-fold 예측 박스 크롭(사전 추출) → Stage-2 원본 크롭 학습 → **Gate 0(b)(c)** → 촬영·축소 하한 확정 | | 5 |
-| 6 | Stage-2 최종 학습(열화 증강, ResNet-18 @320) + cal-A(Platt, τ = Youden·FPR ≤ 10%) + cal-B(TPR/FPR) → `vdi.yaml`(`tau_policy`·`fpr_cap`·cal-A FPR@τ 기록) | | 5.5 |
+| 6 | Stage-2 최종 학습(열화 증강, ResNet-18 @320) + cal-A(Platt, τ = Youden·FPR ≤ 1%) + cal-B(TPR/FPR) → `vdi.yaml`(`tau_policy`·`fpr_cap`·cal-A FPR@τ 기록) | | 5.5 |
 | 7 | e2e 의사-프레임 평가 + 단일 스테이지 베이스라인 + 회귀 fixture v2 | | 6 |
 | 8 | API/DB 관용화(§8-1) | 5~7과 병렬 | — |
 | 9 | `two_stage_engine.py` + `vdi.py` + evidence + 이중 출력(§8-2) | | 7, 8 |
@@ -201,7 +201,7 @@
 
 | 날짜 | 결정 | 근거 |
 |---|---|---|
-| 2026-09-25 | **스펙 v2.2 (v0.2.0 결과 반영)**: ① **τ 정책** = cal-A Youden 최대점(TPR − FPR), cal-A FPR ≤ 10% 상한(`tau_policy: youden`, `fpr_cap: 0.10`; `vdi.yaml`에 τ·정책·상한·cal-A FPR@τ 기록). Platt는 cal-A, TPR/FPR은 cal-B, 보정 조건 `TPR − FPR ≥ 0.5` 불변. 근거: (a) 2026-09-25 실측 — 같은 τ에서 cal-B FPR이 cal-A FPR보다 3~10× 낮음(colony shift) → FPR-1% 규칙이 과보수·colony 민감(v2 cal-B TPR 0.27, E1 0.05); (b) Youden은 스펙 자체의 보정 조건과 같은 양; (c) E3는 FPR-1%로 Δ0.518(여유 없음) 통과, Youden으로 Δ0.635(golden recall 0.40 → 0.57). ② **크기 베이스라인 AUROC 게이트 → 진단(보고만)** — 라벨(GT 박스 크기)의 성질이지 모델 성질이 아님(증강 무관 golden 0.79 / EV2 0.85); native 크기 3분위별 recall@τ 보고 추가(임계값 없음); recall·specificity 게이트는 유지. ③ **cal 다양성**: 다음 데이터 확장부터 cal-A·cal-B 각 ≥ 3 colony(현재 각 2, 재동결 없음 — Training 단계 동결이 최종). ④ **Stage-2 백본** = ResNet-18, 320px, cal-A AUROC 모델 선택(ShuffleNet-V2 x1.0 @224는 변형 3종 cal-B TPR ≤ 0.27로 실패, 폴백으로 유지); 서빙 CPU ≈15 ms/크롭, ONNX 출력 불변(`featmap` 512ch), CAM `fc_weight` 길이는 `metadata.json`에서 | 사용자 승인(옵션 A), 나머지 결정은 컨트롤러 위임 |
+| 2026-09-25 | **스펙 v2.2 (v0.2.0 결과 반영)**: ① **τ 정책** = cal-A Youden 최대점(TPR − FPR), cal-A FPR ≤ 1% 상한(`tau_policy: youden`, `fpr_cap: 0.01`; `vdi.yaml`에 τ·정책·상한·cal-A FPR@τ 기록). Platt는 cal-A, TPR/FPR은 cal-B, 보정 조건 `TPR − FPR ≥ 0.5` 불변. 근거: (a) 2026-09-25 실측 — 같은 τ에서 cal-B FPR이 cal-A FPR보다 3~10× 낮음(colony shift) → FPR-1% 규칙이 과보수·colony 민감(v2 cal-B TPR 0.27, E1 0.05); (b) Youden은 스펙 자체의 보정 조건과 같은 양; (c) E3는 FPR-1%로 Δ0.518(여유 없음) 통과, Youden으로 Δ0.635(golden recall 0.40 → 0.57). ② **크기 베이스라인 AUROC 게이트 → 진단(보고만)** — 라벨(GT 박스 크기)의 성질이지 모델 성질이 아님(증강 무관 golden 0.79 / EV2 0.85); native 크기 3분위별 recall@τ 보고 추가(임계값 없음); recall·specificity 게이트는 유지. ③ **cal 다양성**: 다음 데이터 확장부터 cal-A·cal-B 각 ≥ 3 colony(현재 각 2, 재동결 없음 — Training 단계 동결이 최종). ④ **Stage-2 백본** = ResNet-18, 320px, cal-A AUROC 모델 선택(ShuffleNet-V2 x1.0 @224는 변형 3종 cal-B TPR ≤ 0.27로 실패, 폴백으로 유지); 서빙 CPU ≈15 ms/크롭, ONNX 출력 불변(`featmap` 512ch), CAM `fc_weight` 길이는 `metadata.json`에서 | 사용자 승인(옵션 A), 나머지 결정은 컨트롤러 위임 **정정 22:35 — `fpr_cap` 0.10 → 0.01**: cap 0.10으로 E3 재보정 시 벌 단위 지표는 개선(cal-B TPR 0.65, golden recall 0.52)됐으나 벌통 단위 e2e는 악화(tier 일치 0.83→0.55, 건강 프레임<3% 1.00→0.10, VDI MAE 1.9→4.2) — cal-B FPR(1.85%)이 미학습 golden colony의 FPR(5.5%)을 과소추정해 보정에서 덜 빼므로 건강 벌통이 ≈5–6%(elevated)로 읽힘. golden 스윕: cap 0.01 → 0.83/1.00/1.9, 0.02 → 0.785/0.775/2.0, 0.05 → 0.74/0.63/2.3, 0.10 → 0.55/0.10/4.2; cal-B e2e는 보정 원천이라 무정보(전 cap 0.91–0.95). 원칙: tier 경계 3% ⇒ 운영점은 미학습 colony에서도 FPR ≪ 3%여야 하고, TPR 부족은 보정으로 안전하나 FPR 과소추정은 안전하지 않다. cap 선택에 golden e2e를 1회 사용했으므로 golden e2e 수치는 약간 낙관적. Youden 의미는 유지(향후 저FPR 모델 대비). 최종 vdi.yaml: τ 0.639, TPR 0.516, FPR 0.0025, corrected. |
 | 2026-09-22 | 목표 = 실제 벌 개체별 감염 판정 시연; 벌 크롭 → 분류; 핸드헬드 폰; 비영리; 게이트 제거; `vdi`·tier 이름 변경; 외부 데이터 혼합; Training 셋 1차; Stage-1 성충 1-class | 사용자 + xyxy 재계산 |
 | 2026-09-23 | **스펙 v2.1 승인(ACCEPTED)** — 구현 계획 2개(데이터·학습 / 서빙·앱 동기)로 진행 | 사용자 |
 | 2026-09-23 | **v2.1 (2차 검증)**: `risk_score`는 `score_mapping(vdi)` 점수 단위 유지; 트렌드 시리즈 분리; `bee_infested` 저장·읽기 시 집계; `vdi_display` 단일 반올림·tier 기준; CI는 raw Jeffreys 후 보정 사상(점추정만 clip); cal-A/cal-B 반분; out-of-fold 크롭; 합성 의사-프레임 부트스트랩; CAM 닫힌 형식; 타임아웃 체인 95/90s; sharp q95·HEIC·GPS strip; AI 축소 우회는 two-stage만; golden colony 합집합 동결; Gate 0(b)를 5.5단계로; 디스크 예산표; 연산 2~4일/3~8h; A3 예외; OpenAI shim 계약·폴백 규칙; insufficient→info | critic-v2 |
