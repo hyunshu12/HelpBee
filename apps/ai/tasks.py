@@ -73,6 +73,12 @@ def train_stage2(args: list[str]) -> int:
     """Stage-2 학습·보정·ONNX — training/configs/stage2.yaml. 추가 인자(--degrade none|90, --set k=v ...)는 그대로 전달."""
     return _run([sys.executable, "-m", "training.train_stage2", "--config", "training/configs/stage2.yaml", *args])
 
+def recalibrate(args: list[str]) -> int:
+    """Stage-2 재보정(학습 없음): tasks.py recalibrate <run_dir> [--set k=v ...] → best.pt 로 Platt·τ 재선택,
+    <run_dir>/vdi.yaml · training/configs/vdi.yaml · eval_history/v0.2.0-stage2.json · metadata.json 갱신 (ONNX 불변)."""
+    return _run([sys.executable, "-m", "training.train_stage2", "--config", "training/configs/stage2.yaml",
+                 "--recalibrate", *args])
+
 def gate0(args: list[str]) -> int:
     """Gate 0(b) px/mm 별 recall 곡선 → training/eval_history/v0.2.0-gate0.json. --weights/--crops 등 인자는 그대로 전달."""
     return _run([sys.executable, "-m", "training.gate0_pxmm", *args])
@@ -120,7 +126,8 @@ def subset(args: list[str]) -> int:
 
 TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
                                                   "train-stage1": train_stage1, "crops": crops,
-                                                  "train-stage2": train_stage2, "gate0": gate0,
+                                                  "train-stage2": train_stage2, "recalibrate": recalibrate,
+                                                  "gate0": gate0,
                                                   "eval-stage2": eval_stage2, "eval-e2e": eval_e2e,
                                                   "subset": subset}
 

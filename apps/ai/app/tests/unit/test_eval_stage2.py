@@ -1,9 +1,10 @@
 # apps/ai/app/tests/unit/test_eval_stage2.py
 import numpy as np
+import pytest
 import pandas as pd
 
-from training.eval_stage2 import (by_group, lodo_probe, overall_metrics, size_only_auroc, size_only_auroc_by_source,
-                                  source_probe_acc)
+from training.eval_stage2 import (by_group, lodo_probe, overall_metrics, recall_by_size_tercile, size_only_auroc,
+                                  size_only_auroc_by_source, source_probe_acc)
 
 
 def test_size_only_auroc_detects_size_shortcut_and_chance_without_it():
@@ -74,3 +75,25 @@ def test_size_only_auroc_by_source_per_group_and_skips_small_or_single_class():
     r = size_only_auroc_by_source(w, w * 1.1, y, src)
     assert set(r) == {"71667", "varroadataset"}
     assert r["71667"] > 0.95 and abs(r["varroadataset"] - 0.5) < 0.15
+
+
+def test_recall_by_size_tercile_per_source():
+    n = 60
+    size = np.tile(np.arange(1, 31, dtype=float), 2)  # 1..30 × 2
+    y = np.r_[np.ones(30), np.zeros(30)].astype(int)
+    # 양성: 작은 벌(≤10)은 놓치고 큰 벌은 잡는다
+    p = np.where((y == 1) & (size > 10), 0.9, 0.1)
+    src = ["71667-val"] * n
+    # 작은 소스(행 < 20) 는 생략
+    size2, y2, p2 = np.r_[size, [5.0] * 10], np.r_[y, [1] * 10], np.r_[p, [0.9] * 10]
+    src2 = src + ["ev2"] * 10
+    r = recall_by_size_tercile(size2, size2 * 0.5, y2, p2, 0.5, src2)
+    assert set(r) == {"71667"}  # 71667-val → 71667 그룹, ev2(10행) 생략
+    t = r["71667"]["terciles"]
+    assert [b["n_pos"] for b in t] == [10, 10, 10]
+    assert [b["recall"] for b in t] == [0.0, 1.0, 1.0]
+    assert r["71667"]["edges"][0] == pytest.approx(10.666, abs=0.01)
+    assert t[0]["size_lo"] == 1.0 and t[2]["size_hi"] == 30.0
+    # max(native_w, native_h) 사용: h 가 더 크면 h 기준
+    r2 = recall_by_size_tercile(size * 0.5, size, y, p, 0.5, src)
+    assert [b["recall"] for b in r2["71667"]["terciles"]] == [0.0, 1.0, 1.0]

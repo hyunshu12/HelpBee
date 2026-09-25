@@ -7,10 +7,11 @@ import numpy as np
 import pytest
 import yaml
 
-from training.train_stage2 import (auroc, check_splits, choose_tau, ece, fit_platt, is_improvement, measure_rates,
-                                   model_spec, onnx_input_size, parse_backbone, parse_select_metric,
-                                   parse_size_jitter, pick_metric, rates_by_source, sample_weights, select_splits,
-                                   write_vdi_yaml)
+from training.train_stage2 import (auroc, build_parser, calibrate, check_splits, choose_tau, choose_tau_youden, ece,
+                                   fit_platt, is_improvement, measure_rates, model_spec, onnx_input_size,
+                                   parse_backbone, parse_fpr_cap, parse_select_metric, parse_size_jitter,
+                                   parse_tau_policy, pick_metric, rates_by_source, sample_weights, select_splits,
+                                   select_tau, write_vdi_yaml)
 
 
 def test_phone_degrade_shape_and_range():
@@ -82,9 +83,11 @@ def test_select_splits_routes_sources():
 def test_write_vdi_yaml_schema(tmp_path):
     p = write_vdi_yaml(tmp_path / "vdi.yaml", version="v0.2.0", tau=0.62, tpr=0.91, fpr=0.009, platt=(1.13, -0.42))
     d = yaml.safe_load(p.read_text(encoding="utf-8"))
-    assert set(d) == {"version", "tau", "tpr", "fpr", "corrected", "platt", "thresholds", "quality",
-                      "capture_floor_px_per_mm", "recommendations", "by_source"}
+    assert set(d) == {"version", "tau", "tpr", "fpr", "corrected", "platt", "tau_policy", "fpr_cap",
+                      "cal_a_fpr_at_tau", "thresholds", "quality", "capture_floor_px_per_mm", "recommendations",
+                      "by_source"}
     assert d["by_source"] is None
+    assert d["tau_policy"] is None and d["fpr_cap"] is None and d["cal_a_fpr_at_tau"] is None
     assert d["corrected"] is True and d["platt"] == {"a": 1.13, "b": -0.42}
     assert d["thresholds"] == {"elevated": 3.0, "high": 10.0}
     assert d["quality"] == {"blur_laplacian_min": 100, "exposure_mean": [40, 215]}
@@ -188,10 +191,10 @@ def test_stage2_yaml_loads():
     root = Path(__file__).resolve().parents[3]
     cfg = yaml.safe_load((root / "training/configs/stage2.yaml").read_text(encoding="utf-8"))
     assert cfg == {"epochs": 50, "patience": 10, "batch": 64, "lr": 3e-4, "weight_decay": 0.01,
-                   "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 224,
-                   "backbone": "shufflenet_v2_x1_0", "select_metric": "val_auroc", "seed": 42,
-                   "crops": "training/crops", "project": "training/runs/stage2", "name": "v0.2.0-stage2",
-                   "workers": 0}
+                   "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 320,
+                   "backbone": "resnet18", "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.10,
+                   "seed": 42, "crops": "training/crops-320", "project": "training/runs/stage2",
+                   "name": "v0.2.0-stage2", "workers": 0}
 
 
 def test_parse_degrade():
@@ -307,3 +310,160 @@ def test_onnx_two_outputs_resnet18_320(tmp_path):
     assert onnx_input_size(s.get_inputs()[0].shape) == 320
     logit, feat = s.run(None, {"image": np.zeros((2, 3, 320, 320), np.float32)})
     assert logit.shape == (2,) and feat.shape == (2, 512, 10, 10)
+
+
+# ── τ 정책 (스펙 v2.2) ────────────────────────────────────────────────────────
+def _beta_scores(seed=2, n_neg=2000, n_pos=200):
+    rng = np.random.default_rng(seed)
+    y = np.r_[np.zeros(n_neg), np.ones(n_pos)].astype(int)
+    p = np.r_[rng.beta(2, 5, n_neg), rng.beta(5, 2, n_pos)]  # 겹침이 커서 Youden 최적 FPR 이 1% 보다 큼
+    return p, y
+
+
+def _brute_youden(p, y, cap):
+    best, bt = -np.inf, None
+    for t in np.unique(p):
+        tpr, fpr = measure_rates(p, y, t)
+        if fpr <= cap and tpr - fpr >= best:
+            best, bt = tpr - fpr, t
+    return bt
+
+
+def test_choose_tau_youden_maximizes_j_under_cap():
+    p, y = _beta_scores()
+    for cap in (0.10, 0.05, 0.3, 1.0):
+        tau = choose_tau_youden(p, y, cap)
+        tpr, fpr = measure_rates(p, y, tau)
+        assert fpr <= cap + 1e-12
+        assert tau == _brute_youden(p, y, cap)
+    # cap 이 느슨할수록 J 는 줄지 않는다
+    js = [np.subtract(*measure_rates(p, y, choose_tau_youden(p, y, c))) for c in (0.01, 0.05, 0.10, 1.0)]
+    assert all(a <= b + 1e-12 for a, b in zip(js, js[1:]))
+    # 이 겹침에서 Youden(cap 0.10) 은 FPR-1% τ 보다 TPR 이 높다 (v0.2.0 이 겪은 저 TPR 문제의 해법)
+    assert measure_rates(p, y, choose_tau_youden(p, y, 0.10))[0] > measure_rates(p, y, choose_tau(p, y, 0.01))[0]
+
+
+def test_choose_tau_youden_cap_zero_is_highest_negative():
+    p, y = _beta_scores(seed=5)
+    tau = choose_tau_youden(p, y, 0.0)
+    assert tau == p[y == 0].max()
+    tpr, fpr = measure_rates(p, y, tau)
+    assert fpr == 0.0 and tpr == (p[y == 1] > p[y == 0].max()).mean()
+
+
+def test_choose_tau_youden_requires_both_classes():
+    with pytest.raises(ValueError):
+        choose_tau_youden([0.1, 0.2], [0, 0], 0.1)
+
+
+def test_select_tau_and_policy_parsing():
+    p, y = _beta_scores()
+    assert select_tau(p, y, "fpr", target_fpr=0.01) == choose_tau(p, y, 0.01)
+    assert select_tau(p, y, "youden", fpr_cap=0.05) == choose_tau_youden(p, y, 0.05)
+    assert parse_tau_policy(None) == "youden" and parse_tau_policy("fpr") == "fpr"
+    assert parse_fpr_cap(None) == 0.10 and parse_fpr_cap("0.2") == 0.2
+    with pytest.raises(ValueError):
+        parse_tau_policy("f1")
+    with pytest.raises(ValueError):
+        parse_fpr_cap(1.5)
+
+
+def test_calibrate_reports_policy_and_cal_a_fpr():
+    rng = np.random.default_rng(9)
+
+    def split(n_neg, n_pos, src):
+        y = np.r_[np.zeros(n_neg), np.ones(n_pos)].astype(int)
+        z = np.r_[rng.normal(-1, 1, n_neg), rng.normal(1, 1, n_pos)]
+        return z, y, [{"source": src, "label": str(v)} for v in y]
+
+    za, ya, ra = split(1500, 200, "71667-val")
+    zb, yb, rb = split(3000, 100, "71667-val")
+    zv, yv, rv = split(300, 60, "varroadataset")
+    sp = {"cal_a": ra, "cal_b": rb, "val": rv}
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, {})
+    assert cal["tau_policy"] == "youden" and cal["fpr_cap"] == 0.10
+    assert cal["cal_a_fpr_at_tau"] <= 0.10
+    assert cal["report"]["tau_policy"] == "youden" and cal["report"]["cal_a_fpr_at_tau"] == cal["cal_a_fpr_at_tau"]
+    assert set(cal["by_source_at_tau"]["cal_b"]) == {"71667"} and set(cal["by_source_at_tau"]["val"]) == {"varroadataset"}
+    old = calibrate(za, ya, zb, yb, zv, yv, sp, {"tau_policy": "fpr"})
+    assert old["tau_policy"] == "fpr" and old["cal_a_fpr_at_tau"] <= 0.01 + 1e-9
+    assert old["tau"] >= cal["tau"] and old["tpr"] <= cal["tpr"]
+
+
+def test_write_vdi_yaml_records_tau_policy_and_round_trips(tmp_path):
+    from app.services.vdi import VdiConfig, load_vdi_config
+
+    p = write_vdi_yaml(tmp_path / "vdi.yaml", version="v0.2.0", tau=0.41, tpr=0.72, fpr=0.08, platt=(0.7, -0.7),
+                       tau_policy="youden", fpr_cap=0.10, cal_a_fpr_at_tau=0.093)
+    d = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert d["tau_policy"] == "youden" and d["fpr_cap"] == 0.10 and d["cal_a_fpr_at_tau"] == 0.093
+    assert load_vdi_config(p) == VdiConfig(tau=0.41, tpr=0.72, fpr=0.08, corrected=True, elevated=3.0, high=10.0,
+                                           platt=(0.7, -0.7))
+
+
+def test_recalibrate_arg_parsing_dispatches_without_training(tmp_path, monkeypatch):
+    import training.train_stage2 as ts
+
+    cfg_path = tmp_path / "stage2.yaml"
+    cfg_path.write_text("crops: training/crops-320\ntau_policy: youden\nfpr_cap: 0.1\n", encoding="utf-8")
+    calls = {}
+    monkeypatch.setattr(ts, "recalibrate", lambda run_dir, cfg: calls.setdefault("recal", (run_dir, cfg)))
+    monkeypatch.setattr(ts, "train", lambda cfg: calls.setdefault("train", cfg))
+    ts.main(["--recalibrate", str(tmp_path / "run"), "--config", str(cfg_path), "--set", "tau_policy=fpr"])
+    run_dir, cfg = calls["recal"]
+    assert "train" not in calls and run_dir == tmp_path / "run"
+    assert cfg["tau_policy"] == "fpr" and cfg["fpr_cap"] == 0.1 and cfg["crops"] == "training/crops-320"
+    a = build_parser().parse_args(["--recalibrate", "runs/x"])
+    assert a.recalibrate == Path("runs/x") and a.config == Path("training/configs/stage2.yaml")
+    assert build_parser().parse_args([]).recalibrate is None
+    with pytest.raises(ValueError):
+        ts.main(["--recalibrate", "r", "--config", str(cfg_path), "--set", "tau_policy=bogus"])
+
+
+def test_tasks_recalibrate_target_registered():
+    import tasks
+
+    assert "recalibrate" in tasks.TARGETS
+
+
+def test_recalibrate_smoke_rewrites_outputs(tmp_path):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    cv2 = pytest.importorskip("cv2")
+    import training.train_stage2 as ts
+
+    crops = tmp_path / "crops"
+    (crops / "img").mkdir(parents=True)
+    rng = np.random.default_rng(0)
+    rows = []
+    for split, src in (("cal_a", "71667-val"), ("cal_b", "71667-val"), ("val", "varroadataset"),
+                       ("train", "71667-val")):
+        for i in range(8):
+            lab = i % 2
+            rel = f"img/{split}_{i}.png"
+            cv2.imwrite(str(crops / rel), rng.integers(0, 255, (64, 64, 3), dtype=np.uint8))
+            rows.append({"path": rel, "label": lab, "source": src, "colony": "c", "device": "d", "split": split,
+                         "native_w": 100 + i, "native_h": 90 + i})
+    import csv as _csv
+
+    with (crops / "crops.csv").open("w", encoding="utf-8", newline="") as f:
+        w = _csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    run = tmp_path / "runs" / "v0.2.0-stage2"
+    run.mkdir(parents=True)
+    m = ts.build_model(pretrained=False, backbone="resnet18")
+    torch.save(m.state_dict(), run / "best.pt")
+    ts.write_metadata(run / "metadata.json", m, (1.0, 0.0), 0.5, 64)
+    (run / "stage2.onnx").write_bytes(b"sentinel")
+    cfg = {"crops": str(crops), "batch": 4, "workers": 0, "seed": 0, "tau_policy": "youden", "fpr_cap": 0.5,
+           "vdi_out": str(tmp_path / "vdi.yaml"), "eval_out": str(tmp_path / "eval.json")}
+    rep = ts.recalibrate(run, cfg)
+    assert rep["recalibrated_from"] == str(run) and rep["tau_policy"] == "youden"
+    for vp in (run / "vdi.yaml", tmp_path / "vdi.yaml"):
+        d = yaml.safe_load(vp.read_text(encoding="utf-8"))
+        assert d["tau_policy"] == "youden" and d["fpr_cap"] == 0.5 and d["tau"] == pytest.approx(rep["tau"])
+    meta = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["tau"] == pytest.approx(rep["tau"]) and meta["tau_policy"] == "youden" and meta["img_size"] == 64
+    assert (run / "stage2.onnx").read_bytes() == b"sentinel"
+    assert json.loads((tmp_path / "eval.json").read_text(encoding="utf-8"))["recalibrated_from"] == str(run)

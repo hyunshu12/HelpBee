@@ -15,6 +15,8 @@ eval.py·단일 스테이지 베이스라인이 쓰는 golden.json 300장보다 
      "by_source": {...}, "by_device": {...}, "by_colony": {...},   # 그룹별 {recall, specificity, n_pos, n_neg}
      "size_only_auroc": float,     # [native_w, native_h, w/h] 만의 5-fold 로지스틱 AUROC — 게이트 < 0.7
      "size_only_auroc_by_source": {source: float},  # 같은 프로브를 소스 그룹별로 (n<20 또는 단일 클래스 소스 제외)
+     "recall_by_size_tercile": {source: {"edges": [q1, q2], "terciles": [{size_lo, size_hi, recall, n_pos} ×3]}},
+                                   # 진단(게이트 아님): 양성 native 크기(max(w,h)) 3분위별 recall@τ (n<20 소스 제외)
      "source_probe_acc": float,    # penultimate 임베딩 → source 5-fold LogisticRegression 정확도
      "lodo": {device: {auroc, n}}} # leave-one-device-out 선형 프로브 (임베딩 고정)
 
@@ -109,6 +111,34 @@ def size_only_auroc_by_source(native_w, native_h, y, source, min_rows: int = 20,
     return out
 
 
+def recall_by_size_tercile(native_w, native_h, y, p, tau: float, source, min_rows: int = 20) -> dict:
+    """진단(게이트 없음): 소스 그룹별로 크롭 native 크기 s = max(native_w, native_h) 3분위 안의 recall@τ.
+
+    3분위 경계는 그 소스 **양성** 크기의 1/3·2/3 분위수 (recall 은 양성만 쓰므로 bin 별 n_pos 를 고르게).
+    bin: s ≤ q1 | q1 < s ≤ q2 | s > q2 (작은 → 큰 순). 행 < min_rows 이거나 양성 없는 소스는 생략,
+    양성 없는 bin 의 recall 은 None. 크기 지름길(작은 감염 벌을 놓치는지)을 소스 안에서 본다."""
+    size = np.maximum(np.asarray(native_w, np.float64), np.asarray(native_h, np.float64))
+    y = np.asarray(y).astype(int)
+    pred = np.asarray(p, np.float64) > tau
+    groups = np.array([source_group(s) for s in source])
+    out = {}
+    for g in sorted(set(groups)):
+        m = groups == g
+        pos = m & (y == 1)
+        if m.sum() < min_rows or not pos.any():
+            continue
+        q1, q2 = (float(v) for v in np.quantile(size[pos], [1 / 3, 2 / 3]))
+        bins = [size <= q1, (size > q1) & (size <= q2), size > q2]
+        terc = []
+        for b in bins:
+            bp = pos & b
+            terc.append({"size_lo": float(size[bp].min()) if bp.any() else None,
+                         "size_hi": float(size[bp].max()) if bp.any() else None,
+                         "recall": float(pred[bp].mean()) if bp.any() else None, "n_pos": int(bp.sum())})
+        out[str(g)] = {"edges": [q1, q2], "terciles": terc}
+    return out
+
+
 def source_probe_acc(emb, source, seed: int = 0) -> float:
     """임베딩 → source 선형 프로브 5-fold 정확도 — 높을수록 임베딩이 촬영 소스를 담고 있음."""
     emb = np.asarray(emb, np.float64)
@@ -149,6 +179,8 @@ def build_report(df: pd.DataFrame, logits, emb, tau: float, platt: tuple[float, 
         "size_only_auroc": size_only_auroc(df["native_w"].astype(float), df["native_h"].astype(float), y),
         "size_only_auroc_by_source": size_only_auroc_by_source(df["native_w"].astype(float),
                                                                df["native_h"].astype(float), y, df["source"]),
+        "recall_by_size_tercile": recall_by_size_tercile(df["native_w"].astype(float), df["native_h"].astype(float),
+                                                         y, p, tau, df["source"]),
         "source_probe_acc": source_probe_acc(emb, df["source"]),
         "lodo": lodo_probe(emb, y, df["device"]),
     }

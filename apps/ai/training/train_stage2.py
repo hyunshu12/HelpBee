@@ -3,6 +3,8 @@
 Usage (apps/ai 에서, 학습 박스):
     python -m training.train_stage2 --config training/configs/stage2.yaml [--degrade none|90] [--set k=v ...]
     (= python tasks.py train-stage2 --degrade 90)
+    python -m training.train_stage2 --recalibrate <run_dir> [--config ...] [--set k=v ...]
+    (= python tasks.py recalibrate <run_dir>) — 학습 없이 best.pt 로 Platt·τ 만 다시 정한다 (ONNX 불변).
 
 데이터: training/crops/crops.csv (make_crops.py 산출물). split 라우팅은 select_splits 참조 —
 VarroaDataset `test` 와 EV2 `holdout` 은 Task 12 평가용이라 여기서 절대 쓰지 않는다.
@@ -14,8 +16,9 @@ GAP → Linear(C,1). ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_si
 모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 
-보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 음성 FPR 1% 에서 τ 선택 →
-cal-B 에서 TPR/FPR 측정(독립 추정). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
+보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
+`youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
+분위수) → cal-B 에서 TPR/FPR 측정(독립 추정). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
 eval_history/v0.2.0-stage2.json(AUROC·ECE 15-bin) 기록.
 
 torch/torchvision/cv2 는 함수 안에서 lazy import — 이 모듈은 numpy/yaml 만으로 import 가능해야 한다
@@ -42,6 +45,10 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
 SELECT_METRICS = ("val_auroc", "cal_a_auroc")
+TAU_POLICIES = ("youden", "fpr")
+DEFAULT_TAU_POLICY = "youden"
+DEFAULT_FPR_CAP = 0.10
+DEFAULT_TARGET_FPR = 0.01
 BACKBONES = {"shufflenet_v2_x1_0": 1024, "resnet18": 512}  # 이름 → featmap 채널 수 (= fc_weight 길이)
 DEFAULT_BACKBONE = "shufflenet_v2_x1_0"
 DEFAULT_IMG_SIZE = 224
@@ -62,6 +69,22 @@ def parse_select_metric(v) -> str:
     v = "val_auroc" if v is None else str(v)
     if v not in SELECT_METRICS:
         raise ValueError(f"select_metric 은 {SELECT_METRICS} 중 하나: {v!r}")
+    return v
+
+
+def parse_tau_policy(v) -> str:
+    """config `tau_policy` 검증. None → `youden` (스펙 v2.2 기본)."""
+    v = DEFAULT_TAU_POLICY if v is None else str(v)
+    if v not in TAU_POLICIES:
+        raise ValueError(f"tau_policy 는 {TAU_POLICIES} 중 하나: {v!r}")
+    return v
+
+
+def parse_fpr_cap(v) -> float:
+    """config `fpr_cap` (Youden τ 의 cal-A FPR 상한). None → 0.10. [0, 1] 밖이면 ValueError."""
+    v = DEFAULT_FPR_CAP if v is None else float(v)
+    if not 0.0 <= v <= 1.0:
+        raise ValueError(f"fpr_cap 은 [0, 1]: {v!r}")
     return v
 
 
@@ -239,11 +262,11 @@ def select_splits(rows: list[dict]) -> dict[str, list[dict]]:
     return out
 
 
-def check_splits(sp: dict[str, list[dict]]) -> None:
+def check_splits(sp: dict[str, list[dict]], keys=("train", "val", "cal_a", "cal_b")) -> None:
     """학습 전 조기 검증: train/val/cal_a/cal_b 가 비었거나 한 클래스뿐이면 ValueError.
     (몇 시간 학습 뒤 Platt/τ 단계에서 np.concatenate([]) 로 죽거나 NaN 이 나는 것을 막는다.)"""
     bad = []
-    for k in ("train", "val", "cal_a", "cal_b"):
+    for k in keys:
         labels = {int(r["label"]) for r in sp.get(k, [])}
         if labels != {0, 1}:
             bad.append(f"{k}: n={len(sp.get(k, []))} labels={sorted(labels)}")
@@ -275,6 +298,31 @@ def choose_tau(p, y, target_fpr=0.01):
     """음성 점수의 (1-target_fpr) 분위수 → p > τ 의 FPR ≤ target_fpr."""
     neg = np.sort(np.asarray(p)[np.asarray(y) == 0])
     return float(neg[int(np.ceil((1 - target_fpr) * len(neg))) - 1])
+
+
+def choose_tau_youden(p, y, fpr_cap: float = DEFAULT_FPR_CAP) -> float:
+    """Youden τ: 후보 τ(점수 고유값, 판정은 p > τ) 중 FPR ≤ fpr_cap 을 만족하는 것에서 TPR−FPR 최대.
+    동점이면 큰 τ(보수적). fpr_cap=0 이면 음성 최고점 이상 중 TPR 최대 = 음성 최고점으로 수렴.
+    τ = max(p) 는 항상 FPR 0 이라 feasible 집합이 비지 않는다."""
+    p = np.asarray(p, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    pos, neg = np.sort(p[y == 1]), np.sort(p[y == 0])
+    if not len(pos) or not len(neg):
+        raise ValueError(f"choose_tau_youden: 양성·음성 모두 필요 (n_pos={len(pos)}, n_neg={len(neg)})")
+    cand = np.unique(p)
+    tpr = 1 - np.searchsorted(pos, cand, side="right") / len(pos)
+    fpr = 1 - np.searchsorted(neg, cand, side="right") / len(neg)
+    j = np.where(fpr <= float(fpr_cap) + 1e-12, tpr - fpr, -np.inf)
+    best = np.flatnonzero(j == j.max())[-1]  # 동점 → 가장 큰 τ
+    return float(cand[best])
+
+
+def select_tau(p, y, policy: str = DEFAULT_TAU_POLICY, fpr_cap: float = DEFAULT_FPR_CAP,
+               target_fpr: float = DEFAULT_TARGET_FPR) -> float:
+    """config `tau_policy` 에 따라 cal-A 점수로 τ 선택 (`youden` | `fpr`)."""
+    if parse_tau_policy(policy) == "youden":
+        return choose_tau_youden(p, y, fpr_cap)
+    return choose_tau(p, y, target_fpr)
 
 
 def measure_rates(p, y, tau):
@@ -379,19 +427,23 @@ def export_onnx(model, path: Path, img_size: int = DEFAULT_IMG_SIZE) -> Path:
 
 
 def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
-                   img_size: int = DEFAULT_IMG_SIZE) -> Path:
+                   img_size: int = DEFAULT_IMG_SIZE, tau_policy: str | None = None) -> Path:
     """계획 2 CAM 계산용: fc 가중치(featmap 채널 수 길이) + Platt + τ + backbone/feat_channels/img_size."""
     fc = model.fc.weight.detach().cpu().numpy().reshape(-1)
     data = {"fc_weight": [float(v) for v in fc], "platt": {"a": float(platt[0]), "b": float(platt[1])},
             "tau": float(tau), "backbone": getattr(model, "backbone", DEFAULT_BACKBONE),
             "feat_channels": int(fc.shape[0]), "img_size": int(img_size)}
+    if tau_policy is not None:
+        data["tau_policy"] = parse_tau_policy(tau_policy)
     path = Path(path)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
 
 
 def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: float, platt: tuple[float, float],
-                   capture_floor_px_per_mm: float | None = None, by_source: dict | None = None) -> Path:
+                   capture_floor_px_per_mm: float | None = None, by_source: dict | None = None,
+                   tau_policy: str | None = None, fpr_cap: float | None = None,
+                   cal_a_fpr_at_tau: float | None = None) -> Path:
     data = {
         "version": version,
         "tau": float(tau),
@@ -399,6 +451,9 @@ def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: flo
         "fpr": float(fpr),
         "corrected": bool(tpr - fpr >= 0.5),
         "platt": {"a": float(platt[0]), "b": float(platt[1])},
+        "tau_policy": tau_policy,  # youden | fpr (진단·재현용, 서빙은 tau 만 읽는다)
+        "fpr_cap": None if fpr_cap is None else float(fpr_cap),
+        "cal_a_fpr_at_tau": None if cal_a_fpr_at_tau is None else float(cal_a_fpr_at_tau),
         "thresholds": {"elevated": 3.0, "high": 10.0},
         "quality": {"blur_laplacian_min": 100, "exposure_mean": [40, 215]},
         "capture_floor_px_per_mm": capture_floor_px_per_mm,
@@ -529,57 +584,143 @@ def train(cfg: dict) -> dict:
     torch.save(model.state_dict(), save_dir / "last.pt")
 
     model.load_state_dict(torch.load(save_dir / "best.pt", map_location=device, weights_only=True))
-    za, ya = _predict_logits(model, eval_dl(sp["cal_a"]), device)
+    za, ya = _predict_logits(model, cal_a_loader, device)
     zb, yb = _predict_logits(model, eval_dl(sp["cal_b"]), device)
-    platt = fit_platt(za, ya)
-    pa, pb = sigmoid(platt[0] * za + platt[1]), sigmoid(platt[0] * zb + platt[1])
-    tau = choose_tau(pa, ya, 0.01)
-    tpr, fpr = measure_rates(pb, yb, tau)
     zv, yv = _predict_logits(model, val_loader, device)
-    pv = sigmoid(platt[0] * zv + platt[1])
-    by_source_at_tau = {"cal_b": rates_by_source(pb, yb, [r["source"] for r in sp["cal_b"]], tau),
-                        "val": rates_by_source(pv, yv, [r["source"] for r in sp["val"]], tau)}
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
 
     model_cpu = model.to("cpu")
     export_onnx(model_cpu, save_dir / "stage2.onnx", img_size)
-    write_metadata(save_dir / "metadata.json", model_cpu, platt, tau, img_size)
-    vdi = write_vdi_yaml(Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), version="v0.2.0", tau=tau, tpr=tpr,
-                         fpr=fpr, platt=platt, by_source=by_source_at_tau["cal_b"])
+    write_metadata(save_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"])
+    vdi = _write_vdi(cal, Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), save_dir / "vdi.yaml")
     report = {
         "version": "v0.2.0-stage2", "model": backbone, "img_size": img_size, "degrade": cfg.get("degrade"),
         "select_metric": select_metric, f"best_{select_metric}": best_score,
         "best_epoch": best_ep, "val_auroc": history[best_ep]["val_auroc"] if best_ep >= 0 else None,
-        "platt": {"a": platt[0], "b": platt[1]},
-        "tau": tau, "target_fpr": 0.01, "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
-        "by_source_at_tau": by_source_at_tau, "size_jitter": list(jitter) if jitter else None,
-        "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
-        "ece15": {"cal_a": ece(pa, ya), "cal_b": ece(pb, yb), "cal_b_uncalibrated": ece(sigmoid(zb), yb)},
+        **cal["report"], "size_jitter": list(jitter) if jitter else None,
         "counts": {k: {"n": len(v), "pos": sum(int(r["label"]) for r in v)} for k, v in sp.items()},
         "history": history, "weights": str(save_dir / "best.pt"), "onnx": str(save_dir / "stage2.onnx"),
         "vdi": str(vdi),
     }
     out = Path(cfg.get("eval_out", "training/eval_history/v0.2.0-stage2.json"))
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info(f"τ={tau:.4f} cal-B TPR={tpr:.3f} FPR={fpr:.4f} → {out}")
+    logger.info(f"τ={cal['tau']:.4f} ({cal['tau_policy']}) cal-B TPR={cal['tpr']:.3f} FPR={cal['fpr']:.4f} → {out}")
     return report
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+def calibrate(za, ya, zb, yb, zv, yv, sp: dict[str, list[dict]], cfg: dict) -> dict:
+    """(numpy) cal-A logit → Platt → τ(`tau_policy`) → cal-B TPR/FPR + 소스별 rates. 학습·--recalibrate 공용.
+    반환: platt/tau/tpr/fpr/tau_policy/fpr_cap/target_fpr/cal_a_fpr_at_tau/by_source_at_tau + eval JSON 조각 `report`."""
+    policy = parse_tau_policy(cfg.get("tau_policy"))
+    fpr_cap = parse_fpr_cap(cfg.get("fpr_cap"))
+    target_fpr = float(cfg.get("target_fpr", DEFAULT_TARGET_FPR))
+    platt = fit_platt(za, ya)
+    pa, pb, pv = (sigmoid(platt[0] * np.asarray(z) + platt[1]) for z in (za, zb, zv))
+    tau = select_tau(pa, ya, policy, fpr_cap, target_fpr)
+    cal_a_fpr = measure_rates(pa, ya, tau)[1]
+    tpr, fpr = measure_rates(pb, yb, tau)
+    by_source_at_tau = {"cal_b": rates_by_source(pb, yb, [r["source"] for r in sp["cal_b"]], tau),
+                        "val": rates_by_source(pv, yv, [r["source"] for r in sp["val"]], tau)}
+    report = {
+        "platt": {"a": platt[0], "b": platt[1]}, "tau": tau, "tau_policy": policy, "fpr_cap": fpr_cap,
+        "target_fpr": target_fpr, "cal_a_fpr_at_tau": cal_a_fpr,
+        "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
+        "by_source_at_tau": by_source_at_tau,
+        "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
+        "ece15": {"cal_a": ece(pa, ya), "cal_b": ece(pb, yb), "cal_b_uncalibrated": ece(sigmoid(zb), yb)},
+    }
+    return {"platt": platt, "tau": tau, "tpr": tpr, "fpr": fpr, "tau_policy": policy, "fpr_cap": fpr_cap,
+            "target_fpr": target_fpr, "cal_a_fpr_at_tau": cal_a_fpr, "by_source_at_tau": by_source_at_tau,
+            "report": report}
+
+
+def _write_vdi(cal: dict, *paths: Path) -> Path:
+    """calibrate() 결과로 vdi.yaml 을 여러 경로에 같은 내용으로 쓴다. 첫 경로 반환."""
+    for path in paths:
+        write_vdi_yaml(path, version="v0.2.0", tau=cal["tau"], tpr=cal["tpr"], fpr=cal["fpr"], platt=cal["platt"],
+                       by_source=cal["by_source_at_tau"]["cal_b"], tau_policy=cal["tau_policy"],
+                       fpr_cap=cal["fpr_cap"], cal_a_fpr_at_tau=cal["cal_a_fpr_at_tau"])
+    return Path(paths[0])
+
+
+def recalibrate(run_dir: Path, cfg: dict) -> dict:
+    """학습 없이 <run_dir>/best.pt 로 cal_a/cal_b/val 을 다시 예측해 Platt·τ(`tau_policy`) 재선택.
+    backbone/img_size 는 <run_dir>/metadata.json. 갱신: <run_dir>/vdi.yaml · cfg vdi_out · cfg eval_out
+    (`recalibrated_from` 추가, 같은 run 의 기존 JSON 이면 history 등 학습 필드 보존) · metadata.json(platt/tau/tau_policy).
+    stage2.onnx 는 건드리지 않는다 (Platt·τ 는 ONNX 밖)."""
+    import torch
+    from torch.utils.data import DataLoader
+
+    run_dir = Path(run_dir)
+    weights, meta_path = run_dir / "best.pt", run_dir / "metadata.json"
+    if not weights.exists() or not meta_path.exists():
+        raise FileNotFoundError(f"--recalibrate 에 best.pt·metadata.json 필요: {run_dir}")
+    backbone, img_size = model_spec(weights)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    crops_dir = Path(cfg["crops"])
+    sp = select_splits(read_crops(crops_dir))
+    check_splits(sp, keys=("val", "cal_a", "cal_b"))
+    workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
+    model = build_model(pretrained=False, backbone=backbone).to(device)
+    model.load_state_dict(torch.load(weights, map_location=device, weights_only=True))
+
+    def logits(rows):
+        dl = DataLoader(_dataset(rows, crops_dir, False, None, int(cfg.get("seed", 0)), img_size=img_size),
+                        batch_size=int(cfg.get("batch", 64)), shuffle=False, num_workers=workers)
+        return _predict_logits(model, dl, device)
+
+    (za, ya), (zb, yb), (zv, yv) = logits(sp["cal_a"]), logits(sp["cal_b"]), logits(sp["val"])
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
+
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.update({"platt": {"a": float(cal["platt"][0]), "b": float(cal["platt"][1])}, "tau": float(cal["tau"]),
+                 "tau_policy": cal["tau_policy"]})
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    vdi = _write_vdi(cal, run_dir / "vdi.yaml", Path(cfg.get("vdi_out", "training/configs/vdi.yaml")))
+
+    out = Path(cfg.get("eval_out", "training/eval_history/v0.2.0-stage2.json"))
+    base = {}
+    if out.exists():
+        prev = json.loads(out.read_text(encoding="utf-8"))
+        if Path(str(prev.get("weights", "")).replace("\\", "/")).parent.name == run_dir.name:
+            base = prev  # 같은 run 의 학습 리포트 → history/best_epoch 등 보존
+    counts = {k: {"n": len(v), "pos": sum(int(r["label"]) for r in v)} for k, v in sp.items()}
+    report = {**base, "version": "v0.2.0-stage2", "model": backbone, "img_size": img_size, **cal["report"],
+              "counts": counts, "weights": str(weights), "vdi": str(vdi), "recalibrated_from": str(run_dir)}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info(f"recalibrated τ={cal['tau']:.4f} ({cal['tau_policy']}, cal-A FPR={cal['cal_a_fpr_at_tau']:.4f}) "
+                f"cal-B TPR={cal['tpr']:.3f} FPR={cal['fpr']:.4f} → {out}")
+    return report
+
+
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
-    p.add_argument("--config", type=Path, required=True, help="training/configs/stage2.yaml")
+    p.add_argument("--config", type=Path, default=Path("training/configs/stage2.yaml"),
+                   help="training/configs/stage2.yaml (기본)")
     p.add_argument("--degrade", default=None, help="none | <lo_px 정수> (폰 열화 증강)")
     p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="임의 config 키 오버라이드")
-    a = p.parse_args()
+    p.add_argument("--recalibrate", type=Path, default=None, metavar="RUN_DIR",
+                   help="학습 없이 RUN_DIR/best.pt 로 Platt·τ 재선택 (vdi.yaml·eval JSON·metadata.json 갱신, ONNX 불변)")
+    return p
+
+
+def main(argv: list[str] | None = None):
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    a = build_parser().parse_args(argv)
     cfg = yaml.safe_load(a.config.read_text(encoding="utf-8"))
     cfg = apply_overrides(cfg, a.set)
     if a.degrade is not None:
         cfg["degrade"] = a.degrade
-    parse_degrade(cfg.get("degrade"))  # 조기 검증
+    parse_tau_policy(cfg.get("tau_policy"))  # 조기 검증
+    parse_fpr_cap(cfg.get("fpr_cap"))
+    cfg["config"] = str(a.config)
+    if a.recalibrate is not None:
+        return recalibrate(a.recalibrate, cfg)
+    parse_degrade(cfg.get("degrade"))
     parse_select_metric(cfg.get("select_metric"))
     parse_backbone(cfg.get("backbone"))
-    cfg["config"] = str(a.config)
-    train(cfg)
+    return train(cfg)
 
 
 if __name__ == "__main__":
