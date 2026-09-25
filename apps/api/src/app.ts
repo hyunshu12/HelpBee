@@ -68,6 +68,8 @@ export function createApp() {
     baseURL: env.AI_BASE_URL,
     hmacSecret: env.AI_INTERNAL_HMAC_SECRET,
     http,
+    // yolo(무료)·auto(유료, YOLO 1차) 모두 AI 서버의 two-stage 파이프라인을 탄다 (스펙 §8).
+    engineTimeoutsMs: { yolo: env.AI_TIMEOUT_MS_TWO_STAGE, auto: env.AI_TIMEOUT_MS_TWO_STAGE },
   });
   const bucket = env.S3_IMAGES_BUCKET;
 
@@ -105,8 +107,8 @@ export function createApp() {
     },
     refundQuota: (userId) => quota.refund(redis, userId),
     presignGet: (objectKey) => s3.presignGet(s3client, bucket, objectKey),
-    resolveModelId: async (provider) =>
-      (await queries.models.resolveActiveModel(db, provider))?.id,
+    resolveModelId: async (provider, pipeline) =>
+      (await queries.models.resolveActiveModel(db, provider, pipeline))?.id,
     analyze: (input) => aiClient.analyze(input),
     storeAnalysis: (input) =>
       queries.analyses.createSingleAnalysis(db, {

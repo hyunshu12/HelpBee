@@ -18,18 +18,19 @@ import {
   trendQuerySchema,
 } from '../schemas/analyses';
 
-type Tier = 'safe' | 'watch' | 'danger';
+import type { AiAnalysisResult, Tier } from '../services/ai-client';
 
-export type AiResult = {
-  risk_score: number | null;
-  tier: string;
-  estimated_count?: number | null;
-  recommendations: string[];
-  engine_used: string | null;
-  latency_ms?: number;
-  cost_estimate_usd?: number | null;
-  raw_payload?: Record<string, unknown>;
+/**
+ * 라우트가 받는 AI 결과. ai-client 계약(AiAnalysisResult)을 따르되 DI 경계에서 관용적으로:
+ * tier는 미지의 값도 허용(→ overall_health null, severity info), model_version은 선택.
+ */
+export type AiResult = Omit<AiAnalysisResult, 'tier' | 'model_version'> & {
+  tier: Tier | (string & {});
+  model_version?: string;
 };
+
+/** 결과를 낸 파이프라인 — model_versions 유무로 판별 → ai_models 행 선택 (스펙 §8-1). */
+export type ModelPipeline = 'two-stage' | 'v1';
 
 export type StoreAnalysisInput = {
   hiveId: string;
@@ -52,7 +53,7 @@ export type AnalysesDeps = {
   reserveQuota(userId: string): Promise<void>; // 초과 시 AppError('QUOTA_EXCEEDED') throw
   refundQuota(userId: string): Promise<void>;
   presignGet(objectKey: string): Promise<string>;
-  resolveModelId(provider: 'yolo' | 'openai'): Promise<string | undefined>;
+  resolveModelId(provider: 'yolo' | 'openai', pipeline?: ModelPipeline): Promise<string | undefined>;
   analyze(input: { imageUrl: string; engine: 'auto' | 'yolo'; requestId: string }): Promise<AiResult>;
   storeAnalysis(input: StoreAnalysisInput): Promise<unknown>;
   /** failed 행 제자리 재실행: id 보존, 결과/권장조치 갱신. CAS(WHERE status='failed'). */
@@ -77,18 +78,56 @@ export type AnalysesDeps = {
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const HEALTH: Record<Tier, string> = { safe: 'healthy', watch: 'warning', danger: 'critical' };
-const SEVERITY: Record<Tier, string> = { safe: 'info', watch: 'warn', danger: 'danger' };
+// 구 계약(safe/watch/danger) + two-stage 계약(low/elevated/high/insufficient) 양립 (스펙 §3·§8-1).
+// insufficient(벌 0마리·판독 불가)는 건강 판정 불가 → overall_health null, severity info.
+const HEALTH: Record<Tier, string | null> = {
+  safe: 'healthy',
+  watch: 'warning',
+  danger: 'critical',
+  low: 'healthy',
+  elevated: 'warning',
+  high: 'critical',
+  insufficient: null,
+};
+const SEVERITY: Record<Tier, string> = {
+  safe: 'info',
+  watch: 'warn',
+  danger: 'danger',
+  low: 'info',
+  elevated: 'warn',
+  high: 'danger',
+  insufficient: 'info',
+};
+
+function healthFor(tier: string): string | null {
+  return Object.prototype.hasOwnProperty.call(HEALTH, tier) ? HEALTH[tier as Tier] : null;
+}
+function severityFor(tier: string): string {
+  return Object.prototype.hasOwnProperty.call(SEVERITY, tier) ? SEVERITY[tier as Tier] : 'info';
+}
 
 type Recommendation = { order: number; content: string; severity: string };
 
-function toRecommendations(tier: Tier, list: string[]): Recommendation[] {
-  return list.slice(0, 5).map((content, i) => ({ order: i, content, severity: SEVERITY[tier] }));
+function toRecommendations(tier: string, list: string[]): Recommendation[] {
+  const severity = severityFor(tier);
+  return list.slice(0, 5).map((content, i) => ({ order: i, content, severity }));
+}
+
+// numeric(6,3) 컬럼은 드라이버가 문자열로 반환 → 응답에선 number로 직렬화(클라이언트 파싱 부담 제거).
+// 값 자체는 AI가 준 그대로 — 재반올림하지 않는다(표시값은 AI의 vdi_display가 단일 소스).
+const NUMERIC_KEYS = ['vdi', 'vdiCiLow', 'vdiCiHigh'] as const;
+
+function normalizeRow(row: unknown): Record<string, unknown> {
+  const r = { ...(row as Record<string, unknown>) };
+  for (const k of NUMERIC_KEYS) {
+    if (typeof r[k] === 'string') r[k] = Number(r[k]);
+  }
+  return r;
 }
 
 /** 분석 row에 recommendations 배열을 실어 응답 페이로드로 만든다(계약: §4). */
 function withRecs(row: unknown, recs: Recommendation[]) {
-  return { ...(row as Record<string, unknown>), recommendations: recs };
+  return { ...normalizeRow(row), recommendations: recs };
 }
 
 export function analysesRoutes(deps: AnalysesDeps) {
@@ -138,17 +177,24 @@ export function analysesRoutes(deps: AnalysesDeps) {
     }
 
     const analyzedAt = new Date();
-    const failed = !result || result.engine_used === null || result.risk_score === null;
+    // 실패 = 결과 없음(AI_UNAVAILABLE) 또는 engine_used null(AI graceful 실패)뿐.
+    // two-stage 계약은 risk_score가 null일 수 있으므로 risk_score 누락만으로는 실패가 아니다(스펙 §8-1).
+    const failed = !result || result.engine_used === null;
 
     // ⑤-a 실패: 무료면 환불, status=failed 저장, graceful 200(비차단)
     if (failed) {
       if (isFree) await deps.refundQuota(userId);
-      const modelId = (await deps.resolveModelId('yolo')) ?? '';
+      const modelId = (await deps.resolveModelId('yolo', 'v1')) ?? '';
       const analysis = {
         status: 'failed',
         varroaInfectionRisk: null,
         estimatedVarroaCount: null,
         overallHealth: null,
+        vdi: null,
+        vdiCiLow: null,
+        vdiCiHigh: null,
+        beeTotal: null,
+        beeInfested: null,
         rawResponse: result?.raw_payload ?? { error_reason: 'ai_unavailable' },
         latencyMs: result?.latency_ms ?? null,
         error: 'ai_unavailable',
@@ -170,18 +216,27 @@ export function analysesRoutes(deps: AnalysesDeps) {
     }
 
     // ⑤-b 성공: engine_used→model_id, 1행 저장(신규 201) 또는 failed 행 갱신(재시도 200)
-    const tier = result!.tier as Tier;
-    const provider = result!.engine_used as 'yolo' | 'openai';
-    const modelId = await deps.resolveModelId(provider);
+    // tier는 AI가 vdi_display에서만 계산해 보낸 값 — API는 vdi로 재계산/재반올림하지 않는다.
+    const res = result!;
+    const tier = res.tier;
+    const provider = res.engine_used as 'yolo' | 'openai';
+    const pipeline: ModelPipeline = res.model_versions ? 'two-stage' : 'v1';
+    const modelId = await deps.resolveModelId(provider, pipeline);
     if (!modelId) return problem(c, 'AI_UNAVAILABLE'); // 모델 메타 없음(seed/매핑 오류)
-    const recs = toRecommendations(tier, result!.recommendations ?? []);
+    const recs = toRecommendations(tier, res.recommendations ?? []);
     const analysis = {
       status: 'success',
-      varroaInfectionRisk: result!.risk_score,
-      estimatedVarroaCount: result!.estimated_count ?? null,
-      overallHealth: HEALTH[tier] ?? null,
-      rawResponse: result!.raw_payload ?? null,
-      latencyMs: result!.latency_ms ?? null,
+      // 이중 출력 기간: AI가 score_mapping(vdi)로 채운 점수 단위 그대로 저장(round(vdi) 금지).
+      varroaInfectionRisk: res.risk_score ?? null,
+      estimatedVarroaCount: res.estimated_count ?? null,
+      overallHealth: healthFor(tier),
+      vdi: res.vdi ?? null,
+      vdiCiLow: res.sampling_ci95?.[0] ?? null,
+      vdiCiHigh: res.sampling_ci95?.[1] ?? null,
+      beeTotal: res.bee_total ?? null,
+      beeInfested: res.bee_infested ?? null,
+      rawResponse: res.raw_payload ?? null,
+      latencyMs: res.latency_ms ?? null,
       error: null,
       analyzedAt,
     };
@@ -203,7 +258,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
   app.get('/', zValidator('query', listAnalysesQuerySchema), async (c) => {
     const userId = c.get('userId') as string;
     const { hiveId, limit, offset } = c.req.valid('query');
-    const rows = await deps.listForUser(hiveId, userId, { limit, offset });
+    const rows = (await deps.listForUser(hiveId, userId, { limit, offset })).map(normalizeRow);
     return ok(c, rows, { pagination: { limit, offset, total: rows.length } });
   });
 

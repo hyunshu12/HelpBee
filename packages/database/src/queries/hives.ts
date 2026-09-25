@@ -119,7 +119,10 @@ export async function getHiveByIdForUser(
 
 export type HiveTrendPoint = {
   bucket: string; // ISO date (UTC)
+  /** 구 계약 row(vdi·bee_total 모두 NULL)만의 varroa_infection_risk 평균 (0~100 점수). */
   avgRisk: number | null;
+  /** two-stage row의 vdi 평균 (%). 단위가 달라 avgRisk와 섞지 않는다(coalesce 금지, 스펙 §8-1). */
+  avgVdi: number | null;
   analysisCount: number;
 };
 
@@ -129,6 +132,9 @@ export type HiveTrendPoint = {
  * - hives INNER JOIN으로 소유권(userId) + soft delete(deletedAt IS NULL) 동시 검증.
  *   → 호출 라우트가 검증을 깜빡해도 IDOR 발생 X.
  *   → 다른 user의 hiveId로 호출 시 빈 배열 반환.
+ * - 시리즈 분리(스펙 v2.2 §8-1): two-stage row(vdi 또는 bee_total 이 채워진 행)는 avgVdi,
+ *   구 row는 avgRisk. 이중 출력 기간엔 two-stage row에도 risk_score(점수 단위)가 채워지지만
+ *   avgRisk에서 제외 — 한 버킷에 두 시리즈가 모두 있을 수 있으며 프론트가 구분한다.
  * - dual-engine 환경에서는 같은 image_id에 2 row가 있을 수 있어 단순 평균이 두 모델 합 평균이 됨.
  *   베타 비교 기간에는 이 동작 의도적 — 후속 PR에서 model_id로 분리 트렌드 함수 추가 예정.
  *
@@ -147,7 +153,10 @@ export async function getHiveTrend(
   const rows = await db
     .select({
       bucket,
-      avgRisk: avg(analyses.varroaInfectionRisk).mapWith(Number),
+      avgRisk: sql<string | null>`avg(case when ${analyses.vdi} is null and ${analyses.beeTotal} is null then ${analyses.varroaInfectionRisk} end)`.mapWith(
+        Number,
+      ),
+      avgVdi: avg(analyses.vdi).mapWith(Number),
       analysisCount: count(analyses.id).mapWith(Number),
     })
     .from(analyses)
@@ -168,6 +177,7 @@ export async function getHiveTrend(
   return rows.map((r) => ({
     bucket: r.bucket,
     avgRisk: r.avgRisk,
+    avgVdi: r.avgVdi,
     analysisCount: r.analysisCount,
   }));
 }

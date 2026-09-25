@@ -20,6 +20,11 @@ describe('loadEnv', () => {
     expect(env.NODE_ENV).toBe('development');
   });
 
+  it('AI_TIMEOUT_MS_TWO_STAGE defaults to 90s (spec §8 timeout chain) and coerces', () => {
+    expect(loadEnv(valid).AI_TIMEOUT_MS_TWO_STAGE).toBe(90_000);
+    expect(loadEnv({ ...valid, AI_TIMEOUT_MS_TWO_STAGE: '60000' }).AI_TIMEOUT_MS_TWO_STAGE).toBe(60_000);
+  });
+
   it('coerces PORT from string', () => {
     expect(loadEnv({ ...valid, PORT: '4000' }).PORT).toBe(4000);
   });

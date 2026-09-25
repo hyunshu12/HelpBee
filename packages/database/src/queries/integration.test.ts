@@ -18,9 +18,11 @@ const U1 = '00000000-0000-4000-8000-000000000001';
 const U2 = '00000000-0000-4000-8000-000000000002';
 const HIVE = '00000000-0000-4000-8000-0000000000a1';
 const IMG = '00000000-0000-4000-8000-0000000000b1';
+const IMG2 = '00000000-0000-4000-8000-0000000000b2';
 
 let yoloModelId: string;
 let openaiModelId: string;
+let twoStageModelId: string;
 
 async function clean() {
   await db.delete(schema.recommendations);
@@ -44,6 +46,7 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
     await db.insert(schema.aiModels).values([
       { provider: 'openai', name: 'gpt-4o-mini', version: '2024-07-18' },
       { provider: 'yolo', name: 'helpbee-yolov11s', version: '0.1.0' },
+      { provider: 'yolo', name: 'helpbee-two-stage', version: '0.2.0' },
     ]);
     await db.insert(schema.analysisImages).values({
       id: IMG,
@@ -52,8 +55,16 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
       storageUrl: 'images/u1/2026/06/x.jpg',
       mimeType: 'image/jpeg',
     });
+    await db.insert(schema.analysisImages).values({
+      id: IMG2,
+      hiveId: HIVE,
+      uploadedBy: U1,
+      storageUrl: 'images/u1/2026/06/y.jpg',
+      mimeType: 'image/jpeg',
+    });
     yoloModelId = (await queries.models.resolveActiveModel(db, 'yolo'))!.id;
     openaiModelId = (await queries.models.resolveActiveModel(db, 'openai'))!.id;
+    twoStageModelId = (await queries.models.resolveActiveModel(db, 'yolo', 'two-stage'))!.id;
   });
 
   afterAll(async () => {
@@ -63,6 +74,16 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
   it('resolveActiveModel: provider별 활성 모델', () => {
     expect(yoloModelId).toBeTruthy();
     expect(openaiModelId).toBeTruthy();
+  });
+
+  it('resolveActiveModel: 같은 yolo provider에서 v1 ↔ two-stage 행을 pipeline으로 구분', async () => {
+    expect(twoStageModelId).toBeTruthy();
+    expect(twoStageModelId).not.toBe(yoloModelId);
+    const v1 = await queries.models.resolveActiveModel(db, 'yolo', 'v1');
+    const ts = await queries.models.resolveActiveModel(db, 'yolo', 'two-stage');
+    expect(v1!.name).toBe('helpbee-yolov11s');
+    expect(ts!.name).toBe('helpbee-two-stage');
+    expect(ts!.version).toBe('0.2.0');
   });
 
   it('getAnalysisImageByIdForUser: 소유권 강제(IDOR)', async () => {
@@ -143,5 +164,39 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
     const to = new Date(Date.now() + 86_400_000);
     expect((await queries.hives.getHiveTrend(db, HIVE, U1, from, to)).length).toBeGreaterThan(0);
     expect(await queries.hives.getHiveTrend(db, HIVE, U2, from, to)).toHaveLength(0);
+  });
+
+  it('two-stage 컬럼 저장 + getHiveTrend 시리즈 분리(avgRisk=구 row만, avgVdi=two-stage만)', async () => {
+    // 이중 출력 기간: two-stage row에도 risk_score(점수 단위 70)가 채워지지만 avgRisk에 섞이면 안 된다.
+    await queries.analyses.createSingleAnalysis(db, {
+      hiveId: HIVE,
+      imageId: IMG2,
+      modelId: twoStageModelId,
+      analysis: {
+        status: 'success',
+        varroaInfectionRisk: 70,
+        overallHealth: 'critical',
+        vdi: 10.04 as never,
+        vdiCiLow: 6.5 as never,
+        vdiCiHigh: 14.2 as never,
+        beeTotal: 250,
+        beeInfested: 26,
+        analyzedAt: new Date(),
+      },
+      recommendations: [],
+    });
+    const [row] = await db.select().from(schema.analyses).where(eq(schema.analyses.imageId, IMG2));
+    expect(Number(row!.vdi)).toBeCloseTo(10.04, 3);
+    expect(row!.beeTotal).toBe(250);
+    expect(row!.beeInfested).toBe(26);
+
+    const from = new Date(Date.now() - 86_400_000);
+    const to = new Date(Date.now() + 86_400_000);
+    const trend = await queries.hives.getHiveTrend(db, HIVE, U1, from, to);
+    expect(trend).toHaveLength(1);
+    // 구 row: yolo 35 + openai 40 → 37.5 (two-stage의 70 제외)
+    expect(trend[0]!.avgRisk).toBeCloseTo(37.5, 5);
+    expect(trend[0]!.avgVdi).toBeCloseTo(10.04, 3);
+    expect(trend[0]!.analysisCount).toBe(3);
   });
 });

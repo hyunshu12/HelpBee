@@ -85,7 +85,7 @@ packages/database/
 - 시간은 항상 timestamptz (UTC 저장, 클라이언트에서 KST 변환).
 
 ### 3.7 Dual-engine 패턴
-- `ai_models` 테이블에 (`openai`, `gpt-4o-mini`, `2024-07-18`) / (`yolo`, `helpbee-yolov8s`, `0.1.0`) 두 row.
+- `ai_models` 테이블에 (`openai`, `gpt-4o-mini`, `2024-07-18`) / (`yolo`, `helpbee-yolov11s`, `0.1.0`) / (`yolo`, `helpbee-two-stage`, `0.2.0`) row. 같은 yolo provider의 두 행은 `queries.models.resolveActiveModel(db, provider, pipeline)`의 pipeline(`v1`|`two-stage`)으로 구분.
 - `analyses.model_id` FK + **`UNIQUE(image_id, model_id)`** 제약 → 같은 이미지에 OpenAI 결과와 YOLO 결과를 각각 row 1개씩 저장.
 - nullable FK 없이 두 엔진 결과 공존 가능. 비교 쿼리는 self-join 또는 `GROUP BY image_id` 패턴.
 - `engine` 컬럼은 두지 않는다 (정규화 위반). `ai_models.provider`로 식별.
@@ -101,7 +101,7 @@ packages/database/
 | **hives** | 사용자별 벌통 (위치, 메모, 설치일). soft delete 대상. |
 | **analysis_images** | S3 storage_url 메타 (mime, 크기, checksum, 촬영 시각). |
 | **ai_models** | provider(openai|yolo) + name + version. UNIQUE(provider, name, version). |
-| **analyses** | 분석 결과 (risk 0-100, tier, jsonb raw, latency). UNIQUE(image_id, model_id). |
+| **analyses** | 분석 결과 (risk 0-100, tier, jsonb raw, latency). UNIQUE(image_id, model_id). two-stage(v0.2.0~) 행은 nullable `vdi`/`vdi_ci_low`/`vdi_ci_high` numeric(6,3) + `bee_total`/`bee_infested` int (0003, 스펙 §8-1). 트렌드는 vdi / risk 시리즈 분리. |
 | **recommendations** | analysis_id에 종속된 권장 조치 (i18n/검색을 위해 분리 테이블). |
 | **subscriptions** | user_id UNIQUE, plan(free|basic|pro), trial_ends_at. |
 | **audit_log** | bigserial PK. actor_id/action/entity/entity_id/jsonb metadata. (entity, entity_id) 인덱스. |

@@ -31,6 +31,8 @@ const envSchema = z
     AUTH_LOCKOUT_WINDOW_SEC: z.coerce.number().int().positive().default(900),
     AI_BASE_URL: z.string().min(1),
     AI_INTERNAL_HMAC_SECRET: z.string().min(32),
+    // two-stage 추론 경로 타임아웃(ms). 체인: 모바일 ≥95s ≥ 이 값(90s) ≥ AI 내부 예산 (스펙 §8).
+    AI_TIMEOUT_MS_TWO_STAGE: z.coerce.number().int().positive().default(90_000),
     WEBHOOK_HMAC_SECRET: z.string().min(32).optional(), // 결제 webhook 서명(§11.4). 미설정 시 WEBHOOK_DISABLED.
     SUBSCRIPTION_WEBHOOK_ENABLED: z.coerce.boolean().default(false), // MVP inert 기본
     SENTRY_DSN: z.string().optional(),

@@ -282,6 +282,182 @@ describe('POST /v1/analyses', () => {
     expect(retryAnalysis).not.toHaveBeenCalled();
   });
 
+  // ── two-stage 계약 관용화 (스펙 §3·§8-1) ──
+  it('stores success when risk_score is missing but engine_used is set (new contract)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const resolveModelId = vi.fn(async (_p: 'yolo' | 'openai', pipeline?: 'two-stage' | 'v1') =>
+      pipeline === 'two-stage' ? 'model-two-stage' : 'model-yolo',
+    );
+    const deps = baseDeps({
+      storeAnalysis,
+      resolveModelId,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'elevated',
+        vdi: 4.2,
+        vdi_display: '4.2',
+        bee_total: 310,
+        bee_infested: 14,
+        sampling_ci95: [2.4, 6.9],
+        recommendations: ['가루설탕법으로 확인하세요'],
+        model_version: 'two-stage-v0.2.0',
+        model_versions: { stage1: 's1-0.2.0', stage2: 's2-0.2.0', vdi_config: 'vdi-0.2.0' },
+        risk_score: null,
+      }),
+    });
+    const res = await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    expect(res.status).toBe(201);
+    const input = storeAnalysis.mock.calls[0][0];
+    const stored = input.analysis;
+    expect(stored.status).toBe('success');
+    expect(stored.overallHealth).toBe('warning');
+    expect(stored.varroaInfectionRisk).toBeNull();
+    expect(stored.vdi).toBe(4.2);
+    expect(stored.vdiCiLow).toBe(2.4);
+    expect(stored.vdiCiHigh).toBe(6.9);
+    expect(stored.beeTotal).toBe(310);
+    expect(stored.beeInfested).toBe(14);
+    expect(input.recommendations[0].severity).toBe('warn');
+    // model_versions 존재 → two-stage 모델 row
+    expect(resolveModelId).toHaveBeenCalledWith('yolo', 'two-stage');
+    expect(input.modelId).toBe('model-two-stage');
+  });
+
+  it('stores insufficient tier with zero bees without error', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const refundQuota = vi.fn(async () => {});
+    const deps = baseDeps({
+      storeAnalysis,
+      refundQuota,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'insufficient',
+        vdi: null,
+        vdi_display: null,
+        bee_total: 0,
+        bee_infested: 0,
+        recommendations: ['벌이 보이도록 다시 촬영해 주세요'],
+        model_version: 'two-stage-v0.2.0',
+        risk_score: null,
+      }),
+    });
+    const res = await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    expect(res.status).toBe(201);
+    const input = storeAnalysis.mock.calls[0][0];
+    expect(input.analysis.status).toBe('success');
+    expect(input.analysis.overallHealth).toBeNull();
+    expect(input.analysis.vdi).toBeNull();
+    expect(input.analysis.beeTotal).toBe(0);
+    expect(input.recommendations[0].severity).toBe('info');
+    expect(refundQuota).not.toHaveBeenCalled(); // insufficient는 실패가 아님
+  });
+
+  it.each([
+    ['low', 'healthy', 'info'],
+    ['elevated', 'warning', 'warn'],
+    ['high', 'critical', 'danger'],
+    ['insufficient', null, 'info'],
+    ['safe', 'healthy', 'info'],
+    ['watch', 'warning', 'warn'],
+    ['danger', 'critical', 'danger'],
+  ])('tier %s → overall_health %s, severity %s', async (tier, health, severity) => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const deps = baseDeps({
+      storeAnalysis,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: tier as never,
+        risk_score: 40,
+        recommendations: ['x'],
+        model_version: 'm',
+      }),
+    });
+    await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    const input = storeAnalysis.mock.calls[0][0];
+    expect(input.analysis.overallHealth).toBe(health);
+    expect(input.recommendations[0].severity).toBe(severity);
+  });
+
+  it('dual output: stores AI risk_score as-is (score units, no re-rounding of vdi)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const deps = baseDeps({
+      storeAnalysis,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'high',
+        tier_legacy: 'danger',
+        risk_score: 70,
+        vdi: 10.04,
+        vdi_display: '10.0',
+        bee_total: 250,
+        bee_infested: 26,
+        recommendations: [],
+        model_version: 'two-stage-v0.2.0',
+        model_versions: { stage1: 'a', stage2: 'b', vdi_config: 'c' },
+      }),
+    });
+    await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    const stored = storeAnalysis.mock.calls[0][0].analysis;
+    expect(stored.varroaInfectionRisk).toBe(70);
+    expect(stored.vdi).toBe(10.04);
+    expect(stored.overallHealth).toBe('critical');
+  });
+
+  it('unknown tier from AI → overall_health null, severity info (no crash)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const deps = baseDeps({
+      storeAnalysis,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'mystery' as never,
+        risk_score: 10,
+        recommendations: ['x'],
+        model_version: 'm',
+      }),
+    });
+    const res = await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    expect(res.status).toBe(201);
+    const input = storeAnalysis.mock.calls[0][0];
+    expect(input.analysis.overallHealth).toBeNull();
+    expect(input.recommendations[0].severity).toBe('info');
+  });
+
+  it('still accepts the legacy contract (risk_score + safe/watch/danger) → v1 model row', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const resolveModelId = vi.fn(async () => 'model-yolo');
+    const deps = baseDeps({
+      storeAnalysis,
+      resolveModelId,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'watch',
+        risk_score: 55,
+        recommendations: [],
+        model_version: 'v0.1.0',
+      }),
+    });
+    const res = await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    expect(res.status).toBe(201);
+    const stored = storeAnalysis.mock.calls[0][0].analysis;
+    expect(stored.overallHealth).toBe('warning');
+    expect(stored.varroaInfectionRisk).toBe(55);
+    expect(stored.vdi).toBeNull();
+    expect(stored.beeTotal).toBeNull();
+    expect(resolveModelId).toHaveBeenCalledWith('yolo', 'v1');
+  });
+
+  it('serializes numeric (string) vdi columns from DB rows as numbers in the response', async () => {
+    const res = await makeApp(
+      baseDeps({
+        getByIdForUser: async () => ({ id: 'an1', vdi: '4.200', vdiCiLow: '2.400', vdiCiHigh: null }),
+      }),
+    ).request('/v1/analyses/an1');
+    const body = await res.json();
+    expect(body.data.vdi).toBe(4.2);
+    expect(body.data.vdiCiLow).toBe(2.4);
+    expect(body.data.vdiCiHigh).toBeNull();
+  });
+
   it('rejects unknown body keys (.strict, mass assignment)', async () => {
     const res = await post(makeApp(baseDeps()), {
       hiveId: HIVE,

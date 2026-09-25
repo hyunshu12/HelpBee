@@ -235,7 +235,8 @@ AI 추론은 별도 서비스(`services/ai`, FastAPI/Triton 등)에 위임. back
 ```
 
 **클라이언트 설정**:
-- `timeout: 30_000` (30초)
+- `timeout: 30_000` (30초) 기본 — **two-stage 경로(yolo·auto)는 `AI_TIMEOUT_MS_TWO_STAGE`(기본 90000)** 로 오버라이드(`engineTimeoutsMs`). 체인: 모바일 ≥95s ≥ 90s ≥ AI 내부 예산 (two-stage 스펙 §8)
+- **실패 판정은 `!result || engine_used === null` 뿐** — two-stage 계약은 `risk_score` null 가능. tier 매핑: safe/low→healthy·info, watch/elevated→warning·warn, danger/high→critical·danger, insufficient→null·info. `model_versions` 있으면 `ai_models('yolo','helpbee-two-stage')` 행 사용
 - **재시도 2회** — 지수 백오프(500ms → 1500ms), 5xx/네트워크 에러만. 4xx는 재시도 안 함.
 - **engine=auto fallback** — 기본 엔진 실패 시 fallback 엔진으로 자동 재시도. 양쪽 다 실패해야 503.
 - **dual-result 모드** — `?engine=dual` 파라미터 시 두 엔진 응답을 병렬 호출하고 둘 다 반환. 응답 스키마: `{ primary, secondary, agreement }`.
