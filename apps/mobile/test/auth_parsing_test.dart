@@ -61,7 +61,12 @@ void main() {
 
     test('defaults expiresIn to 900 when absent', () {
       final s = AuthSession.fromAuthData({
-        'user': {'id': 'u', 'email': 'e@e.com', 'name': 'n', 'createdAt': '2026-01-01T00:00:00Z'},
+        'user': {
+          'id': 'u',
+          'email': 'e@e.com',
+          'name': 'n',
+          'createdAt': '2026-01-01T00:00:00Z',
+        },
         'accessToken': 'a',
         'refreshToken': 'r',
       });
@@ -71,7 +76,12 @@ void main() {
 
   test('MeResult.fromJson parses nested user + subscription', () {
     final me = MeResult.fromJson({
-      'user': {'id': 'u', 'email': 'e@e.com', 'name': 'n', 'createdAt': '2026-01-01T00:00:00Z'},
+      'user': {
+        'id': 'u',
+        'email': 'e@e.com',
+        'name': 'n',
+        'createdAt': '2026-01-01T00:00:00Z',
+      },
       'subscription': {'plan': 'free', 'status': 'active'},
     });
     expect(me.user.id, 'u');
@@ -81,9 +91,15 @@ void main() {
 
   group('errorCodeFromWire', () {
     test('maps known backend codes', () {
-      expect(errorCodeFromWire('AUTH_INVALID_CREDENTIALS'), ErrorCode.authInvalidCredentials);
+      expect(
+        errorCodeFromWire('AUTH_INVALID_CREDENTIALS'),
+        ErrorCode.authInvalidCredentials,
+      );
       expect(errorCodeFromWire('QUOTA_EXCEEDED'), ErrorCode.quotaExceeded);
-      expect(errorCodeFromWire('AUTH_EMAIL_NOT_VERIFIED'), ErrorCode.authEmailNotVerified);
+      expect(
+        errorCodeFromWire('AUTH_EMAIL_NOT_VERIFIED'),
+        ErrorCode.authEmailNotVerified,
+      );
     });
 
     test('falls back to unknown for null / unrecognized', () {

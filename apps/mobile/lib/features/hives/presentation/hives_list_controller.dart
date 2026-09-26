@@ -116,5 +116,5 @@ class HivesListController extends AsyncNotifier<List<Hive>> {
 /// App-wide hive list controller.
 final hivesListControllerProvider =
     AsyncNotifierProvider<HivesListController, List<Hive>>(
-  HivesListController.new,
-);
+      HivesListController.new,
+    );

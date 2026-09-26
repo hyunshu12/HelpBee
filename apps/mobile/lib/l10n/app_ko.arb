@@ -112,6 +112,8 @@
     }
   },
   "scoreWithTier": "{score}점 ({tier})",
+  "vdiWithTier": "{vdi}% ({tier})",
+  "@vdiWithTier": { "placeholders": { "vdi": { "type": "String" }, "tier": { "type": "String" } } },
   "@scoreWithTier": {
     "description": "History row value, e.g. 84점 (위험).",
     "placeholders": {

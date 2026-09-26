@@ -61,13 +61,15 @@ class AuthRepositoryImpl implements AuthRepository {
         // token is already expired, this 401s and is swallowed — we must NOT let
         // the interceptor rotate/re-persist a fresh token right before we clear.
         final access = _tokens.accessToken;
-        await _ref.read(bareDioProvider).post<dynamic>(
-          '${AppConfig.apiPrefix}/auth/logout',
-          data: {'refreshToken': refresh},
-          options: access != null
-              ? Options(headers: {'Authorization': 'Bearer $access'})
-              : null,
-        );
+        await _ref
+            .read(bareDioProvider)
+            .post<dynamic>(
+              '${AppConfig.apiPrefix}/auth/logout',
+              data: {'refreshToken': refresh},
+              options: access != null
+                  ? Options(headers: {'Authorization': 'Bearer $access'})
+                  : null,
+            );
       } catch (_) {
         // Server revoke is best-effort; always clear locally regardless.
       }
@@ -119,5 +121,6 @@ class AuthRepositoryImpl implements AuthRepository {
 }
 
 /// App-wide [AuthRepository] singleton.
-final authRepositoryProvider =
-    Provider<AuthRepository>((ref) => AuthRepositoryImpl(ref));
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => AuthRepositoryImpl(ref),
+);

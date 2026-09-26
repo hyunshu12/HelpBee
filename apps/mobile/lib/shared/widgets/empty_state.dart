@@ -55,7 +55,10 @@ class EmptyState extends StatelessWidget {
               AppSpacing.gapXl,
               SizedBox(
                 width: 220,
-                child: SecondaryButton(label: actionLabel!, onPressed: onAction),
+                child: SecondaryButton(
+                  label: actionLabel!,
+                  onPressed: onAction,
+                ),
               ),
             ],
           ],

@@ -152,7 +152,11 @@ class _Body extends ConsumerWidget {
         AppSpacing.xxl,
       ),
       children: [
-        _RiskSummaryCard(tier: tier, score: latest?.varroaInfectionRisk),
+        _RiskSummaryCard(
+          tier: tier,
+          score: latest?.varroaInfectionRisk,
+          vdiDisplay: latest?.vdiDisplay,
+        ),
         AppSpacing.gapMd,
         _LocationCard(address: hive.address),
         AppSpacing.gapMd,
@@ -208,10 +212,15 @@ class _Body extends ConsumerWidget {
 }
 
 class _RiskSummaryCard extends StatelessWidget {
-  const _RiskSummaryCard({required this.tier, required this.score});
+  const _RiskSummaryCard({
+    required this.tier,
+    required this.score,
+    this.vdiDisplay,
+  });
 
   final RiskTier tier;
   final int? score;
+  final String? vdiDisplay; // two-stage: 서버 표시 문자열 우선
 
   @override
   Widget build(BuildContext context) {
@@ -235,13 +244,21 @@ class _RiskSummaryCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (score != null)
+              if (tier == RiskTier.insufficient)
+                Text(
+                  l10n.tierInsufficient,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                )
+              else if (vdiDisplay != null || score != null)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '$score',
+                      vdiDisplay ?? '$score',
                       style: theme.textTheme.displaySmall?.copyWith(
                         color: color,
                         fontWeight: FontWeight.w800,
@@ -249,7 +266,7 @@ class _RiskSummaryCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 2),
                     Text(
-                      l10n.scoreSuffix,
+                      vdiDisplay != null ? '%' : l10n.scoreSuffix,
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -437,6 +454,13 @@ class _TimelineRow extends StatelessWidget {
     final String valueText;
     if (analysis.isFailed) {
       valueText = l10n.errAiUnavailable;
+    } else if (tier == RiskTier.insufficient) {
+      valueText = _tierShort(l10n, tier);
+    } else if (analysis.vdiDisplay != null) {
+      valueText = l10n.vdiWithTier(
+        analysis.vdiDisplay!,
+        _tierShort(l10n, tier),
+      );
     } else if (analysis.varroaInfectionRisk != null) {
       valueText = l10n.scoreWithTier(
         analysis.varroaInfectionRisk!,

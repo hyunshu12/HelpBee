@@ -159,8 +159,12 @@ class _HiveFormScreenState extends ConsumerState<HiveFormScreen> {
               child: Form(
                 key: _formKey,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.screenH,
-                      AppSpacing.md, AppSpacing.screenH, AppSpacing.lg),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenH,
+                    AppSpacing.md,
+                    AppSpacing.screenH,
+                    AppSpacing.lg,
+                  ),
                   children: [
                     const _HeroBanner(),
                     AppSpacing.gapLg,
@@ -214,8 +218,12 @@ class _HiveFormScreenState extends ConsumerState<HiveFormScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.screenH,
-                  AppSpacing.xs, AppSpacing.screenH, AppSpacing.md),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenH,
+                AppSpacing.xs,
+                AppSpacing.screenH,
+                AppSpacing.md,
+              ),
               child: PrimaryButton(
                 label: _isEdit ? l10n.commonSave : l10n.createHive,
                 loading: _submitting,
@@ -252,7 +260,11 @@ class _HeroBanner extends StatelessWidget {
           ),
         ),
         child: const Center(
-          child: Icon(Icons.hive_outlined, size: 56, color: AppColors.amberDeep),
+          child: Icon(
+            Icons.hive_outlined,
+            size: 56,
+            color: AppColors.amberDeep,
+          ),
         ),
       ),
     );
@@ -268,9 +280,9 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
-        );
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w700,
+    );
     return Padding(
       padding: const EdgeInsets.only(left: 2),
       child: Text.rich(
@@ -344,8 +356,10 @@ class _DateField extends StatelessWidget {
         child: InputDecorator(
           decoration: InputDecoration(
             errorText: errorText,
-            suffixIcon: const Icon(Icons.calendar_month_outlined,
-                color: AppColors.hintBorder),
+            suffixIcon: const Icon(
+              Icons.calendar_month_outlined,
+              color: AppColors.hintBorder,
+            ),
             constraints: const BoxConstraints(minHeight: 56),
           ),
           child: Text(

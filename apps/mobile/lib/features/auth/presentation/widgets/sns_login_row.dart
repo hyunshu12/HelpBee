@@ -68,11 +68,7 @@ class _SnsButton extends StatelessWidget {
             child: SizedBox(
               width: AppSpacing.touchTarget,
               height: AppSpacing.touchTarget,
-              child: Icon(
-                provider.icon,
-                color: AppColors.hintBorder,
-                size: 26,
-              ),
+              child: Icon(provider.icon, color: AppColors.hintBorder, size: 26),
             ),
           ),
         ),

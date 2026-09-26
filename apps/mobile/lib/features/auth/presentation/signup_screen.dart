@@ -56,7 +56,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(authControllerProvider.notifier).signup(
+      await ref
+          .read(authControllerProvider.notifier)
+          .signup(
             email: _emailController.text.trim(),
             name: _nameController.text.trim(),
             password: _passwordController.text,

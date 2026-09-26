@@ -640,6 +640,12 @@ abstract class AppLocalizations {
   /// **'{score}점 ({tier})'**
   String scoreWithTier(int score, String tier);
 
+  /// No description provided for @vdiWithTier.
+  ///
+  /// In ko, this message translates to:
+  /// **'{vdi}% ({tier})'**
+  String vdiWithTier(String vdi, String tier);
+
   /// No description provided for @hiveLocationLabel.
   ///
   /// In ko, this message translates to:

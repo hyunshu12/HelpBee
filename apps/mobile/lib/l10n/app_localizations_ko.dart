@@ -290,6 +290,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String vdiWithTier(String vdi, String tier) {
+    return '$vdi% ($tier)';
+  }
+
+  @override
   String get hiveLocationLabel => '위치(위도, 경도)';
 
   @override

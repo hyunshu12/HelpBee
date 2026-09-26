@@ -20,18 +20,19 @@ abstract final class AppTheme {
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
 
-    final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.honeyPrimary,
-      brightness: brightness,
-    ).copyWith(
-      primary: AppColors.honeyPrimary,
-      secondary: AppColors.amberDeep,
-      surface: isDark ? AppColors.splashBg : AppColors.surface,
-      error: AppColors.error,
-      onPrimary: AppColors.textPrimary,
-      onSurface: isDark ? AppColors.bgLight : AppColors.textPrimary,
-      outline: AppColors.hintBorder,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: AppColors.honeyPrimary,
+          brightness: brightness,
+        ).copyWith(
+          primary: AppColors.honeyPrimary,
+          secondary: AppColors.amberDeep,
+          surface: isDark ? AppColors.splashBg : AppColors.surface,
+          error: AppColors.error,
+          onPrimary: AppColors.textPrimary,
+          onSurface: isDark ? AppColors.bgLight : AppColors.textPrimary,
+          outline: AppColors.hintBorder,
+        );
 
     final scaffoldBg = isDark ? AppColors.splashBg : AppColors.bgLight;
 
@@ -60,9 +61,7 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: _inputDecorationTheme(),
       checkboxTheme: CheckboxThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         side: const BorderSide(color: AppColors.hintBorder, width: 1.5),
         fillColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
@@ -88,7 +87,9 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.textPrimary,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: AppColors.bgLight),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: AppColors.bgLight,
+        ),
         shape: const RoundedRectangleBorder(
           borderRadius: AppRadius.inputRadius,
         ),
@@ -109,7 +110,10 @@ abstract final class AppTheme {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       hintStyle: const TextStyle(color: AppColors.hintBorder, fontSize: 16),
       labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
-      floatingLabelStyle: const TextStyle(color: AppColors.amberDeep, fontSize: 14),
+      floatingLabelStyle: const TextStyle(
+        color: AppColors.amberDeep,
+        fontSize: 14,
+      ),
       errorStyle: const TextStyle(color: AppColors.error, fontSize: 13),
       border: border,
       enabledBorder: border,

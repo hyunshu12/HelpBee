@@ -108,7 +108,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.capture,
         builder: (context, state) {
           final a = state.extra;
-          return a is CaptureArgs ? CaptureScreen(args: a) : const _FlowMissing();
+          return a is CaptureArgs
+              ? CaptureScreen(args: a)
+              : const _FlowMissing();
         },
       ),
       GoRoute(
@@ -124,7 +126,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.analyzing,
         builder: (context, state) {
           final a = state.extra;
-          return a is PhotoArgs ? AnalyzingScreen(args: a) : const _FlowMissing();
+          return a is PhotoArgs
+              ? AnalyzingScreen(args: a)
+              : const _FlowMissing();
         },
       ),
       GoRoute(

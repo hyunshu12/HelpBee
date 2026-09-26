@@ -39,8 +39,8 @@ class HiveSummaryCard extends ConsumerWidget {
     final String statusText = analysis != null
         ? _fmtDate(analysis.analyzedAt ?? analysis.createdAt)
         : latest.isLoading
-            ? '…'
-            : (latest.hasError ? l10n.cardLoadFailed : l10n.noAnalysisYet);
+        ? '…'
+        : (latest.hasError ? l10n.cardLoadFailed : l10n.noAnalysisYet);
 
     return Material(
       color: AppColors.surface,
@@ -79,8 +79,11 @@ class HiveSummaryCard extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.xxs),
                 Row(
                   children: [
-                    const Icon(Icons.location_on,
-                        size: 16, color: AppColors.hintBorder),
+                    const Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: AppColors.hintBorder,
+                    ),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
