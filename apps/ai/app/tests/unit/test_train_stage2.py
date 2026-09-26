@@ -752,7 +752,7 @@ def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatc
     _no_pretrained(monkeypatch, ts)
     snaps, bn_loaders = [], []
     orig_update = swa_utils.AveragedModel.update_parameters
-    orig_bn = swa_utils.update_bn
+    orig_bn = ts.recompute_bn
 
     def spy_update(self, model):
         snaps.append({k: v.detach().clone() for k, v in model.state_dict().items()})
@@ -763,7 +763,7 @@ def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatc
         return orig_bn(loader, model, device)
 
     monkeypatch.setattr(swa_utils.AveragedModel, "update_parameters", spy_update)
-    monkeypatch.setattr(swa_utils, "update_bn", spy_bn)
+    monkeypatch.setattr(ts, "recompute_bn", spy_bn)
     crops = _mini_crops(tmp_path)
     cfg = {**_smoke_cfg(tmp_path, crops, "swa", False), "epochs": 3, "patience": 0, "swa_epochs": 2}
     rep = ts.train(cfg)
@@ -809,3 +809,46 @@ def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatc
         zt, _ = m(x)
     zo, _ = s.run(None, {"image": x.numpy()})
     assert np.allclose(zt.numpy(), zo, atol=1e-4)
+
+
+def _fixed_batches(torch, seed=0, n=2, size=64):
+    g = torch.Generator().manual_seed(seed)
+    return [(torch.randn(4, 3, size, size, generator=g), torch.zeros(4)) for _ in range(n)]
+
+
+def test_recompute_bn_disables_stochastic_depth_efficientnet():
+    """EfficientNet-B0: BN 만 train 모드 → StochasticDepth 꺼짐 → 같은 입력 두 번 재계산 결과가 비트 동일.
+    끝나면 모델 전체 eval, momentum 복원."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    import training.train_stage2 as ts
+    from torch.nn.modules.batchnorm import _BatchNorm
+
+    m = ts.build_model(pretrained=False, backbone="efficientnet_b0")
+    sd = [x for x in m.modules() if type(x).__name__ == "StochasticDepth"]
+    assert sd and any(x.p > 0 for x in sd)  # 전제: 확률적 깊이가 실제로 있다
+    batches = _fixed_batches(torch)
+    runs = []
+    for seed in (1, 2):  # 전역 RNG 를 바꿔도 같아야 한다 (확률적 연산이 꺼져 있으므로)
+        torch.manual_seed(seed)
+        ts.recompute_bn(batches, m)
+        runs.append({k: v.clone() for k, v in m.state_dict().items() if "running_" in k})
+    assert runs[0].keys() and all(torch.equal(runs[0][k], runs[1][k]) for k in runs[0])
+    assert not m.training and not any(x.training for x in m.modules())
+    bns = [x for x in m.modules() if isinstance(x, _BatchNorm)]
+    assert all(x.momentum == 0.1 for x in bns) and all(int(x.num_batches_tracked) == 2 for x in bns)
+
+
+def test_recompute_bn_resnet18_updates_running_stats():
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    import training.train_stage2 as ts
+
+    m = ts.build_model(pretrained=False, backbone="resnet18")
+    init = {k: v.clone() for k, v in m.state_dict().items() if "running_" in k}
+    assert torch.equal(init["features.1.running_mean"], torch.zeros_like(init["features.1.running_mean"]))
+    ts.recompute_bn(_fixed_batches(torch), m)
+    after = m.state_dict()
+    assert not torch.equal(after["features.1.running_mean"], init["features.1.running_mean"])
+    assert not torch.equal(after["features.1.running_var"], init["features.1.running_var"])
+    assert int(after["features.1.num_batches_tracked"]) == 2 and not m.training

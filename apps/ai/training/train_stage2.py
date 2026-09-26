@@ -18,7 +18,7 @@ ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이 epochs 전부(cosine 이 0 으로 수렴) → 마지막 epoch.
 `swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → 비증강·비샘플 train 부분집합
-(≤ SWA_BN_MAX_ROWS)으로 BN 통계 재계산(update_bn, fp32) → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
+(≤ SWA_BN_MAX_ROWS)으로 BN 통계 재계산(recompute_bn: BN 만 train 모드, fp32) → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
 (cal-A 는 사실상 colony 하나라 epoch 별 AUROC 가 0.77↔0.88 로 튀어 "최고 epoch" 은 운 좋은 고-LR iterate 를 고른다.)
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
@@ -636,6 +636,39 @@ def _grad_scaler():
     return torch.cuda.amp.GradScaler()
 
 
+def recompute_bn(loader, model, device=None):
+    """SWA 평균 모델의 BatchNorm running stats 재추정 (torch swa_utils.update_bn 대체).
+
+    update_bn 은 model.train() 전체를 켜서 EfficientNet 의 StochasticDepth·Dropout 이 블록을 떨군 채 통계를 모은다
+    → eval(서빙) 활성과 어긋난다. 여기서는 모든 _BatchNorm 의 running stats 를 리셋·momentum=None(누적 평균,
+    update_bn 과 동일)으로 두고 **BN 모듈만** train 모드, 나머지(StochasticDepth/Dropout 등)는 eval 모드로
+    no_grad·fp32(autocast 없음) forward. 입력 = batch[0]. 끝나면 momentum 복원, 모델은 eval 모드로 반환."""
+    import torch
+    from torch.nn.modules.batchnorm import _BatchNorm
+
+    bns = [m for m in model.modules() if isinstance(m, _BatchNorm)]
+    model.eval()
+    momenta = {}
+    for m in bns:
+        m.reset_running_stats()
+        momenta[m] = m.momentum
+        m.momentum = None
+        m.train()
+    try:
+        if bns:
+            with torch.no_grad():
+                for batch in loader:
+                    x = batch[0] if isinstance(batch, (list, tuple)) else batch
+                    if device is not None:
+                        x = x.to(device)
+                    model(x.float())
+    finally:
+        for m, mom in momenta.items():
+            m.momentum = mom
+        model.eval()
+    return model
+
+
 def _predict_logits(model, loader, device, amp: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """logit 은 항상 float32 로 모은다 (sigmoid/Platt/AUROC 는 fp32). amp=True 는 CUDA autocast 로 forward 만."""
     import torch
@@ -703,7 +736,7 @@ def train(cfg: dict) -> dict:
     val_loader = eval_dl(sp["val"])
     cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
     best_score, best_ep, history = -1.0, -1, []
-    swa = None  # swa_epochs>0: 마지막 k epoch 끝 가중치의 등가 평균 (파라미터만 — BN 통계는 학습 후 update_bn)
+    swa = None  # swa_epochs>0: 마지막 k epoch 끝 가중치의 등가 평균 (파라미터만 — BN 통계는 학습 후 recompute_bn)
     for ep in range(cfg["epochs"]):
         model.train()
         tot, n = 0.0, 0
@@ -749,10 +782,10 @@ def train(cfg: dict) -> dict:
 
     bn_rows = None
     if swa is not None:
-        # BN 재계산: 비증강·비샘플 train 부분집합, 셔플 없음, fp32(autocast 없음). update_bn 은 no_grad·train 모드.
+        # BN 재계산: 비증강·비샘플 train 부분집합, 셔플 없음, fp32(autocast 없음), BN 만 train 모드.
         bn_rows = swa_bn_rows(sp["train"])
         logger.info(f"SWA: epoch {swa_start}~{cfg['epochs'] - 1} 평균 → BN 재계산 ({len(bn_rows)} train 크롭, 비증강)")
-        swa_utils.update_bn(eval_dl(bn_rows), swa.module, device=device)
+        recompute_bn(eval_dl(bn_rows), swa.module, device=device)
         torch.save(swa.module.state_dict(), save_dir / "best.pt")
         best_ep = len(history) - 1
     elif select_metric == "last":
