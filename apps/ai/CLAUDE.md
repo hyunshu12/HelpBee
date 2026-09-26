@@ -285,24 +285,32 @@ HELPBEE_API_INTERNAL_URL=http://api:3000
 
 ### 10-2. 회귀 테스트 (`app/tests/regression/` + `app/tests/fixtures/`)
 
-**스냅샷 회귀 게이트** — 서빙 경로(`run_analysis(engine="yolo")` = preprocess→YOLO(ONNX)→risk)를
-그대로 돌려 현재 출력을 박제하고, 이후 변경이 이를 흔드는지 감시한다. eval/train 경로가 아니라
-**서빙 경로**를 쓴다(과거 preprocess/decode skew 재발 방지 — `docs/05-implementation/2026-06-16-yolo-inference-decode-and-preprocess-fixes.md`).
+**스냅샷 회귀 게이트 v2 (two-stage, 2026-09-26)** — 서빙 경로(`run_analysis(engine="yolo", two_stage=OnnxTwoStageEngine)`
+= decode→Stage-1→Stage-2→VDI)를 그대로 돌려 현재 출력을 박제하고, 이후 변경이 이를 흔드는지 감시한다.
+eval/train 경로가 아니라 **서빙 경로**를 쓴다(과거 preprocess/decode skew 재발 방지 — `docs/05-implementation/2026-06-16-yolo-inference-decode-and-preprocess-fixes.md`).
 
-- **매니페스트 방식 (라이선스)**: 71667 원본 이미지는 재배포 금지(내국인 제약)라 **이미지를 git에
-  절대 커밋하지 않는다.** 대신 `app/tests/fixtures/regression_manifest.json` 하나만 커밋:
-  `[{path, sha256, expected_risk_score, expected_tier, class_folder}]` + 메타(model_version/conf/iou/imgsz).
-  경로는 `training/datasets/Sample/...`(gitignored) 상대경로.
-- **생성**: `make regression-fixtures` (= `python -m training.data.make_regression_fixtures`).
-  클래스별 seed 고정 선택 24장(응애 8/정상 8/기타질병 8, 성충·유충 혼합). 재실행 byte-identical.
-- **skip 규칙**: 로컬에 ONNX 모델(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`) + Sample 데이터셋이
-  둘 다 있을 때만 실제로 돈다. 없으면(CI 등) 전 케이스 `pytest.skip`. sha256 불일치 시 그 케이스만 경고+skip.
+- **매니페스트 방식 (라이선스)**: 71667 원본/파생 이미지는 재배포 금지(내국인 제약)라 **이미지를 git에
+  절대 커밋하지 않는다.** 대신 `app/tests/fixtures/regression_manifest.json`(v2) 하나만 커밋:
+  `[{path, sha256, case, expected_vdi_display, expected_tier, expected_bee_total}]` + 메타
+  (`model_versions` stage1/stage2/vdi_config, `vdi_config_sha`·ONNX sha, `tau`, `quality` 임계, 허용 오차).
+  `path`는 **datasets 디렉터리 기준** 상대경로(`Sample/...`, `Sample_derived/...` — 둘 다 gitignored).
+- **datasets 탐색**: `$HELPBEE_DATASETS_DIR` → `apps/ai/training/datasets` → (git worktree면) 메인 체크아웃의 같은 경로.
+- **케이스 (7종, 24~30장, 각 ≥3)**: `boundary`(vdi_display가 3.0/10.0에 최근접) · `low_count`(벌 1~5) ·
+  `healthy`(성충_정상 + 감염 0) · `dense`(bee_total 상위) · `zero_bees`(합성 소비판/노이즈 → 벌 0) ·
+  `blur`(Sample GaussianBlur → quality.ok false) · `varroa_visible_no`(성충_응애 폴더인데 감염 0 = 숨은 응애).
+  EV2(`varroa_visible=false`)가 로컬에 없어 숨은 응애는 Sample 기반으로 대체. 선정 규칙 = `select_cases`
+  (단위 테스트 `app/tests/unit/test_regression_case_selection.py`).
+- **생성**: `make regression-fixtures` (= `python -m training.data.make_regression_fixtures`). Sample 330장 전수 스캔 +
+  `training/datasets/Sample_derived/`(합성 0마리 3·블러 3) 결정적 생성, seed 42. created_at 없음 → 재실행 byte-identical.
+- **skip 규칙**: two-stage 번들 캐시(`~/.cache/helpbee/two-stage/v0.2.0/`) + Sample 둘 다 있을 때만 실제로 돈다.
+  없으면(CI 등) 모듈 전체 skip. sha256 불일치 시 그 케이스만 경고+skip.
 - **회귀 게이트 트리거** (아래 변경 시 반드시 통과 — 의도된 변경이면 매니페스트 재생성):
-  - 프롬프트 변경 (`prompt_version` bump)
-  - OpenAI 모델 핀 변경
-  - YOLO 가중치 버전 변경
-  - 위험도 가중치(`risk.yaml`) 변경 / 전처리·디코드 변경
-- 허용 오차: `abs(expected - actual) <= 10` (tier 변경은 0 허용)
+  - two-stage 번들(stage1/stage2 ONNX, vdi.yaml τ·Platt·임계) 버전 변경
+  - crop/letterbox/NMS/타일링·품질 게이트·decode 변경
+  - 프롬프트/OpenAI 핀 변경(폴백 경로 — 게이트는 engine="yolo"라 직접 대상 아님)
+- 허용 오차: `|Δvdi_display| ≤ 1.0`, tier 변동 0, `bee_total` 상대 ±10%(기대 0이면 정확히 0).
+- **v1 퇴역**: v0.1.0 단일 스테이지 매니페스트는 `app/tests/fixtures/regression_manifest_v1.json`으로 보존만 한다
+  (v0.1.0은 `AI_ENGINE=yolo-v1` 롤백 경로 전용 — 게이트 대상 아님, 테스트 없음). 롤백을 실제로 쓰게 되면 v1 게이트를 되살릴 것.
 - ⚠️ golden holdout(`training/datasets/golden/`)이 로컬에 없어 fixture/golden 겹침을 정적 검증하지
   못한다. fixture 는 학습에 쓰이지 않으므로 누수 위험은 없으나, golden 확보 후 disjoint 확인 권장.
 

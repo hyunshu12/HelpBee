@@ -1,0 +1,324 @@
+{
+  "_comment": "회귀 게이트 매니페스트 v2 (two-stage 서빙 경로). 이미지는 라이선스(AI Hub 71667 재배포 금지)로 커밋하지 않는다 — datasets 디렉터리 기준 path/sha256/기대값만. 생성: python -m training.data.make_regression_fixtures",
+  "metadata": {
+    "manifest_version": 2,
+    "script_version": "2.0.0",
+    "bundle_version": "v0.2.0",
+    "model_versions": {
+      "stage1": "v0.2.0",
+      "stage2": "v0.2.0-stage2v3-E3",
+      "vdi_config": "v0.2.0"
+    },
+    "vdi_config_sha": "9786c151f04f4e85bdcd6e85af9058b8efecf17950f089b136f62d76d722c814",
+    "stage1_sha": "43899dc22283dd36936672835fd92459c9b30989cc46c9c18543b7d15791a0af",
+    "stage2_sha": "73cae63525717397149ab9599cafc6836c2fa1f6478e31f06a6798b20dc105fc",
+    "tau": 0.6390129125617522,
+    "thresholds": {
+      "elevated": 3.0,
+      "high": 10.0
+    },
+    "quality": {
+      "blur_laplacian_min": 100,
+      "exposure_mean": [
+        40,
+        215
+      ]
+    },
+    "tolerance": {
+      "vdi_abs": 1.0,
+      "tier_change": 0,
+      "bee_total_rel": 0.1
+    },
+    "selection_seed": 42,
+    "case_quota": {
+      "zero_bees": 3,
+      "blur": 3,
+      "boundary": 4,
+      "varroa_visible_no": 4,
+      "healthy": 4,
+      "low_count": 4,
+      "dense": 3
+    },
+    "dataset": "AI Hub 71667 Sample + Sample_derived(합성 0마리·블러)",
+    "serving_path": "run_analysis(engine='yolo', two_stage=OnnxTwoStageEngine) → Stage-1→Stage-2→VDI",
+    "scanned": 336,
+    "count": 25
+  },
+  "fixtures": [
+    {
+      "path": "Sample/01.원천데이터/성충/성충_날개불구바이러스감염증/009/B_001_001_20230824080631_001_002_001_002.jpg",
+      "sha256": "24dc551af639fc8fc891419d2939e96de180f1116edfdba5782feb1a79bfc3fd",
+      "case": "low_count",
+      "class_folder": "성충_날개불구바이러스감염증",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 4,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/007/B_001_001_20230822083841_001_002_001_001.jpg",
+      "sha256": "5c7ea4eb719d967a5e3290246446963e3ed2b9c1e9f0df93a6c1bd87a7395a06",
+      "case": "boundary",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "10.3",
+      "expected_tier": "high",
+      "expected_bee_total": 18,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/014/B_001_001_20230827085906_001_004_001_001.jpg",
+      "sha256": "7ec1eee4216c7078c6c26a0027b92df1d37f8be5fd5afa2eaafeb3b0468554f3",
+      "case": "low_count",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "48.2",
+      "expected_tier": "high",
+      "expected_bee_total": 4,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/016/B_001_001_20230827130309_001_003_001_001.jpg",
+      "sha256": "1117c9428fd13aaef9a0154e9a8b4161616d2fefd8a90c3c2c687a0bb78c714d",
+      "case": "boundary",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "9.3",
+      "expected_tier": "elevated",
+      "expected_bee_total": 20,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/025/B_001_003_20230821085014_001_002_001_001.jpg",
+      "sha256": "ca21d90630010d0ba3f2479162edfb504aeb08f2a7929928ae06c0a529329d67",
+      "case": "varroa_visible_no",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 16,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/026/B_001_003_20230821085018_001_002_001_001.jpg",
+      "sha256": "f27fcce4334c0d4c0e6b201ee1114be247090b9991e1b9786ef685c34bf3b2e8",
+      "case": "varroa_visible_no",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 16,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/031/B_001_003_20230822085019_001_003_001_001.jpg",
+      "sha256": "ceee071ec2bfe9a65c7f2cdc0587caa080d8a4a5eec30483b5ba66671822f90e",
+      "case": "varroa_visible_no",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 19,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/064/B_001_007_20230827092324_001_001_001_001.jpg",
+      "sha256": "9903cbd72c1ad98f031f1ffe06d950f870a7f60ec772cb41a622bbde70b3047a",
+      "case": "boundary",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "11.0",
+      "expected_tier": "high",
+      "expected_bee_total": 17,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/070/B_001_007_20230829091748_001_001_001_001.jpg",
+      "sha256": "13eaaa36ef19b0fc42785de7b3ac9d3a47467d4a698acb0862864906525476a3",
+      "case": "boundary",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "8.0",
+      "expected_tier": "elevated",
+      "expected_bee_total": 23,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_응애/072/B_001_008_20230821092227_001_003_001_001.jpg",
+      "sha256": "1f74646c3d10b52f132ddbb5e5071514ebc7e28ca336b3677c95e269cc428fd9",
+      "case": "varroa_visible_no",
+      "class_folder": "성충_응애",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 18,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_정상/003/B_001_001_20230819135623_001_004_001_000.jpg",
+      "sha256": "5769bf52b15beb20ac7ce48f136403d098f18ccf4fe97daa8fd0d7574f92a476",
+      "case": "healthy",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 5,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_정상/017/B_001_001_20230820105451_001_003_001_000.jpg",
+      "sha256": "f7fc7569a0c04cb63fce72a33de305f6b71287492f2e265bdc1f86821f585169",
+      "case": "healthy",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 10,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_정상/029/B_001_001_20230821082418_001_001_001_000.jpg",
+      "sha256": "50d4246f08a3ef9a70d51b253256fe195e92f333eadce4b0fd0f84012960b17a",
+      "case": "healthy",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 25,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_정상/054/B_001_001_20230822083827_001_001_001_000.jpg",
+      "sha256": "0b42c36a711b68e0c124125ddc20dc97cc0368a142b4a69db508faf6d61bf5bc",
+      "case": "healthy",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 31,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/성충/성충_정상/060/B_001_001_20230822083830_001_003_001_000.jpg",
+      "sha256": "0286fa36271eefe00485b0b7b89b8533ec5c70a3db0eee131e645aedc73a3922",
+      "case": "dense",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 30,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/유충/유충_석고병/011/B_001_001_20230819135121_001_001_000_002.jpg",
+      "sha256": "4b3b0f32526425a629179ebb710870ce4fd8d6e302939792ac10960a5a56456e",
+      "case": "low_count",
+      "class_folder": "유충_석고병",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 1,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/유충/유충_석고병/031/B_001_001_20230819135415_001_003_000_002.jpg",
+      "sha256": "7a512bdb512587065c96f24e90496b888321d3c383e72b5332cd9f953ed734c8",
+      "case": "low_count",
+      "class_folder": "유충_석고병",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 2,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/유충/유충_정상/005/B_001_001_20230821082418_001_004_000_000.jpg",
+      "sha256": "d39a9da3550fb716ee573b76e041e2a4ddc2c24714e317cbc50b5fa8df9d309c",
+      "case": "dense",
+      "class_folder": "유충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "low",
+      "expected_bee_total": 29,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample/01.원천데이터/유충/유충_정상/006/B_001_001_20230821082429_001_001_000_000.jpg",
+      "sha256": "3efb7da9ecb83ded4062572df5fda973d0d3885717197bb2c90a9cf35a5433c6",
+      "case": "dense",
+      "class_folder": "유충_정상",
+      "expected_vdi_display": "6.2",
+      "expected_tier": "elevated",
+      "expected_bee_total": 29,
+      "bee_infested": 1,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample_derived/blur_B_001_001_20230819135630_001_004_001_000.jpg",
+      "sha256": "3f3c7764b55ef22a272e334c4cb0fd70e09138d1c6749bee9de59a138a46ceae",
+      "case": "blur",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "insufficient",
+      "expected_bee_total": 1,
+      "bee_infested": 0,
+      "quality_ok": false
+    },
+    {
+      "path": "Sample_derived/blur_B_001_001_20230821083147_001_003_001_000.jpg",
+      "sha256": "19cb497564116dd59689cb836f88c182a55614915f4289bb7278cbaa43da4888",
+      "case": "blur",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": null,
+      "expected_tier": "insufficient",
+      "expected_bee_total": 0,
+      "bee_infested": 0,
+      "quality_ok": false
+    },
+    {
+      "path": "Sample_derived/blur_B_001_001_20230821083745_001_001_001_000.jpg",
+      "sha256": "374ae17599c703e1a37d4774fd55731ad5eaafdb783eae26da62dfb660425ddc",
+      "case": "blur",
+      "class_folder": "성충_정상",
+      "expected_vdi_display": "0.0",
+      "expected_tier": "insufficient",
+      "expected_bee_total": 1,
+      "bee_infested": 0,
+      "quality_ok": false
+    },
+    {
+      "path": "Sample_derived/zero_bees_0.jpg",
+      "sha256": "1a6f247723225e8eb78cf5cb5451a2033aa0218dfe2aeaddae65d7c64c0f1402",
+      "case": "zero_bees",
+      "class_folder": "synthetic",
+      "expected_vdi_display": null,
+      "expected_tier": "insufficient",
+      "expected_bee_total": 0,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample_derived/zero_bees_1.jpg",
+      "sha256": "9ffd8831e796e02683fa626b5f0839750ba314b66965ea279e86a88c810e92f8",
+      "case": "zero_bees",
+      "class_folder": "synthetic",
+      "expected_vdi_display": null,
+      "expected_tier": "insufficient",
+      "expected_bee_total": 0,
+      "bee_infested": 0,
+      "quality_ok": true
+    },
+    {
+      "path": "Sample_derived/zero_bees_2.jpg",
+      "sha256": "6f917c270d91f7e627a4bcf063b264e2622cb0c50388deb08e8b37ff488597a4",
+      "case": "zero_bees",
+      "class_folder": "synthetic",
+      "expected_vdi_display": null,
+      "expected_tier": "insufficient",
+      "expected_bee_total": 0,
+      "bee_infested": 0,
+      "quality_ok": true
+    }
+  ]
+}

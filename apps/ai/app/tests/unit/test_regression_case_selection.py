@@ -82,3 +82,13 @@ def test_boundary_needs_valid_vdi(df):
     df2 = df.copy()
     out = select_cases(df2)
     assert out[out["case"] == "boundary"]["vdi_display"].notna().all()
+
+
+def test_nfd_folder_names_match(df):
+    """macOS 파일시스템은 한글 경로를 NFD 로 돌려준다 — 폴더 규칙이 NFC 리터럴과 맞아야 한다."""
+    import unicodedata
+
+    nfd = df.copy()
+    nfd["class_folder"] = nfd["class_folder"].map(lambda s: unicodedata.normalize("NFD", s))
+    counts = select_cases(nfd)["case"].value_counts().to_dict()
+    assert counts.get("healthy", 0) >= 3 and counts.get("varroa_visible_no", 0) >= 3, counts

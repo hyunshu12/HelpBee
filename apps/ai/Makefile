@@ -36,16 +36,15 @@ dev:
 test:
 	pytest -q
 
-# 서빙 경로(preprocess→YOLO→risk) 스냅샷. 로컬에 ONNX 모델 + 71667 Sample 있을 때만
-# 실제 실행, 없으면 전 케이스 skip (이미지는 라이선스상 미커밋).
+# two-stage 서빙 경로(Stage-1→Stage-2→VDI) 스냅샷 v2. 로컬에 two-stage 번들 캐시 + 71667 Sample
+# 있을 때만 실제 실행, 없으면 모듈 전체 skip (이미지는 라이선스상 미커밋).
 test-regression:
 	pytest -q -m regression
 
-# 매니페스트 재생성 — 프롬프트/모델핀/risk.yaml 을 "의도적으로" 바꾼 뒤에만.
-# created_at 은 date CLI 로 스탬프(선택/기대값은 결정적이라 재실행 byte-identical).
+# 매니페스트 v2 재생성 — 번들/vdi.yaml/전처리를 "의도적으로" 바꾼 뒤에만.
+# Sample 330장 전수 스캔(수 분) + Sample_derived/(합성 0마리·블러) 생성. 재실행 byte-identical.
 regression-fixtures:
-	$(PY) -m training.data.make_regression_fixtures \
-		--created-at "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	$(PY) -m training.data.make_regression_fixtures
 
 lint:
 	ruff check . && mypy app training

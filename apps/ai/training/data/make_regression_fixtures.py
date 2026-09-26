@@ -39,6 +39,7 @@ import json
 import logging
 import os
 import subprocess
+import unicodedata
 from pathlib import Path
 
 import numpy as np
@@ -116,6 +117,11 @@ def bundle_dir(version: str = BUNDLE_VERSION) -> Path:
     return BUNDLE_CACHE / version
 
 
+def _nfc(s: str) -> str:
+    """macOS(APFS)는 한글 경로를 NFD 로 돌려준다 — 비교/기록은 NFC 로 통일 (APFS 는 조회 시 정규화 무관)."""
+    return unicodedata.normalize("NFC", s)
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -138,7 +144,9 @@ def select_cases(df, seed: int = SELECTION_SEED, quota: dict[str, int] | None = 
     import pandas as pd
 
     quota = quota or CASE_QUOTA
-    pool = df.sort_values("path", kind="mergesort").reset_index(drop=True)
+    pool = df.assign(
+        path=df["path"].map(_nfc), class_folder=df["class_folder"].map(_nfc)
+    ).sort_values("path", kind="mergesort").reset_index(drop=True)
     taken: set[str] = set()
     picked: list = []
 
@@ -190,7 +198,7 @@ def _encode_jpeg(arr: np.ndarray) -> bytes:
     from PIL import Image
 
     buf = io.BytesIO()
-    Image.fromarray(arr.astype(np.uint8), "RGB").save(buf, format="JPEG", quality=92, optimize=False)
+    Image.fromarray(np.ascontiguousarray(arr, dtype=np.uint8)).save(buf, format="JPEG", quality=92, optimize=False)
     return buf.getvalue()
 
 
@@ -271,10 +279,10 @@ def scan(datasets: Path, engine, seed: int = SELECTION_SEED):
     for n, (p, source) in enumerate(items, 1):
         data = p.read_bytes()
         res = analyze(engine, data)
-        folder = p.parent.parent.name if source == "sample" else "synthetic" if source == "zero_bees" else "성충_정상"
+        folder = _nfc(p.parent.parent.name) if source == "sample" else "synthetic" if source == "zero_bees" else "성충_정상"
         rows.append(
             {
-                "path": p.relative_to(datasets).as_posix(),
+                "path": _nfc(p.relative_to(datasets).as_posix()),
                 "sha256": _sha256(data),
                 "source": source,
                 "class_folder": folder,
@@ -294,12 +302,23 @@ def _file_sha(p: Path) -> str:
     return _sha256(p.read_bytes())
 
 
-def build_manifest(datasets: Path, seed: int = SELECTION_SEED) -> dict:
+def _none_if_na(v):
+    return None if v is None or (isinstance(v, float) and np.isnan(v)) else v
+
+
+def build_manifest(datasets: Path, seed: int = SELECTION_SEED, scan_cache: Path | None = None) -> dict:
+    """scan_cache: 지정 시 스캔 결과 CSV 를 재사용/저장 (선정 규칙 반복용 — 파생 이미지는 이미 있어야 함)."""
+    import pandas as pd
     import yaml
 
     os.environ.setdefault("OMP_NUM_THREADS", "1")
-    engine = load_engine()
-    df = scan(datasets, engine, seed)
+    if scan_cache is not None and scan_cache.exists():
+        df = pd.read_csv(scan_cache, dtype={"vdi_display": "string"}).astype({"vdi_display": object})
+        df["vdi_display"] = df["vdi_display"].map(lambda v: None if pd.isna(v) else str(v))
+    else:
+        df = scan(datasets, load_engine(), seed)
+        if scan_cache is not None:
+            df.to_csv(scan_cache, index=False)
     sel = select_cases(df, seed)
     bdir = bundle_dir()
     vdi = yaml.safe_load((bdir / "vdi.yaml").read_text(encoding="utf-8"))
@@ -309,7 +328,7 @@ def build_manifest(datasets: Path, seed: int = SELECTION_SEED) -> dict:
             "sha256": r.sha256,
             "case": r.case,
             "class_folder": r.class_folder,
-            "expected_vdi_display": r.vdi_display,
+            "expected_vdi_display": _none_if_na(r.vdi_display),
             "expected_tier": r.tier,
             "expected_bee_total": int(r.bee_total),
             # 디버그 보조 (게이트 판정엔 미사용)
@@ -353,6 +372,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=SELECTION_SEED)
     p.add_argument("--out", type=Path, default=MANIFEST_PATH)
     p.add_argument("--datasets-dir", type=Path, default=None, help="Sample/ 을 가진 datasets 디렉터리")
+    p.add_argument("--scan-cache", type=Path, default=None, help="스캔 결과 CSV 재사용/저장 (개발용)")
     args = p.parse_args()
 
     datasets = args.datasets_dir or find_datasets_dir()
@@ -360,7 +380,7 @@ def main() -> None:
         raise SystemExit("71667 Sample 을 찾지 못했다 — HELPBEE_DATASETS_DIR 지정")
     if not all((bundle_dir() / f).exists() for f in ("stage1.onnx", "stage2.onnx", "vdi.yaml", "metadata.json")):
         raise SystemExit(f"two-stage 번들 없음: {bundle_dir()}")
-    manifest = build_manifest(datasets, seed=args.seed)
+    manifest = build_manifest(datasets, seed=args.seed, scan_cache=args.scan_cache)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
