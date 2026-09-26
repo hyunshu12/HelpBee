@@ -23,3 +23,4 @@ crops: training/crops-320
 project: training/runs/stage2
 name: v0.2.0-stage2
 workers: 4        # DataLoader 워커 (모든 플랫폼). CropDataset 이 모듈 최상위 클래스라 Windows spawn 피클 가능 (구 0 = epoch 7.5분)
+amp: false        # 혼합 정밀도(CUDA fp16 autocast+GradScaler) opt-in — resnet50@320 은 8GB 에 --set amp=true. false = v0.2.0 재현 경로

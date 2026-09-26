@@ -98,6 +98,18 @@ def parse_backbone(v) -> str:
     return v
 
 
+def parse_amp(v) -> bool:
+    """config `amp` (혼합 정밀도, opt-in). None/false → False (v0.2.0 재현 경로). bool 또는 true/false/1/0/yes/no."""
+    if v is None or isinstance(v, bool):
+        return bool(v)
+    t = str(v).strip().lower()
+    if t in ("true", "1", "yes", "on"):
+        return True
+    if t in ("false", "0", "no", "off", "none", ""):
+        return False
+    raise ValueError(f"amp 는 true/false: {v!r}")
+
+
 def pick_metric(row: dict, select_metric: str) -> float:
     """epoch history 행에서 모델 선택 지표 값. cal_b 계열 키는 선택에 쓰지 않는다(불편 추정 셋)."""
     return float(row[parse_select_metric(select_metric)])
@@ -437,7 +449,7 @@ def export_onnx(model, path: Path, img_size: int = DEFAULT_IMG_SIZE) -> Path:
 
 
 def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
-                   img_size: int = DEFAULT_IMG_SIZE, tau_policy: str | None = None) -> Path:
+                   img_size: int = DEFAULT_IMG_SIZE, tau_policy: str | None = None, amp: bool | None = None) -> Path:
     """계획 2 CAM 계산용: fc 가중치(featmap 채널 수 길이) + Platt + τ + backbone/feat_channels/img_size."""
     fc = model.fc.weight.detach().cpu().numpy().reshape(-1)
     data = {"fc_weight": [float(v) for v in fc], "platt": {"a": float(platt[0]), "b": float(platt[1])},
@@ -445,6 +457,8 @@ def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
             "feat_channels": int(fc.shape[0]), "img_size": int(img_size)}
     if tau_policy is not None:
         data["tau_policy"] = parse_tau_policy(tau_policy)
+    if amp is not None:
+        data["amp"] = bool(amp)  # 학습 시 혼합 정밀도 사용 여부 (추적용 — ONNX 는 항상 fp32)
     path = Path(path)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
@@ -563,14 +577,27 @@ def loader_kwargs(workers: int, seed: int) -> dict:
             "generator": torch.Generator().manual_seed(int(seed))}
 
 
-def _predict_logits(model, loader, device) -> tuple[np.ndarray, np.ndarray]:
+def _autocast(enabled: bool):
+    """enabled 면 CUDA fp16 autocast, 아니면 nullcontext (fp32 경로 그대로)."""
+    import contextlib
+
+    if not enabled:
+        return contextlib.nullcontext()
+    import torch
+
+    return torch.autocast("cuda", dtype=torch.float16)
+
+
+def _predict_logits(model, loader, device, amp: bool = False) -> tuple[np.ndarray, np.ndarray]:
+    """logit 은 항상 float32 로 모은다 (sigmoid/Platt/AUROC 는 fp32). amp=True 는 CUDA autocast 로 forward 만."""
     import torch
 
     model.eval()
     zs, ys = [], []
     with torch.no_grad():
         for x, y in loader:
-            z, _ = model(x.to(device, non_blocking=True))
+            with _autocast(amp):
+                z, _ = model(x.to(device, non_blocking=True))
             zs.append(z.float().cpu().numpy())
             ys.append(y.numpy())
     return np.concatenate(zs), np.concatenate(ys).astype(int)
@@ -589,6 +616,10 @@ def train(cfg: dict) -> dict:
     select_metric = parse_select_metric(cfg.get("select_metric"))
     backbone = parse_backbone(cfg.get("backbone"))
     img_size = int(cfg.get("img_size", DEFAULT_IMG_SIZE))
+    cfg["amp"] = parse_amp(cfg.get("amp"))  # 요청값 → resolved_config.json
+    use_amp = cfg["amp"] and device.type == "cuda"  # 실제 사용 여부 (CPU 면 fp32 그대로)
+    if cfg["amp"] and not use_amp:
+        logger.warning("amp=true 이지만 CUDA 없음 → fp32 로 학습")
     save_dir = Path(cfg["project"]) / cfg["name"]
     save_dir.mkdir(parents=True, exist_ok=True)
     dump_resolved(cfg, save_dir)
@@ -614,6 +645,8 @@ def train(cfg: dict) -> dict:
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["epochs"])
     loss_fn = torch.nn.BCEWithLogitsLoss()  # 가중 없음 (불균형은 sampler 가 처리)
+    # AMP: 모델은 fp32 마스터 가중치 그대로(.half() 금지) — autocast 는 forward 만, GradScaler 로 역전파.
+    scaler = torch.amp.GradScaler("cuda") if use_amp else None
     eps = float(cfg["label_smoothing"])
     val_loader = eval_dl(sp["val"])
     cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
@@ -623,15 +656,24 @@ def train(cfg: dict) -> dict:
         tot, n = 0.0, 0
         for x, y in train_dl:
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-            z, _ = model(x)
-            loss = loss_fn(z, y * (1 - eps) + 0.5 * eps)
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
-            opt.step()
+            if use_amp:
+                with _autocast(True):
+                    z, _ = model(x)
+                    loss = loss_fn(z.float(), y * (1 - eps) + 0.5 * eps)
+                opt.zero_grad(set_to_none=True)
+                scaler.scale(loss).backward()
+                scaler.step(opt)
+                scaler.update()
+            else:
+                z, _ = model(x)
+                loss = loss_fn(z, y * (1 - eps) + 0.5 * eps)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
             tot, n = tot + loss.item() * len(y), n + len(y)
         sched.step()
-        zv, yv = _predict_logits(model, val_loader, device)
-        zca, yca = _predict_logits(model, cal_a_loader, device)
+        zv, yv = _predict_logits(model, val_loader, device, use_amp)  # 선택 지표용 — autocast 허용
+        zca, yca = _predict_logits(model, cal_a_loader, device, use_amp)
         row = {"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(zca, yca)}
         history.append(row)
         logger.info(f"epoch {ep}: loss={row['train_loss']:.4f} val_auroc={row['val_auroc']:.4f} "
@@ -646,6 +688,7 @@ def train(cfg: dict) -> dict:
     torch.save(model.state_dict(), save_dir / "last.pt")
 
     model.load_state_dict(torch.load(save_dir / "best.pt", map_location=device, weights_only=True))
+    # Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
     za, ya = _predict_logits(model, cal_a_loader, device)
     zb, yb = _predict_logits(model, eval_dl(sp["cal_b"]), device)
     zv, yv = _predict_logits(model, val_loader, device)
@@ -653,10 +696,12 @@ def train(cfg: dict) -> dict:
 
     model_cpu = model.to("cpu")
     export_onnx(model_cpu, save_dir / "stage2.onnx", img_size)
-    write_metadata(save_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"])
+    write_metadata(save_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
+                   amp=use_amp)
     vdi = _write_vdi(cal, Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), save_dir / "vdi.yaml")
     report = {
         "version": "v0.2.0-stage2", "model": backbone, "img_size": img_size, "degrade": cfg.get("degrade"),
+        "amp": use_amp,
         "select_metric": select_metric, f"best_{select_metric}": best_score,
         "best_epoch": best_ep, "val_auroc": history[best_ep]["val_auroc"] if best_ep >= 0 else None,
         **cal["report"], "size_jitter": list(jitter) if jitter else None,
@@ -784,6 +829,7 @@ def main(argv: list[str] | None = None):
     parse_degrade(cfg.get("degrade"))
     parse_select_metric(cfg.get("select_metric"))
     parse_backbone(cfg.get("backbone"))
+    parse_amp(cfg.get("amp"))
     return train(cfg)
 
 

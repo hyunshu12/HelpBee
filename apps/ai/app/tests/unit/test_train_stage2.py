@@ -194,7 +194,7 @@ def test_stage2_yaml_loads():
                    "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 320,
                    "backbone": "resnet18", "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.01,
                    "seed": 42, "crops": "training/crops-320", "project": "training/runs/stage2",
-                   "name": "v0.2.0-stage2", "workers": 4}
+                   "name": "v0.2.0-stage2", "workers": 4, "amp": False}
 
 
 def test_parse_degrade():
@@ -525,12 +525,9 @@ def test_tasks_recalibrate_target_registered():
     assert "recalibrate" in tasks.TARGETS
 
 
-def test_recalibrate_smoke_rewrites_outputs(tmp_path):
-    torch = pytest.importorskip("torch")
-    pytest.importorskip("torchvision")
+def _mini_crops(tmp_path):
+    """cal_a/cal_b/val/train 각 8장(64px 노이즈, 라벨 교대) + crops.csv — train/recalibrate 스모크 공용."""
     cv2 = pytest.importorskip("cv2")
-    import training.train_stage2 as ts
-
     crops = tmp_path / "crops"
     (crops / "img").mkdir(parents=True)
     rng = np.random.default_rng(0)
@@ -549,6 +546,15 @@ def test_recalibrate_smoke_rewrites_outputs(tmp_path):
         w = _csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
+    return crops
+
+
+def test_recalibrate_smoke_rewrites_outputs(tmp_path):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    import training.train_stage2 as ts
+
+    crops = _mini_crops(tmp_path)
     run = tmp_path / "runs" / "v0.2.0-stage2"
     run.mkdir(parents=True)
     m = ts.build_model(pretrained=False, backbone="resnet18")
@@ -566,3 +572,53 @@ def test_recalibrate_smoke_rewrites_outputs(tmp_path):
     assert meta["tau"] == pytest.approx(rep["tau"]) and meta["tau_policy"] == "youden" and meta["img_size"] == 64
     assert (run / "stage2.onnx").read_bytes() == b"sentinel"
     assert json.loads((tmp_path / "eval.json").read_text(encoding="utf-8"))["recalibrated_from"] == str(run)
+
+
+# ── v0.2.1: AMP opt-in ────────────────────────────────────────────────────────
+def test_parse_amp():
+    from training.train_stage2 import parse_amp
+
+    assert parse_amp(None) is False and parse_amp(False) is False and parse_amp(True) is True
+    assert parse_amp("true") is True and parse_amp("1") is True and parse_amp("false") is False
+    with pytest.raises(ValueError):
+        parse_amp("fp16")
+
+
+def test_amp_override_from_set():
+    """--set amp=true 는 apply_overrides 의 bool 변환을 거쳐 True 로 온다."""
+    from training.train import apply_overrides
+    from training.train_stage2 import parse_amp
+
+    root = Path(__file__).resolve().parents[3]
+    cfg = yaml.safe_load((root / "training/configs/stage2.yaml").read_text(encoding="utf-8"))
+    assert parse_amp(cfg["amp"]) is False
+    assert parse_amp(apply_overrides(cfg, ["amp=true"])["amp"]) is True
+
+
+def test_train_smoke_amp_recorded_and_onnx_fp32(tmp_path, monkeypatch):
+    """1 epoch 스모크. amp=true 요청 → CUDA 면 autocast+GradScaler, CPU(Mac)면 fp32 폴백.
+    요청값은 resolved_config, 실제 사용 여부는 metadata/eval JSON 에 남고 ONNX 는 fp32."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    import training.train_stage2 as ts
+
+    orig = ts.build_model
+    monkeypatch.setattr(ts, "build_model", lambda pretrained=True, backbone=ts.DEFAULT_BACKBONE: orig(False, backbone))
+    crops = _mini_crops(tmp_path)
+    cfg = {"epochs": 1, "patience": 5, "batch": 4, "lr": 1e-3, "weight_decay": 0.0, "label_smoothing": 0.0,
+           "degrade": "none", "size_jitter": None, "img_size": 64, "backbone": "resnet18",
+           "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.5, "seed": 0, "crops": str(crops),
+           "project": str(tmp_path / "runs"), "name": "amp", "workers": 0, "amp": "true",
+           "vdi_out": str(tmp_path / "vdi.yaml"), "eval_out": str(tmp_path / "eval.json")}
+    rep = ts.train(cfg)
+    active = torch.cuda.is_available()
+    run = tmp_path / "runs" / "amp"
+    assert json.loads((run / "resolved_config.json").read_text(encoding="utf-8"))["amp"] is True
+    assert json.loads((run / "metadata.json").read_text(encoding="utf-8"))["amp"] is active
+    assert rep["amp"] is active
+    s = ort.InferenceSession(str(run / "stage2.onnx"), providers=["CPUExecutionProvider"])
+    assert s.get_inputs()[0].type == "tensor(float)" and s.get_outputs()[0].type == "tensor(float)"
+    logit, feat = s.run(None, {"image": np.zeros((2, 3, 64, 64), np.float32)})
+    assert logit.dtype == np.float32 and feat.shape == (2, 512, 2, 2)
