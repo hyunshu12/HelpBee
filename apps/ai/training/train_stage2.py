@@ -22,10 +22,15 @@ v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이
 → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
 (cal-A 는 사실상 colony 하나라 epoch 별 AUROC 가 0.77↔0.88 로 튀어 "최고 epoch" 은 운 좋은 고-LR iterate 를 고른다.)
 
+    python -m training.train_stage2 --finalize <run_dir> --ckpt last.pt --out <out_dir> [--config ...] [--set k=v ...]
+    (= python tasks.py finalize-stage2 <run_dir> --ckpt last.pt --out <out_dir>) — 학습 없이 run 의 체크포인트 하나를
+    <out_dir>/best.pt 로 복사하고 train() 과 같은 학습 후 경로(fp32 보정 → ONNX → metadata → vdi.yaml → 리포트)를
+    <out_dir> 안에만 쓴다. training/configs/vdi.yaml · eval_history 는 절대 쓰지 않는다(cfg vdi_out/eval_out 무시).
+
 메모리(v0.2.1): 학습 루프가 끝나면 옵티마이저·scheduler·GradScaler·train DataLoader(·SWA 사본)를 해제하고
 gc.collect + torch.cuda.empty_cache 뒤에 fp32 보정을 돈다 (AMP 학습 후 fp32 보정 OOM, 2026-09-26 박스).
 config `eval_batch`(기본 = `batch`) = 비학습 로더 배치 — 에폭별 val/cal-A, 학습 후 보정(pin_memory=False),
---recalibrate. 학습 로더와 SWA BN 재계산 로더(학습 분포 재현)는 `batch`.
+--recalibrate, --finalize. 학습 로더와 SWA BN 재계산 로더(학습 분포 재현)는 `batch`.
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
 `youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
@@ -57,6 +62,7 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 # `last` = 고정 스케줄: 조기 종료 없이 epochs 전부 → 마지막 epoch 가중치를 best.pt 로 (epoch 지표로 고르지 않음).
 SELECT_METRICS = ("val_auroc", "cal_a_auroc", "last")
 SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 뽑는 train 샘플 상한 (가중 샘플러 복원추출, batch 배수로 내림)
+FINALIZE_REPORT = "stage2-eval.json"  # --finalize 리포트 파일명 (<out_dir> 안)
 TAU_POLICIES = ("youden", "fpr")
 DEFAULT_TAU_POLICY = "youden"
 DEFAULT_FPR_CAP = 0.10
@@ -139,7 +145,7 @@ def parse_swa_epochs(v, epochs=None) -> int:
 
 
 def parse_eval_batch(v, batch=64) -> int:
-    """config `eval_batch` — 비학습 DataLoader(에폭별 val/cal-A, 학습 후 보정, recalibrate) 배치.
+    """config `eval_batch` — 비학습 DataLoader(에폭별 val/cal-A, 학습 후 보정, recalibrate, finalize) 배치.
     None → `batch`(v0.2.0 동작 그대로). 1 이상 정수. bool·비정수·0 이하면 ValueError.
     학습 로더와 SWA BN 재계산 로더(학습 분포 재현)는 항상 `batch`."""
     if v is None:
@@ -632,6 +638,15 @@ def loader_kwargs(workers: int, seed: int) -> dict:
             "generator": torch.Generator().manual_seed(int(seed))}
 
 
+def _eval_loader(rows, crops_dir: Path, *, img_size: int, batch: int, workers: int, seed: int,
+                 pin_memory: bool = False):
+    """비학습 로더 (비증강·순차). train 의 에폭별·학습 후 로더와 --finalize 공용."""
+    from torch.utils.data import DataLoader
+
+    return DataLoader(_dataset(rows, crops_dir, False, None, seed, img_size=img_size), batch_size=batch,
+                      shuffle=False, pin_memory=pin_memory, **loader_kwargs(workers, seed))
+
+
 def swa_bn_loader(rows, crops_dir: Path, *, degrade_lo: int | None, seed: int, jitter: tuple[float, float] | None,
                   img_size: int, batch: int, workers: int = 0, cap: int = SWA_BN_MAX_ROWS):
     """SWA 평균 모델 BN 재추정용 로더 — **학습과 같은 분포**: 증강 train 데이터셋(열화·크기 지터 포함, train() 과 같은
@@ -792,8 +807,8 @@ def train(cfg: dict) -> dict:
 
     def eval_dl(rows, pin_memory=True):
         """비학습 로더 (비증강·순차, batch = eval_batch). 학습 후 1회성 로더는 pin_memory=False."""
-        return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"], img_size=img_size), batch_size=eval_batch,
-                          shuffle=False, pin_memory=pin_memory, **loader_kwargs(workers, cfg["seed"]))
+        return _eval_loader(rows, crops_dir, img_size=img_size, batch=eval_batch, workers=workers, seed=cfg["seed"],
+                            pin_memory=pin_memory)
 
     model = build_model(pretrained=True, backbone=backbone).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
@@ -878,25 +893,16 @@ def train(cfg: dict) -> dict:
         torch.save(model.state_dict(), save_dir / "best.pt")  # 마지막 epoch = 선택 모델
         best_ep = len(history) - 1
 
-    model.load_state_dict(torch.load(save_dir / "best.pt", map_location=device, weights_only=True))
-    # Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
-    # 1회성 로더라 pin_memory=False (OOM 이 난 곳이 pin-memory 스레드였다), batch = eval_batch.
-    za, ya = _predict_logits(model, eval_dl(sp["cal_a"], pin_memory=False), device)
-    zb, yb = _predict_logits(model, eval_dl(sp["cal_b"], pin_memory=False), device)
-    zv, yv = _predict_logits(model, eval_dl(sp["val"], pin_memory=False), device)
+    post = _calibrate_export(model, save_dir / "best.pt", save_dir, sp, cfg, device, eval_dl, img_size,
+                             amp=use_amp, select_metric=select_metric, swa_epochs=swa_epochs,
+                             vdi_paths=(Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), save_dir / "vdi.yaml"))
+    cal, vdi = post["cal"], post["vdi"]
     swa_report = None
     if bn_samples is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
         swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_samples": bn_samples,
-                      "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya)}
+                      "val_auroc": post["val_auroc"], "cal_a_auroc": post["cal_a_auroc"]}
         logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
                     f"cal_a_auroc={swa_report['cal_a_auroc']:.4f}")
-    cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
-
-    model_cpu = model.to("cpu")
-    export_onnx(model_cpu, save_dir / "stage2.onnx", img_size)
-    write_metadata(save_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
-                   amp=use_amp, select_metric=select_metric, swa_epochs=swa_epochs)
-    vdi = _write_vdi(cal, Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), save_dir / "vdi.yaml")
     # best_{metric} = 선택 모델의 지표 값 (SWA 면 평균 모델 fp32 값). select_metric=last 는 epoch 지표로 안 고르므로 키 없음.
     selection = {"select_metric": select_metric, "swa_epochs": swa_epochs}
     if select_metric != "last":
@@ -957,6 +963,33 @@ def _write_vdi(cal: dict, *paths: Path) -> Path:
     return Path(paths[0])
 
 
+def _calibrate_export(model, weights: Path, out_dir: Path, sp: dict[str, list[dict]], cfg: dict, device, eval_dl,
+                      img_size: int, *, amp: bool | None = None, select_metric: str | None = None,
+                      swa_epochs: int | None = None, vdi_paths) -> dict:
+    """학습 후 공통 경로 (train · --finalize): weights 로드 → fp32 cal-A/cal-B/val logit → calibrate →
+    export_onnx(<out_dir>/stage2.onnx) → write_metadata(<out_dir>/metadata.json) → _write_vdi(vdi_paths).
+
+    Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
+    eval_dl(rows, pin_memory) 는 batch = eval_batch 비학습 로더, 1회성이라 pin_memory=False
+    (AMP 후 OOM 이 난 곳이 pin-memory 스레드였다). eval JSON 은 호출자가 쓴다.
+    반환: {"cal": calibrate 결과, "val_auroc", "cal_a_auroc"(fp32, 이 가중치), "vdi": 첫 vdi 경로}."""
+    import torch
+
+    out_dir = Path(out_dir)
+    model.load_state_dict(torch.load(weights, map_location=device, weights_only=True))
+    za, ya = _predict_logits(model, eval_dl(sp["cal_a"], pin_memory=False), device)
+    zb, yb = _predict_logits(model, eval_dl(sp["cal_b"], pin_memory=False), device)
+    zv, yv = _predict_logits(model, eval_dl(sp["val"], pin_memory=False), device)
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
+
+    model_cpu = model.to("cpu")
+    export_onnx(model_cpu, out_dir / "stage2.onnx", img_size)
+    write_metadata(out_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
+                   amp=amp, select_metric=select_metric, swa_epochs=swa_epochs)
+    vdi = _write_vdi(cal, *vdi_paths)
+    return {"cal": cal, "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya), "vdi": vdi}
+
+
 def recalibrate(run_dir: Path, cfg: dict) -> dict:
     """학습 없이 <run_dir>/best.pt 로 cal_a/cal_b/val 을 다시 예측해 Platt·τ(`tau_policy`) 재선택.
     backbone/img_size 는 <run_dir>/metadata.json. 갱신: <run_dir>/vdi.yaml · cfg vdi_out · cfg eval_out
@@ -1009,6 +1042,85 @@ def recalibrate(run_dir: Path, cfg: dict) -> dict:
     return report
 
 
+def _source_run_report(run_dir: Path) -> dict:
+    """run_dir 안의 학습 리포트(`history` 키가 있는 JSON dict) — FINALIZE_REPORT 우선, 그다음 *.json 이름순
+    (metadata.json·resolved_config.json 제외). 없으면 {}. (train() 은 기본적으로 리포트를 eval_out 에 쓰므로
+    `--set eval_out=<run_dir>/stage2-eval.json` 으로 학습했거나 finalize 산출물 디렉터리일 때만 있다.)"""
+    run_dir = Path(run_dir)
+    skip = {"metadata.json", "resolved_config.json", FINALIZE_REPORT}
+    for p in [run_dir / FINALIZE_REPORT, *sorted(p for p in run_dir.glob("*.json") if p.name not in skip)]:
+        if not p.is_file():
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict) and "history" in d:
+            return d
+    return {}
+
+
+def finalize(run_dir: Path, ckpt: str, out_dir: Path, cfg: dict) -> dict:
+    """학습 없이 <run_dir>/<ckpt> 를 출하 후보로 확정: <out_dir>/best.pt 로 복사 → train() 과 같은 학습 후 경로
+    (_calibrate_export: fp32 cal-A/cal-B/val logit(eval_batch, pin_memory=False) → calibrate → ONNX → metadata →
+    vdi.yaml) → <out_dir>/stage2-eval.json. backbone/img_size/amp 는 <run_dir>/metadata.json.
+
+    모든 산출물은 <out_dir> 안에만 쓴다 — training/configs/vdi.yaml · training/eval_history/* 는 cfg vdi_out/eval_out
+    과 무관하게 절대 쓰지 않는다(출하 경로 갱신은 사람이 결과를 보고 따로). <out_dir> 가 이미 있고 비어 있지 않으면
+    FileExistsError. 리포트: finalized_from · backbone · img_size · amp(원 metadata 에 있으면) · 원 run 리포트가 있으면
+    그 history/select_metric/swa_epochs (없으면 생략)."""
+    import shutil
+
+    import torch
+
+    run_dir, out_dir = Path(run_dir), Path(out_dir)
+    src, meta_path = run_dir / ckpt, run_dir / "metadata.json"
+    if not src.is_file() or not meta_path.is_file():
+        raise FileNotFoundError(f"--finalize 에 {ckpt}·metadata.json 필요: {run_dir}")
+    if out_dir.exists() and (not out_dir.is_dir() or any(out_dir.iterdir())):
+        raise FileExistsError(f"--out 이 이미 있고 비어 있지 않다: {out_dir}")
+    backbone, img_size = model_spec(src)  # src 옆 metadata.json = run 의 backbone/img_size
+    src_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    amp = src_meta.get("amp")  # 원 run 학습 정밀도 (추적용 — ONNX 는 항상 fp32)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    crops_dir = Path(cfg["crops"])
+    sp = select_splits(read_crops(crops_dir))
+    check_splits(sp, keys=("val", "cal_a", "cal_b"))
+    workers = resolve_workers(cfg)
+    seed = int(cfg.get("seed", 0))
+    eval_batch = parse_eval_batch(cfg.get("eval_batch"), cfg.get("batch", 64))
+    model = build_model(pretrained=False, backbone=backbone).to(device)
+    model.load_state_dict(torch.load(src, map_location=device, weights_only=True))  # 산출물 만들기 전에 검증
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    weights = out_dir / "best.pt"
+    shutil.copy2(src, weights)
+
+    def eval_dl(rows, pin_memory=False):
+        return _eval_loader(rows, crops_dir, img_size=img_size, batch=eval_batch, workers=workers, seed=seed,
+                            pin_memory=pin_memory)
+
+    logger.info(f"finalize {src} → {out_dir} ({backbone} @{img_size}; vdi_out/eval_out 무시, 출하 경로 미기록)")
+    post = _calibrate_export(model, weights, out_dir, sp, cfg, device, eval_dl, img_size, amp=amp,
+                             vdi_paths=(out_dir / "vdi.yaml",))
+    cal = post["cal"]
+    src_rep = _source_run_report(run_dir)
+    report = {
+        "version": "v0.2.0-stage2", "model": backbone, "backbone": backbone, "img_size": img_size,
+        "finalized_from": str(src), **({"amp": bool(amp)} if amp is not None else {}),
+        **{k: src_rep[k] for k in ("select_metric", "swa_epochs") if k in src_rep},
+        "val_auroc": post["val_auroc"], **cal["report"],
+        "counts": {k: {"n": len(v), "pos": sum(int(r["label"]) for r in v)} for k, v in sp.items()},
+        **({"history": src_rep["history"]} if "history" in src_rep else {}),
+        "weights": str(weights), "onnx": str(out_dir / "stage2.onnx"), "vdi": str(post["vdi"]),
+    }
+    out = out_dir / FINALIZE_REPORT
+    out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info(f"finalized τ={cal['tau']:.4f} ({cal['tau_policy']}) cal-A AUROC={post['cal_a_auroc']:.4f} "
+                f"cal-B TPR={cal['tpr']:.3f} FPR={cal['fpr']:.4f} → {out}")
+    return report
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser()
     p.add_argument("--config", type=Path, default=Path("training/configs/stage2.yaml"),
@@ -1017,12 +1129,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--set", nargs="*", default=[], metavar="KEY=VALUE", help="임의 config 키 오버라이드")
     p.add_argument("--recalibrate", type=Path, default=None, metavar="RUN_DIR",
                    help="학습 없이 RUN_DIR/best.pt 로 Platt·τ 재선택 (vdi.yaml·eval JSON·metadata.json 갱신, ONNX 불변)")
+    p.add_argument("--finalize", type=Path, default=None, metavar="RUN_DIR",
+                   help="학습 없이 RUN_DIR/<--ckpt> → <--out>/best.pt + 보정·ONNX·metadata·vdi.yaml·stage2-eval.json "
+                        "(모두 --out 안, 출하 경로 training/configs/vdi.yaml·eval_history 미기록)")
+    p.add_argument("--ckpt", default=None, metavar="NAME", help="--finalize: RUN_DIR 안 체크포인트 (예: last.pt)")
+    p.add_argument("--out", type=Path, default=None, metavar="OUT_DIR",
+                   help="--finalize: 산출물 디렉터리 (없거나 비어 있어야 한다)")
     return p
 
 
 def main(argv: list[str] | None = None):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    a = build_parser().parse_args(argv)
+    parser = build_parser()
+    a = parser.parse_args(argv)
+    if a.finalize is not None:
+        if a.recalibrate is not None:
+            parser.error("--finalize 와 --recalibrate 는 함께 쓸 수 없다")
+        if not a.ckpt or a.out is None:
+            parser.error("--finalize 는 --ckpt <name> 과 --out <out_dir> 이 필요하다")
+    elif a.ckpt is not None or a.out is not None:
+        parser.error("--ckpt/--out 은 --finalize 와 함께만 쓴다")
     cfg = yaml.safe_load(a.config.read_text(encoding="utf-8"))
     cfg = apply_overrides(cfg, a.set)
     if a.degrade is not None:
@@ -1035,6 +1161,8 @@ def main(argv: list[str] | None = None):
     cfg["config"] = str(a.config)
     if a.recalibrate is not None:
         return recalibrate(a.recalibrate, cfg)
+    if a.finalize is not None:
+        return finalize(a.finalize, a.ckpt, a.out, cfg)
     parse_degrade(cfg.get("degrade"))
     parse_select_metric(cfg.get("select_metric"))
     parse_swa_epochs(cfg.get("swa_epochs"), cfg.get("epochs"))

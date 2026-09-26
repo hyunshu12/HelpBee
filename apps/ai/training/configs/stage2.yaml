@@ -2,12 +2,13 @@
 # 스펙 §6 대비 이탈(의도): batch 128→64 (8GB VRAM), '그림자' 증강 미구현 (train_stage2.augment 참조).
 # 실행: python tasks.py train-stage2 [--degrade none|90] [--set key=value ...]
 #       python tasks.py recalibrate <run_dir> [--set tau_policy=fpr ...]   (학습 없이 Platt·τ 만 재선택)
+#       python tasks.py finalize-stage2 <run_dir> --ckpt last.pt --out <out_dir>   (체크포인트 → 보정·ONNX, <out_dir> 안에만)
 # 산출물: <project>/<name>/{best.pt,stage2.onnx,metadata.json,resolved_config.json},
 #         training/configs/vdi.yaml, training/eval_history/v0.2.0-stage2.json
 epochs: 50
 patience: 10
 batch: 64          # 스펙 §6 은 128 — RTX 4060 8GB VRAM 여유 때문에 64 (의도적 이탈)
-# eval_batch: 32   # (생략 = batch) 비학습 로더 배치 — 에폭별 val/cal-A·학습 후 보정·recalibrate (SWA BN 재계산은 batch).
+# eval_batch: 32   # (생략 = batch) 비학습 로더 배치 — 에폭별 val/cal-A·학습 후 보정·recalibrate·finalize (SWA BN 재계산은 batch).
                    # AMP 학습 후 fp32 보정이 OOM 이면 --set eval_batch=32 처럼 낮춘다 (학습 로더는 batch 그대로)
 lr: 3.0e-4
 weight_decay: 0.01

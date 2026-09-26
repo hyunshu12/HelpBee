@@ -1023,3 +1023,147 @@ def test_recalibrate_uses_eval_batch(tmp_path, monkeypatch):
     ts.recalibrate(run, cfg)
     assert sizes == [3, 3, 3, 4, 4, 4]
 
+
+# ── v0.2.1: --finalize (체크포인트 → 보정·ONNX·평가 산출물, 출하 경로 미기록) ─────────────
+def test_finalize_arg_parsing_dispatches_without_training(tmp_path, monkeypatch):
+    import training.train_stage2 as ts
+
+    cfg_path = tmp_path / "stage2.yaml"
+    cfg_path.write_text("crops: training/crops-320\ntau_policy: youden\nfpr_cap: 0.01\n", encoding="utf-8")
+    calls = {}
+    monkeypatch.setattr(ts, "finalize",
+                        lambda run_dir, ckpt, out, cfg: calls.setdefault("fin", (run_dir, ckpt, out, cfg)))
+    monkeypatch.setattr(ts, "train", lambda cfg: pytest.fail("train 호출되면 안 됨"))
+    monkeypatch.setattr(ts, "recalibrate", lambda run_dir, cfg: pytest.fail("recalibrate 호출되면 안 됨"))
+    ts.main(["--finalize", str(tmp_path / "run"), "--ckpt", "last.pt", "--out", str(tmp_path / "out"),
+             "--config", str(cfg_path), "--set", "eval_batch=16"])
+    run_dir, ckpt, out, cfg = calls["fin"]
+    assert run_dir == tmp_path / "run" and ckpt == "last.pt" and out == tmp_path / "out"
+    assert cfg["eval_batch"] == 16 and cfg["crops"] == "training/crops-320"
+    for bad in (["--finalize", "r", "--ckpt", "last.pt"],  # --out 없음
+                ["--finalize", "r", "--out", "o"],  # --ckpt 없음
+                ["--finalize", "r", "--ckpt", "last.pt", "--out", "o", "--recalibrate", "r"],
+                ["--ckpt", "last.pt"], ["--out", "o"]):  # --finalize 없이
+        with pytest.raises(SystemExit):
+            ts.main([*bad, "--config", str(cfg_path)])
+    with pytest.raises(ValueError, match="eval_batch"):  # 공통 조기 검증
+        ts.main(["--finalize", "r", "--ckpt", "c", "--out", "o", "--config", str(cfg_path), "--set", "eval_batch=0"])
+
+
+def test_tasks_finalize_target_registered():
+    import tasks
+
+    assert tasks.TARGETS["finalize-stage2"] is tasks.finalize_stage2
+
+
+def test_source_run_report_prefers_stage2_eval_and_needs_history(tmp_path):
+    from training.train_stage2 import _source_run_report
+
+    assert _source_run_report(tmp_path) == {}
+    (tmp_path / "metadata.json").write_text(json.dumps({"history": ["no"]}), encoding="utf-8")  # 제외 대상
+    (tmp_path / "resolved_config.json").write_text(json.dumps({"history": ["no"]}), encoding="utf-8")
+    (tmp_path / "a.json").write_text(json.dumps({"tau": 0.5}), encoding="utf-8")  # history 없음
+    (tmp_path / "broken.json").write_text("{", encoding="utf-8")
+    assert _source_run_report(tmp_path) == {}
+    (tmp_path / "z.json").write_text(json.dumps({"history": [1]}), encoding="utf-8")
+    assert _source_run_report(tmp_path) == {"history": [1]}
+    (tmp_path / "stage2-eval.json").write_text(json.dumps({"history": [2]}), encoding="utf-8")
+    assert _source_run_report(tmp_path) == {"history": [2]}
+
+
+def _snapshot(paths):
+    return {p: (p.stat().st_mtime_ns, p.read_bytes()) for p in paths}
+
+
+def test_finalize_smoke_writes_only_out_dir_and_matches_train(tmp_path, monkeypatch):
+    """select_metric=last 2 epoch 학습 → last.pt 로 finalize: <out> 에 best.pt(=last.pt)·ONNX(logit, featmap)·
+    metadata·vdi.yaml·stage2-eval.json. 보정 결과는 train() 의 학습 후 경로와 동일(best.pt == last.pt).
+    원 run 파일·cfg vdi_out/eval_out·기본 출하 경로(training/configs, eval_history)는 그대로. 비어 있지 않은 --out 은 에러."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    import training.train_stage2 as ts
+
+    monkeypatch.chdir(tmp_path)  # 상대 기본 경로(training/configs/vdi.yaml 등)가 쓰이면 tmp 아래에 생긴다
+    _no_pretrained(monkeypatch, ts)
+    crops = _mini_crops(tmp_path)
+    run = tmp_path / "runs" / "src"
+    tcfg = {**_smoke_cfg(tmp_path, crops, "src", False), "epochs": 2, "patience": 0, "select_metric": "last",
+            "eval_out": str(run / "stage2-eval.json")}
+    trep = ts.train(tcfg)
+    ship_vdi, ship_eval = tmp_path / "ship" / "vdi.yaml", tmp_path / "ship" / "eval.json"
+    before = _snapshot([*sorted(run.iterdir()), tmp_path / "vdi_src.yaml"])
+
+    out = tmp_path / "final" / "r34-last"
+    fcfg = {**tcfg, "vdi_out": str(ship_vdi), "eval_out": str(ship_eval)}
+    rep = ts.finalize(run, "last.pt", out, fcfg)
+
+    assert sorted(p.name for p in out.iterdir()) == ["best.pt", "metadata.json", "stage2-eval.json", "stage2.onnx",
+                                                     "vdi.yaml"]
+    assert (out / "best.pt").read_bytes() == (run / "last.pt").read_bytes()
+    assert _snapshot(before) == before  # 원 run·학습 vdi_out 불변
+    assert not ship_vdi.exists() and not ship_eval.exists() and not (tmp_path / "ship").exists()
+    assert not (tmp_path / "training").exists()
+
+    ev = json.loads((out / "stage2-eval.json").read_text(encoding="utf-8"))
+    assert ev == json.loads(json.dumps(rep))
+    assert rep["finalized_from"] == str(run / "last.pt") and rep["backbone"] == rep["model"] == "resnet18"
+    assert rep["img_size"] == 64 and rep["amp"] is False
+    assert rep["select_metric"] == "last" and rep["swa_epochs"] == 0 and rep["history"] == trep["history"]
+    assert rep["weights"] == str(out / "best.pt") and rep["vdi"] == str(out / "vdi.yaml")
+    # 같은 가중치(last == best) → train() 학습 후 경로와 같은 보정
+    for k in ("tau", "platt", "cal_b", "auroc", "ece15", "by_source_at_tau", "counts"):
+        assert rep[k] == trep[k], k
+    assert rep["val_auroc"] == trep["val_auroc"]
+
+    meta = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+    src_meta = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["backbone"] == src_meta["backbone"] == "resnet18" and meta["img_size"] == 64
+    assert meta["tau"] == rep["tau"] and meta["fc_weight"] == src_meta["fc_weight"] and meta["amp"] is False
+    assert "select_metric" not in meta and "swa_epochs" not in meta
+    vdi = yaml.safe_load((out / "vdi.yaml").read_text(encoding="utf-8"))
+    assert vdi["tau"] == pytest.approx(rep["tau"]) and vdi["platt"] == rep["platt"]
+
+    s = ort.InferenceSession(str(out / "stage2.onnx"), providers=["CPUExecutionProvider"])
+    assert [o.name for o in s.get_outputs()] == ["logit", "featmap"]
+    m = ts.build_model(False, "resnet18")
+    m.load_state_dict(torch.load(run / "last.pt", weights_only=True))
+    m.eval()
+    x = torch.from_numpy(np.random.default_rng(3).normal(size=(2, 3, 64, 64)).astype(np.float32))
+    with torch.no_grad():
+        zt, _ = m(x)
+    zo, fo = s.run(None, {"image": x.numpy()})
+    assert np.allclose(zt.numpy(), zo, atol=1e-4) and fo.shape == (2, 512, 2, 2)
+
+    with pytest.raises(FileExistsError):  # 비어 있지 않은 --out
+        ts.finalize(run, "last.pt", out, fcfg)
+    with pytest.raises(FileNotFoundError):
+        ts.finalize(run, "nope.pt", tmp_path / "final" / "x", fcfg)
+    assert not (tmp_path / "final" / "x").exists()
+
+
+def test_finalize_without_source_report_omits_history_and_ignores_default_ship_paths(tmp_path, monkeypatch):
+    """원 run 에 리포트가 없으면 history/select_metric/swa_epochs 생략, metadata 에 amp 가 없으면 amp 도 생략.
+    빈 --out 디렉터리는 허용. cfg 에 vdi_out/eval_out 이 없어도(= 상대 기본 출하 경로) 쓰지 않는다."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    import training.train_stage2 as ts
+
+    monkeypatch.chdir(tmp_path)
+    crops = _mini_crops(tmp_path)
+    run = tmp_path / "manual"
+    run.mkdir()
+    m = ts.build_model(pretrained=False, backbone="resnet18")
+    torch.save(m.state_dict(), run / "ep3.pt")
+    ts.write_metadata(run / "metadata.json", m, (1.0, 0.0), 0.5, 64)
+    out = tmp_path / "out"
+    out.mkdir()
+    cfg = {"crops": str(crops), "batch": 4, "workers": 0, "seed": 0, "tau_policy": "youden", "fpr_cap": 0.5}
+    rep = ts.finalize(run, "ep3.pt", out, cfg)
+    assert rep["finalized_from"] == str(run / "ep3.pt")
+    assert not {"history", "select_metric", "swa_epochs", "amp"} & set(rep)
+    assert "amp" not in json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+    assert (out / "stage2.onnx").exists() and not (tmp_path / "training").exists()
+    assert sorted(p.name for p in run.iterdir()) == ["ep3.pt", "metadata.json"]
