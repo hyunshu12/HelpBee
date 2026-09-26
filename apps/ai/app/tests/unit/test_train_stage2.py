@@ -852,3 +852,156 @@ def test_recompute_bn_resnet18_updates_running_stats():
     assert not torch.equal(after["features.1.running_mean"], init["features.1.running_mean"])
     assert not torch.equal(after["features.1.running_var"], init["features.1.running_var"])
     assert int(after["features.1.num_batches_tracked"]) == 2 and not m.training
+
+
+# ── v0.2.1: 보정 전 학습 상태 해제 + eval_batch (AMP 후 fp32 보정 OOM) ─────────────
+def test_parse_eval_batch_default_and_bounds():
+    from training.train_stage2 import parse_eval_batch
+
+    assert parse_eval_batch(None, 64) == 64 and parse_eval_batch(None, 48) == 48 and parse_eval_batch(None) == 64
+    assert parse_eval_batch(32, 64) == 32 and parse_eval_batch("16", 64) == 16 and parse_eval_batch(8.0, 64) == 8
+    assert parse_eval_batch(1, 64) == 1 and parse_eval_batch(256, 64) == 256  # batch 보다 커도 허용
+    for bad in (0, -1, True, False, 2.5, "abc", "x2", ""):
+        with pytest.raises(ValueError, match="eval_batch"):
+            parse_eval_batch(bad, 64)
+    with pytest.raises(ValueError, match="eval_batch"):
+        parse_eval_batch(None, 0)  # 기본값(batch)도 같은 검증
+
+
+def test_main_validates_eval_batch_early(tmp_path, monkeypatch):
+    """eval_batch=0 은 학습·recalibrate 전에 ValueError, 유효값은 cfg 그대로 전달 (기본 config 엔 키 없음)."""
+    import training.train_stage2 as ts
+
+    root = Path(__file__).resolve().parents[3]
+    conf = str(root / "training/configs/stage2.yaml")
+    monkeypatch.setattr(ts, "train", lambda cfg: pytest.fail("train 호출되면 안 됨"))
+    monkeypatch.setattr(ts, "recalibrate", lambda run_dir, cfg: pytest.fail("recalibrate 호출되면 안 됨"))
+    for bad in ("eval_batch=0", "eval_batch=-4", "eval_batch=abc"):
+        with pytest.raises(ValueError, match="eval_batch"):
+            ts.main(["--config", conf, "--set", bad])
+        with pytest.raises(ValueError, match="eval_batch"):
+            ts.main(["--recalibrate", str(tmp_path), "--config", conf, "--set", bad])
+    got = {}
+    monkeypatch.setattr(ts, "train", lambda cfg: got.update(cfg) or "ok")
+    assert ts.main(["--config", conf]) == "ok" and "eval_batch" not in got  # 기본 = batch (키 없음)
+    assert ts.main(["--config", conf, "--set", "eval_batch=32"]) == "ok" and got["eval_batch"] == 32
+
+
+def test_release_memory_is_noop_on_cpu():
+    torch = pytest.importorskip("torch")
+    import training.train_stage2 as ts
+
+    assert ts.cuda_mem_mib(torch.device("cpu")) is None
+    ts.release_memory(torch.device("cpu"), None, "cpu")  # gc.collect 만, 예외 없음
+
+
+def _load_sd(torch, path):
+    return torch.load(path, weights_only=True)
+
+
+def _sd_equal(torch, a, b):
+    return a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
+
+
+def test_train_eval_batch_default_identical_and_smaller_runs(tmp_path, monkeypatch):
+    """기본(eval_batch 키 없음) == eval_batch=batch: best.pt·last.pt·τ·history 비트 동일.
+    eval_batch=3 도 돌고, 학습 가중치(last.pt)·loss 는 그대로 (비학습 로더만 바뀜)."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("cv2")
+    import training.train_stage2 as ts
+
+    if torch.cuda.is_available():
+        pytest.skip("CPU 결정성 전제 (CUDA 는 비결정 커널)")
+    _no_pretrained(monkeypatch, ts)
+    monkeypatch.setattr(ts, "export_onnx", lambda model, path, img_size=224: Path(path))  # onnx 불필요
+    crops = _mini_crops(tmp_path)
+    base = {"epochs": 2, "patience": 5}
+    r_def = ts.train({**_smoke_cfg(tmp_path, crops, "def", False), **base})
+    r_eq = ts.train({**_smoke_cfg(tmp_path, crops, "eq", False), **base, "eval_batch": 4})
+    r_3 = ts.train({**_smoke_cfg(tmp_path, crops, "e3", False), **base, "eval_batch": 3})
+    runs = tmp_path / "runs"
+    for f in ("best.pt", "last.pt"):
+        assert _sd_equal(torch, _load_sd(torch, runs / "def" / f), _load_sd(torch, runs / "eq" / f)), f
+    assert r_def["tau"] == r_eq["tau"] and r_def["platt"] == r_eq["platt"] and r_def["history"] == r_eq["history"]
+    assert r_def["best_epoch"] == r_eq["best_epoch"] and r_def["cal_b"] == r_eq["cal_b"]
+    assert "eval_batch" not in json.loads((runs / "def" / "resolved_config.json").read_text(encoding="utf-8"))
+    # eval_batch=3: 학습 궤적 불변 (train 로더는 batch=4, 평가 로더는 전역 RNG 소비량이 배치 크기와 무관)
+    assert _sd_equal(torch, _load_sd(torch, runs / "def" / "last.pt"), _load_sd(torch, runs / "e3" / "last.pt"))
+    assert [h["train_loss"] for h in r_3["history"]] == [h["train_loss"] for h in r_def["history"]]
+    assert r_3["tau"] == pytest.approx(r_def["tau"], abs=1e-4) and np.isfinite(r_3["tau"])
+    assert json.loads((runs / "e3" / "resolved_config.json").read_text(encoding="utf-8"))["eval_batch"] == 3
+
+
+def test_train_loaders_use_eval_batch_and_release_before_calibration(tmp_path, monkeypatch):
+    """eval_batch=3 · batch=4 · SWA 1 epoch: train 로더만 batch·pin, 에폭별 평가 로더는 eval_batch·pin,
+    학습 후 SWA BN·보정 로더는 eval_batch·pin_memory=False. 학습 상태 해제(release_memory)가 학습 후 첫 로더
+    (SWA BN) 보다 먼저, SWA 사본 해제가 보정 로더보다 먼저."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("cv2")
+    import torch.utils.data as tud
+
+    import training.train_stage2 as ts
+
+    _no_pretrained(monkeypatch, ts)
+    monkeypatch.setattr(ts, "export_onnx", lambda model, path, img_size=224: Path(path))
+    events = []
+    real_dl, real_release = tud.DataLoader, ts.release_memory
+
+    class SpyDL(real_dl):
+        def __init__(self, dataset, **kw):
+            events.append(("dl", kw.get("batch_size"), bool(kw.get("pin_memory", False)), dataset.train,
+                           tuple(sorted({r["split"] for r in dataset.rows}))))
+            super().__init__(dataset, **kw)
+
+    def spy_release(device, before=None, what=""):
+        events.append(("release", what))
+        return real_release(device, before, what)
+
+    monkeypatch.setattr(tud, "DataLoader", SpyDL)
+    monkeypatch.setattr(ts, "release_memory", spy_release)
+    crops = _mini_crops(tmp_path)
+    cfg = {**_smoke_cfg(tmp_path, crops, "spy", False), "epochs": 2, "patience": 5, "swa_epochs": 1, "eval_batch": 3}
+    rep = ts.train(cfg)
+    assert rep["swa"]["bn_rows"] == 8 and rep["best_epoch"] == 1
+
+    dls = [e for e in events if e[0] == "dl"]
+    train_dl, epoch_dls = dls[0], dls[1:3]
+    assert train_dl == ("dl", 4, True, True, ("train",))
+    assert epoch_dls == [("dl", 3, True, False, ("val",)), ("dl", 3, True, False, ("cal_a",))]
+    i_rel = events.index(("release", "학습 상태 해제"))
+    i_swa = events.index(("release", "SWA 사본 해제"))
+    after = events[i_rel + 1:]
+    assert after[0] == ("dl", 3, False, False, ("train",))  # SWA BN 재계산 로더
+    assert after[1] == ("release", "SWA 사본 해제") and i_swa == i_rel + 2
+    assert after[2:] == [("dl", 3, False, False, ("cal_a",)), ("dl", 3, False, False, ("cal_b",)),
+                         ("dl", 3, False, False, ("val",))]
+
+
+def test_recalibrate_uses_eval_batch(tmp_path, monkeypatch):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    import torch.utils.data as tud
+
+    import training.train_stage2 as ts
+
+    crops = _mini_crops(tmp_path)
+    run = tmp_path / "runs" / "r"
+    run.mkdir(parents=True)
+    m = ts.build_model(pretrained=False, backbone="resnet18")
+    torch.save(m.state_dict(), run / "best.pt")
+    ts.write_metadata(run / "metadata.json", m, (1.0, 0.0), 0.5, 64)
+    sizes, real_dl = [], tud.DataLoader
+
+    class SpyDL(real_dl):
+        def __init__(self, dataset, **kw):
+            sizes.append(kw.get("batch_size"))
+            super().__init__(dataset, **kw)
+
+    monkeypatch.setattr(tud, "DataLoader", SpyDL)
+    cfg = {"crops": str(crops), "batch": 4, "workers": 0, "seed": 0, "tau_policy": "youden", "fpr_cap": 0.5,
+           "vdi_out": str(tmp_path / "vdi.yaml"), "eval_out": str(tmp_path / "eval.json")}
+    ts.recalibrate(run, {**cfg, "eval_batch": 3})
+    ts.recalibrate(run, cfg)
+    assert sizes == [3, 3, 3, 4, 4, 4]

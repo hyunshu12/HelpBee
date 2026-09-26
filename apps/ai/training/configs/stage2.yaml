@@ -7,6 +7,8 @@
 epochs: 50
 patience: 10
 batch: 64          # 스펙 §6 은 128 — RTX 4060 8GB VRAM 여유 때문에 64 (의도적 이탈)
+# eval_batch: 32   # (생략 = batch) 비학습 로더 배치 — 에폭별 val/cal-A·학습 후 보정·SWA BN 재계산·recalibrate.
+                   # AMP 학습 후 fp32 보정이 OOM 이면 --set eval_batch=32 처럼 낮춘다 (학습 로더는 batch 그대로)
 lr: 3.0e-4
 weight_decay: 0.01
 label_smoothing: 0.05

@@ -21,6 +21,11 @@ v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이
 (≤ SWA_BN_MAX_ROWS)으로 BN 통계 재계산(recompute_bn: BN 만 train 모드, fp32) → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
 (cal-A 는 사실상 colony 하나라 epoch 별 AUROC 가 0.77↔0.88 로 튀어 "최고 epoch" 은 운 좋은 고-LR iterate 를 고른다.)
 
+메모리(v0.2.1): 학습 루프가 끝나면 옵티마이저·scheduler·GradScaler·train DataLoader(·SWA 사본)를 해제하고
+gc.collect + torch.cuda.empty_cache 뒤에 fp32 보정을 돈다 (AMP 학습 후 fp32 보정 OOM, 2026-09-26 박스).
+config `eval_batch`(기본 = `batch`) = 비학습 로더 배치 — 에폭별 val/cal-A, 학습 후 보정(pin_memory=False),
+SWA BN 재계산, --recalibrate. 학습 로더는 `batch`.
+
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
 `youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
 분위수) → cal-B 에서 TPR/FPR 측정(독립 추정). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
@@ -130,6 +135,22 @@ def parse_swa_epochs(v, epochs=None) -> int:
     if k < 0 or (epochs is not None and k > int(epochs)):
         raise ValueError(f"swa_epochs 는 0 ≤ k ≤ epochs({epochs}): {k}")
     return k
+
+
+def parse_eval_batch(v, batch=64) -> int:
+    """config `eval_batch` — 비학습 DataLoader(에폭별 val/cal-A, 학습 후 보정, SWA BN 재계산, recalibrate) 배치.
+    None → `batch`(v0.2.0 동작 그대로). 1 이상 정수. bool·비정수·0 이하면 ValueError. 학습 로더는 항상 `batch`."""
+    if v is None:
+        v = batch
+    if isinstance(v, bool) or (isinstance(v, float) and not v.is_integer()):
+        raise ValueError(f"eval_batch 는 1 이상 정수: {v!r}")
+    try:
+        n = int(v.strip()) if isinstance(v, str) else int(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"eval_batch 는 1 이상 정수: {v!r}") from None
+    if n < 1:
+        raise ValueError(f"eval_batch 는 1 이상 정수: {v!r}")
+    return n
 
 
 def swa_bn_rows(rows: list, cap: int = SWA_BN_MAX_ROWS) -> list:
@@ -636,6 +657,32 @@ def _grad_scaler():
     return torch.cuda.amp.GradScaler()
 
 
+def cuda_mem_mib(device) -> tuple[float, float] | None:
+    """CUDA 면 (memory_allocated, memory_reserved) MiB, 아니면 None."""
+    if getattr(device, "type", None) != "cuda":
+        return None
+    import torch
+
+    return torch.cuda.memory_allocated(device) / 2**20, torch.cuda.memory_reserved(device) / 2**20
+
+
+def release_memory(device, before: tuple[float, float] | None = None, what: str = "") -> None:
+    """참조를 끊은 뒤 호출: gc.collect + (CUDA 면) torch.cuda.empty_cache — 캐싱 할당기가 쥔 블록을 돌려준다.
+    CUDA 면 before(참조 해제 전 cuda_mem_mib) → 후 allocated/reserved(MiB) 를 INFO 로그."""
+    import gc
+
+    gc.collect()
+    if getattr(device, "type", None) != "cuda":
+        return
+    import torch
+
+    torch.cuda.empty_cache()
+    after = cuda_mem_mib(device)
+    b = f"{before[0]:.0f}→" if before else ""
+    r = f"{before[1]:.0f}→" if before else ""
+    logger.info(f"{what}: CUDA allocated {b}{after[0]:.0f} MiB, reserved {r}{after[1]:.0f} MiB")
+
+
 def recompute_bn(loader, model, device=None):
     """SWA 평균 모델의 BatchNorm running stats 재추정 (torch swa_utils.update_bn 대체).
 
@@ -701,6 +748,7 @@ def train(cfg: dict) -> dict:
     swa_start = cfg["epochs"] - swa_epochs
     backbone = parse_backbone(cfg.get("backbone"))
     img_size = int(cfg.get("img_size", DEFAULT_IMG_SIZE))
+    eval_batch = parse_eval_batch(cfg.get("eval_batch"), cfg["batch"])  # 비학습 로더 배치 (기본 = batch)
     cfg["amp"] = parse_amp(cfg.get("amp"))  # 요청값 → resolved_config.json
     use_amp = cfg["amp"] and device.type == "cuda"  # 실제 사용 여부 (CPU 면 fp32 그대로)
     if cfg["amp"] and not use_amp:
@@ -722,9 +770,10 @@ def train(cfg: dict) -> dict:
                           batch_size=cfg["batch"], sampler=sampler, pin_memory=True, drop_last=True,
                           **loader_kwargs(workers, cfg["seed"]))
 
-    def eval_dl(rows):
-        return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"], img_size=img_size), batch_size=cfg["batch"],
-                          shuffle=False, pin_memory=True, **loader_kwargs(workers, cfg["seed"]))
+    def eval_dl(rows, pin_memory=True):
+        """비학습 로더 (비증강·순차, batch = eval_batch). 학습 후 1회성 로더는 pin_memory=False."""
+        return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"], img_size=img_size), batch_size=eval_batch,
+                          shuffle=False, pin_memory=pin_memory, **loader_kwargs(workers, cfg["seed"]))
 
     model = build_model(pretrained=True, backbone=backbone).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
@@ -780,25 +829,39 @@ def train(cfg: dict) -> dict:
             break
     torch.save(model.state_dict(), save_dir / "last.pt")
 
+    # 학습 상태 해제 (2026-09-26 박스: ResNet-34@320 amp=true batch 64/48 이 39 epoch 학습 후 첫 fp32 보정 forward 에서
+    # CUDA OOM — AdamW 상태·GradScaler·scheduler·train DataLoader(워커·pinned 버퍼)가 살아 있고 캐싱 할당기가 AMP 크기
+    # 블록을 쥔 채 fp32 가 2배 큰 활성 블록을 요구). 이후 코드는 model·sp·history·swa(있으면)만 쓴다.
+    # SWA BN 재계산도 fp32 forward 라 그 전에 해제한다 (BN 은 sp["train"] 행만 필요, 옵티마이저 불필요).
+    mem0 = cuda_mem_mib(device)
+    model.zero_grad(set_to_none=True)  # 파라미터 크기 fp32 .grad 해제 (state_dict 에는 없음)
+    x = y = z = loss = None  # 마지막 학습 배치 텐서 (루프가 0회여도 안전)
+    del opt, sched, scaler, train_dl, sampler, val_loader, cal_a_loader
+    release_memory(device, mem0, "학습 상태 해제")
+
     bn_rows = None
     if swa is not None:
         # BN 재계산: 비증강·비샘플 train 부분집합, 셔플 없음, fp32(autocast 없음), BN 만 train 모드.
         bn_rows = swa_bn_rows(sp["train"])
         logger.info(f"SWA: epoch {swa_start}~{cfg['epochs'] - 1} 평균 → BN 재계산 ({len(bn_rows)} train 크롭, 비증강)")
-        recompute_bn(eval_dl(bn_rows), swa.module, device=device)
+        recompute_bn(eval_dl(bn_rows, pin_memory=False), swa.module, device=device)
         torch.save(swa.module.state_dict(), save_dir / "best.pt")
         best_ep = len(history) - 1
+        mem0 = cuda_mem_mib(device)
+        del swa  # 평균 모델 사본 — best.pt 로 저장됐다. 이후 SWA 여부는 bn_rows 로 판단
+        release_memory(device, mem0, "SWA 사본 해제")
     elif select_metric == "last":
         torch.save(model.state_dict(), save_dir / "best.pt")  # 마지막 epoch = 선택 모델
         best_ep = len(history) - 1
 
     model.load_state_dict(torch.load(save_dir / "best.pt", map_location=device, weights_only=True))
     # Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
-    za, ya = _predict_logits(model, cal_a_loader, device)
-    zb, yb = _predict_logits(model, eval_dl(sp["cal_b"]), device)
-    zv, yv = _predict_logits(model, val_loader, device)
+    # 1회성 로더라 pin_memory=False (OOM 이 난 곳이 pin-memory 스레드였다), batch = eval_batch.
+    za, ya = _predict_logits(model, eval_dl(sp["cal_a"], pin_memory=False), device)
+    zb, yb = _predict_logits(model, eval_dl(sp["cal_b"], pin_memory=False), device)
+    zv, yv = _predict_logits(model, eval_dl(sp["val"], pin_memory=False), device)
     swa_report = None
-    if swa is not None:  # 평균 모델의 fp32 val/cal-A AUROC (1회)
+    if bn_rows is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
         swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_rows": len(bn_rows),
                       "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya)}
         logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
@@ -893,7 +956,7 @@ def recalibrate(run_dir: Path, cfg: dict) -> dict:
 
     def logits(rows):
         dl = DataLoader(_dataset(rows, crops_dir, False, None, int(cfg.get("seed", 0)), img_size=img_size),
-                        batch_size=int(cfg.get("batch", 64)), shuffle=False,
+                        batch_size=parse_eval_batch(cfg.get("eval_batch"), cfg.get("batch", 64)), shuffle=False,
                         **loader_kwargs(workers, int(cfg.get("seed", 0))))
         return _predict_logits(model, dl, device)
 
@@ -944,6 +1007,7 @@ def main(argv: list[str] | None = None):
     parse_fpr_cap(cfg.get("fpr_cap"))
     resolve_workers(cfg)
     parse_amp(cfg.get("amp"))  # --set amp=true 는 apply_overrides 가 bool 로, 문자열 "1"/"0" 등도 허용
+    parse_eval_batch(cfg.get("eval_batch"), cfg.get("batch", 64))  # train·recalibrate 공용
     cfg["config"] = str(a.config)
     if a.recalibrate is not None:
         return recalibrate(a.recalibrate, cfg)
