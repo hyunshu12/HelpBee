@@ -205,6 +205,39 @@ def classify_crops(sess2, crops: np.ndarray, chunk: int = CHUNK,
     return np.concatenate(logits), np.concatenate(feats)
 
 
+def classify_boxes(sess2, image: np.ndarray, boxes: list, *, img_size: int, chunk: int = CHUNK,
+                   platt: tuple[float, float] = (1.0, 0.0), topk: int = TOPK_EVIDENCE,
+                   deadline: float | None = None) -> tuple[np.ndarray, dict[int, np.ndarray]]:
+    """Stage-2 스트리밍: 청크(≤chunk)마다 크롭→정규화→추론. 전체 크롭 텐서를 만들지 않는다.
+
+    1,500 크롭 @320을 한 번에 쌓으면 uint8+float32+transpose 사본으로 요청당 4~6 GB(t3.medium OOM).
+    청크 단위면 동시 상주 텐서가 chunk개로 묶인다. featmap은 CAM에 쓰는 **p 상위 topk**만 유지.
+    반환: (Platt 보정 p[N], {박스 인덱스: featmap}).
+    """
+    a, b = platt
+    ps: list[np.ndarray] = []
+    kept: list[tuple[float, int, np.ndarray]] = []  # (p, idx, featmap) 상위 topk
+    for idx in chunk_indices(len(boxes), chunk):
+        if deadline is not None and time.monotonic() > deadline:
+            raise BudgetExceeded("stage2 budget exceeded")
+        batch = normalize_crops(np.stack([crop_pad(image, boxes[i], margin=CROP_MARGIN, size=img_size)[0]
+                                          for i in range(idx.start, idx.stop)]))
+        lo, fm = sess2.run(["logit", "featmap"], {"image": batch})
+        del batch
+        logit = np.asarray(lo, np.float32).reshape(-1)
+        pc = 1.0 / (1.0 + np.exp(-(a * logit + b)))
+        ps.append(pc)
+        if topk > 0:
+            fm = np.asarray(fm, np.float32)
+            for j in np.argsort(-pc, kind="stable")[:topk]:
+                kept.append((float(pc[j]), idx.start + int(j), fm[j].copy()))
+            kept.sort(key=lambda x: (-x[0], x[1]))
+            del kept[topk:]
+        del fm
+    p = np.concatenate(ps) if ps else np.zeros(0, np.float32)
+    return p, {i: f for _, i, f in kept}
+
+
 def cam_from_featmap(featmap: np.ndarray, fc_w: np.ndarray) -> np.ndarray:
     """닫힌 형식 CAM: ReLU(Σ_c fc_w[c]·featmap[c]) → [0,1] 정규화, featmap 공간 크기 그대로."""
     cam = np.maximum(np.tensordot(np.asarray(fc_w, np.float32), featmap, axes=(0, 0)), 0.0)
@@ -236,7 +269,7 @@ class OnnxTwoStageEngine:
         self._dir = Path(cache_dir) / version
         self._bucket = s3_bucket
         self.crop_cap, self.chunk, self.topk = crop_cap, chunk, topk
-        self._rng = np.random.default_rng(seed)
+        self._seed = seed  # cap 샘플링 rng는 호출마다 생성(Generator는 스레드 비안전 — threadpool 공유 금지)
         self._s1 = self._s2 = None
         self._meta: dict | None = None
         self._vdi_cfg: VdiConfig | None = None
@@ -282,6 +315,11 @@ class OnnxTwoStageEngine:
             self._vdi_cfg = load_vdi_config(path)
             self._vdi_extras = yaml.safe_load(path.read_text(encoding="utf-8"))
 
+    def prewarm(self) -> None:
+        """번들 다운로드 + ONNX 세션 + vdi.yaml 로드를 미리 수행(FastAPI startup, best-effort)."""
+        self._ensure()
+        self._load_vdi()
+
     def vdi_config(self) -> VdiConfig:
         self._load_vdi()
         return self._vdi_cfg  # type: ignore[return-value]
@@ -302,7 +340,7 @@ class OnnxTwoStageEngine:
         tile = needs_tiling(image.shape[:2])
         boxes = detect_bees(self._s1, image, tile=tile)
         t["stage1"] = int((time.monotonic() - t0) * 1000)
-        boxes, sampled = cap_crops(boxes, self.crop_cap, self._rng)
+        boxes, sampled = cap_crops(boxes, self.crop_cap, np.random.default_rng(self._seed))
         if not boxes:
             t["stage2"] = 0
             return TwoStageResult([], 0, 0, sampled, [], dict(self.model_versions), t)
@@ -310,15 +348,15 @@ class OnnxTwoStageEngine:
             raise BudgetExceeded("stage1 budget exceeded")
 
         t1 = time.monotonic()
-        crops = normalize_crops(np.stack([crop_pad(image, b, margin=CROP_MARGIN, size=img_size)[0] for b in boxes]))
-        logits, feats = classify_crops(self._s2, crops, self.chunk, deadline)
         a, b = cfg.platt
-        p = 1.0 / (1.0 + np.exp(-(a * logits + b)))
+        p, top_feats = classify_boxes(self._s2, image, boxes, img_size=img_size, chunk=self.chunk,
+                                      platt=(a, b), topk=self.topk, deadline=deadline)
         t["stage2"] = int((time.monotonic() - t1) * 1000)
 
         bees = [BeeDet(bx, float(pi), bool(pi > cfg.tau)) for bx, pi in zip(boxes, p)]
         evidence = []
-        for i in np.argsort(-p)[: self.topk]:
+        # top_feats 는 classify_boxes 가 유지한 p 상위 topk(동률은 낮은 인덱스 우선) — 그 키만 순회.
+        for i in sorted(top_feats, key=lambda j: (-float(p[j]), j)):
             if p[i] <= cfg.tau:
                 break
             evidence.append({
@@ -326,7 +364,7 @@ class OnnxTwoStageEngine:
                 "box": list(boxes[i]),
                 "crop_region": _crop_region(boxes[i], image.shape[:2]),
                 "p_infested": float(p[i]),
-                "cam": np.round(cam_from_featmap(feats[i], fc_w), 3).tolist(),
+                "cam": np.round(cam_from_featmap(top_feats[int(i)], fc_w), 3).tolist(),
             })
         return TwoStageResult(bees, len(bees), sum(x.infested for x in bees), sampled, evidence,
                               dict(self.model_versions), t)

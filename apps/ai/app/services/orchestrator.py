@@ -31,6 +31,12 @@ DEFAULT_BUDGET_S = 80.0  # AI 내부 예산 — 타임아웃 체인 모바일 �
 MIN_BEES_NO_FALLBACK = 30  # 유료 폴백 트리거: tier insufficient 또는 bee_total < 30 (스펙 §5.5)
 LEGACY_TIER = {"low": "safe", "elevated": "watch", "high": "danger", "insufficient": "unknown"}
 _DEFAULT_VDI_YAML = Path(__file__).resolve().parents[2] / "training" / "configs" / "vdi.yaml"
+RAW_BOXES_CAP = 1500  # = two_stage_engine.CROP_CAP (Stage-2 크롭 상한)
+
+
+def compact_boxes(bees, cap: int = RAW_BOXES_CAP) -> list[list[float]]:
+    """two-stage 벌 박스 → 저장용 [[x1,y1,x2,y2,p], ...] (좌표 int 반올림, p 3자리, cap 개 이하)."""
+    return [[int(round(v)) for v in b.box] + [round(float(b.p_infested), 3)] for b in list(bees)[:cap]]
 
 
 def _default_vdi_extras() -> dict:
@@ -312,6 +318,9 @@ def _run_two_stage(
             "stage_latency_ms": res.stage_latency_ms,
             "image_hw": list(image.shape[:2]),
             "tau": cfg.tau,
+            # 어드민 dual 뷰 bbox 오버레이용 소형 목록 — [x1,y1,x2,y2,p] (int 좌표, p 소수 3자리).
+            # bees[](dict·float)는 저장하지 않고 이것만 raw_response 에 남긴다(≤ crop cap ≈ 40 KB).
+            "boxes": compact_boxes(res.bees),
         },
         engine_used="yolo",
         vdi=agg["vdi"] if has else None,
