@@ -90,5 +90,6 @@ YYYY-MM-DD-{topic-kebab-case}.md
 | 2026-08-20 | **진단 이력 탭 구현**: `GET /v1/analyses`의 `hiveId` optional화(전체 벌통 이력 쿼리 + NULLS LAST·tie-breaker 정렬) + 플레이스홀더였던 모바일 이력 화면을 실제 목록으로 교체(로딩/에러/빈상태/pull-to-refresh/리포트 이동) | (미생성) | [2026-08-20-analysis-history-tab.md](./2026-08-20-analysis-history-tab.md) |
 | 2026-09-23 | Windows 학습 박스 부트스트랩(winget Python/Git/7-Zip, 실행정책·7z PATH) + Makefile 대체 `apps/ai/tasks.py` 러너(doctor/trash) — 박스 doctor `cuda True RTX 4060` | (미생성) | [2026-09-23-training-box-bootstrap.md](./2026-09-23-training-box-bootstrap.md) |
 | 2026-09-25 | **AI v0.2.0 2-stage Training 단계**: refreeze(golden 001/028/022) + train-sub 25k + crops v2 · Stage-1 golden PASS(mAP50 0.986/R 0.961) · Stage-2 cal-B TPR−FPR 0.27 게이트 FAIL · v3 실험(E1/E2) + τ 정책 분석(옵션 A 결정 대기) | (미생성) | [2026-09-25-v020-two-stage-training.md](./2026-09-25-v020-two-stage-training.md) |
+| 2026-09-26 | **AI v0.2.0 two-stage 서빙·스키마·앱 (계획 2)**: API/DB 관용화(vdi·bee 컬럼, tier 4종) · AI two-stage 엔진·품질·이중 출력 · N장 합산 `/aggregate` · q95 패스스루·`PORTFOLIO_MODE` · 모바일 VDI 화면·증거 갤러리 · 어드민 dual 뷰 · 회귀 fixture v2 · ADR-0002 · 태그 `v0.1.0-single-stage`(로컬) · Task 8 DEFERRED | (미생성) | [2026-09-26-two-stage-v020-serving.md](./2026-09-26-two-stage-v020-serving.md) |
 
 (새 기록 추가 시 위 표 갱신)
