@@ -1,4 +1,4 @@
-# 2026-09-25 — HelpBee AI v0.2.0 2-stage Training 단계 실행 기록 (Stage-1 PASS / Stage-2 게이트 FAIL)
+# 2026-09-25 — HelpBee AI v0.2.0 2-stage Training 단계 실행 기록 (Stage-1 PASS / Stage-2 v2 FAIL → E3 최종 PASS)
 
 > PR: (미생성) · 브랜치: `feature/ai-two-stage-redesign-spec` · 계획 1 task 12b 문서
 >
@@ -138,3 +138,53 @@ A/B는 out-of-fold 크롭 생성용이라 50 epoch로 축소. val은 동일 colo
 | Gate 0 / e2e | `apps/ai/training/eval_history/v0.2.0-gate0.json`, `v0.2.0-e2e.json` |
 | shakedown | `apps/ai/training/eval_history/shakedown-*.json` |
 | 가중치 (박스, git 미커밋) | `training/runs/yolo/v0.2.0-stage1v2-allall/weights/best.pt`, `training/runs/stage2/v0.2.0-stage2v2-degnone/best.pt` |
+
+---
+
+## 9. 최종 갱신 (2026-09-26) — E3 확정, τ 정책 정정, 베이스라인
+
+§1~§6은 v2 실패 시점의 기록이다. 이후 진행과 최종 수치는 이 절이 우선한다. 근거: 원장(`progress.md`) "E3 (cal_a sel" / "FINAL v0.2.0" / "τ-policy" / "fpr_cap sweep" / "DECISION (controller, 2026-09-25 22:35)" 줄, `eval_history/v0.2.0-*.json`, `configs/vdi.yaml`.
+
+### 9.1 v3 실험 결과 (τ = cal-A FPR 1% 기준)
+
+| 실험 | 변경 | cal-A / cal-B AUROC | golden AUROC | cal-B TPR / FPR | golden recall@τ |
+|---|---|---|---|---|---|
+| v2 | 기준(ShuffleNet, 224, val 선택) | 0.806 / 0.831 | 0.856 | 0.272 / 0.004 | 0.18 |
+| E1 | 모델 선택을 cal-A AUROC로 | 0.807 / 0.848 | 0.874 | 0.046 / 0.001 | 0.06 |
+| E2 | E1 + 크롭 320 px | 0.824 / 0.812 | 0.849 | 0.269 / 0.001 | 0.16 |
+| **E3** | **E2 + ResNet-18** | **0.872 / 0.833** | 0.839 | **0.520 / 0.0025** | 0.40 |
+
+결론: 백본 용량이 병목(ShuffleNet 3변형 모두 TPR ≤ 0.27). E3 = v0.2.0 최종 Stage-2 (`training/runs/stage2/v0.2.0-stage2v3-E3`, best epoch 8, early stop 18).
+
+### 9.2 τ 정책 (스펙 v2.2, 사용자 승인 후 컨트롤러 정정)
+
+같은 τ에서 cal-B FPR이 cal-A FPR의 1/3~1/10(colony 편차) → "cal-A FPR 1%" 규칙은 보수적. 그러나 Youden(FPR ≤ 10%)으로 재보정하자 벌 단위(cal-B TPR 0.65, golden recall 0.52)는 좋아지고 **벌통 단위 e2e는 악화**(tier 일치 0.83→0.55, 건강 프레임<3% 1.00→0.10, VDI MAE 1.9→4.2): cal-B FPR 1.85%가 golden colony의 실제 FPR 5.5%를 과소추정해 보정에서 덜 빼므로 건강 벌통이 5~6%(elevated)로 읽힘.
+
+golden e2e 스윕(tier 일치 / 건강<3% / MAE): cap 0.01 → 0.83 / 1.00 / 1.9 · 0.02 → 0.785 / 0.775 / 2.0 · 0.05 → 0.74 / 0.63 / 2.3 · 0.10 → 0.55 / 0.10 / 4.2. cal-B e2e는 보정 원천이라 무정보(0.91~0.95).
+
+**결정 (2026-09-25 22:35)**: `tau_policy: youden`, **`fpr_cap: 0.01`**. 원칙: tier 경계가 3%이므로 운영점은 미학습 colony에서도 FPR ≪ 3%여야 하고, TPR 부족은 보정으로 안전하나 FPR 과소추정은 안전하지 않다. cap 선택에 golden e2e를 1회 사용 → golden e2e 수치는 약간 낙관적.
+
+최종 `vdi.yaml`: τ 0.639, TPR 0.516, FPR 0.0025 (Δ0.514 ≥ 0.5, `corrected: true`), Platt a 0.715 / b −0.710, `cal_a_fpr_at_tau` 0.0096.
+
+### 9.3 최종 게이트 표 (E3, cap 1%)
+
+| 게이트 (스펙 §7) | 기준 | 측정 | 판정 |
+|---|---|---|---|
+| Stage-1 golden | mAP50 ≥ 0.85, recall ≥ 0.90 | 0.986 / 0.961 | PASS |
+| Stage-2 보정 조건 | cal-B TPR − FPR ≥ 0.5 | 0.514 | PASS |
+| Stage-2 특이도 | ≥ 0.985 @τ | golden 0.994 | PASS |
+| Stage-2 벌 단위 recall | ≥ 0.90 @τ | golden 0.40 | **미달** → v0.3 목표 (스펙 v2.2 §7 주) |
+| 크기 베이스라인 AUROC | 진단(보고만, v2.2) | golden 0.79 / EV2 0.85 | 라벨 속성 — 게이트 아님 |
+| Gate 0 px/mm | 22 대비 −15%p 붕괴점 | 0.345 / 0.336 / 0.318 / 0.282 @22/15/12/9 | 붕괴 없음 (`capture_floor` null) |
+| e2e tier 일치율 | > 사소 베이스라인 | 0.83 vs 0.40 | PASS |
+| 건강 프레임 < 3% | | 1.00 | PASS |
+| VDI MAE (참고) | | 1.91 (target별 0.85/0.88/1.39/2.02/4.41) | |
+| 단일 스테이지 베이스라인 | 2-stage가 이겨야 함 | golden 실프레임 150장: tier 일치 0.633, 건강<3% 0.963 (2-stage 0.83 / 1.00, 합성 프레임 — 동일 셋 아님) | PASS (지표상) |
+| 외부 셋 | 참고 | VarroaDataset test recall@τ 0.825 (AUROC 0.952), EV2 holdout recall 0.389 (AUROC 0.955) | |
+
+### 9.4 산출물
+
+- 박스: `training/runs/stage2/v0.2.0-stage2v3-E3/{best.pt, stage2.onnx, metadata.json, vdi.yaml}` (ResNet-18, 입력 320, featmap 512×10×10, `fc_weight` 512), `training/runs/yolo/v0.2.0-stage1v2-allall/weights/{best.pt, best.onnx}` (imgsz 1024, opset 17), 크롭 `training/crops-320`, 베이스라인 `training/runs/yolo/v0.2.0-baseline-single`.
+- S3: `s3://helpbee-models/two-stage/v0.2.0/{stage1.onnx, stage2.onnx, metadata.json, vdi.yaml}` (2026-09-25 23:00).
+- 커밋: `apps/ai/training/configs/vdi.yaml`, `eval_history/v0.2.0-{stage1,stage2,stage2-golden,stage2-test,stage2-holdout,gate0,e2e}.json`, 스펙 v2.2(ccc6723, 352765f).
+- 다음: 계획 2(서빙·스키마·앱) — Task 1(API/DB 관용화) 완료(c05626d, fb8da06), Task 2(AI 서빙) 진행.
