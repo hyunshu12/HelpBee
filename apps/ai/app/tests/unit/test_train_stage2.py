@@ -580,6 +580,7 @@ def test_parse_amp():
 
     assert parse_amp(None) is False and parse_amp(False) is False and parse_amp(True) is True
     assert parse_amp("true") is True and parse_amp("1") is True and parse_amp("false") is False
+    assert parse_amp("0") is False and parse_amp("TRUE") is True
     with pytest.raises(ValueError):
         parse_amp("fp16")
 
@@ -595,6 +596,46 @@ def test_amp_override_from_set():
     assert parse_amp(apply_overrides(cfg, ["amp=true"])["amp"]) is True
 
 
+def _smoke_cfg(tmp_path, crops, name, amp):
+    return {"epochs": 1, "patience": 5, "batch": 4, "lr": 1e-3, "weight_decay": 0.0, "label_smoothing": 0.0,
+            "degrade": "none", "size_jitter": None, "img_size": 64, "backbone": "resnet18",
+            "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.5, "seed": 0, "crops": str(crops),
+            "project": str(tmp_path / "runs"), "name": name, "workers": 0, "amp": amp,
+            "vdi_out": str(tmp_path / f"vdi_{name}.yaml"), "eval_out": str(tmp_path / f"eval_{name}.json")}
+
+
+def test_main_rejects_bad_amp_early(tmp_path, monkeypatch):
+    """--set amp=fp16 은 학습 전에 ValueError (workers 와 같은 조기 검증)."""
+    import training.train_stage2 as ts
+
+    monkeypatch.setattr(ts, "train", lambda cfg: pytest.fail("train 호출되면 안 됨"))
+    root = Path(__file__).resolve().parents[3]
+    with pytest.raises(ValueError, match="amp"):
+        ts.main(["--config", str(root / "training/configs/stage2.yaml"), "--set", "amp=fp16"])
+
+
+def test_amp_on_cpu_is_identical_to_fp32(tmp_path, monkeypatch):
+    """CPU 에서 amp=true 는 autocast 없이 amp=false 와 비트 단위로 같은 학습 결과."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    import training.train_stage2 as ts
+
+    if torch.cuda.is_available():
+        pytest.skip("CPU 전용 동치 테스트 (CUDA 박스에선 amp 가 실제로 켜진다)")
+    orig = ts.build_model
+    monkeypatch.setattr(ts, "build_model", lambda pretrained=True, backbone=ts.DEFAULT_BACKBONE: orig(False, backbone))
+    crops = _mini_crops(tmp_path)
+    r_on = ts.train(_smoke_cfg(tmp_path, crops, "on", "true"))
+    r_off = ts.train(_smoke_cfg(tmp_path, crops, "off", False))
+    a = torch.load(tmp_path / "runs/on/last.pt", weights_only=True)
+    b = torch.load(tmp_path / "runs/off/last.pt", weights_only=True)
+    assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
+    assert all(v.dtype != torch.float16 for v in a.values())  # 가중치는 fp32 유지
+    assert r_on["history"] == r_off["history"] and r_on["tau"] == r_off["tau"]
+    assert r_on["amp"] is False and r_off["amp"] is False
+
+
 def test_train_smoke_amp_recorded_and_onnx_fp32(tmp_path, monkeypatch):
     """1 epoch 스모크. amp=true 요청 → CUDA 면 autocast+GradScaler, CPU(Mac)면 fp32 폴백.
     요청값은 resolved_config, 실제 사용 여부는 metadata/eval JSON 에 남고 ONNX 는 fp32."""
@@ -607,12 +648,7 @@ def test_train_smoke_amp_recorded_and_onnx_fp32(tmp_path, monkeypatch):
     orig = ts.build_model
     monkeypatch.setattr(ts, "build_model", lambda pretrained=True, backbone=ts.DEFAULT_BACKBONE: orig(False, backbone))
     crops = _mini_crops(tmp_path)
-    cfg = {"epochs": 1, "patience": 5, "batch": 4, "lr": 1e-3, "weight_decay": 0.0, "label_smoothing": 0.0,
-           "degrade": "none", "size_jitter": None, "img_size": 64, "backbone": "resnet18",
-           "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.5, "seed": 0, "crops": str(crops),
-           "project": str(tmp_path / "runs"), "name": "amp", "workers": 0, "amp": "true",
-           "vdi_out": str(tmp_path / "vdi.yaml"), "eval_out": str(tmp_path / "eval.json")}
-    rep = ts.train(cfg)
+    rep = ts.train(_smoke_cfg(tmp_path, crops, "amp", "true"))
     active = torch.cuda.is_available()
     run = tmp_path / "runs" / "amp"
     assert json.loads((run / "resolved_config.json").read_text(encoding="utf-8"))["amp"] is True

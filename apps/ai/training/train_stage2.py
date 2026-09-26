@@ -588,6 +588,15 @@ def _autocast(enabled: bool):
     return torch.autocast("cuda", dtype=torch.float16)
 
 
+def _grad_scaler():
+    """CUDA GradScaler. torch.amp.GradScaler("cuda")(torch ≥ 2.3) 가 없으면 torch.cuda.amp.GradScaler 로 폴백."""
+    import torch
+
+    if hasattr(getattr(torch, "amp", None), "GradScaler"):
+        return torch.amp.GradScaler("cuda")
+    return torch.cuda.amp.GradScaler()
+
+
 def _predict_logits(model, loader, device, amp: bool = False) -> tuple[np.ndarray, np.ndarray]:
     """logit 은 항상 float32 로 모은다 (sigmoid/Platt/AUROC 는 fp32). amp=True 는 CUDA autocast 로 forward 만."""
     import torch
@@ -646,7 +655,7 @@ def train(cfg: dict) -> dict:
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=cfg["epochs"])
     loss_fn = torch.nn.BCEWithLogitsLoss()  # 가중 없음 (불균형은 sampler 가 처리)
     # AMP: 모델은 fp32 마스터 가중치 그대로(.half() 금지) — autocast 는 forward 만, GradScaler 로 역전파.
-    scaler = torch.amp.GradScaler("cuda") if use_amp else None
+    scaler = _grad_scaler() if use_amp else None
     eps = float(cfg["label_smoothing"])
     val_loader = eval_dl(sp["val"])
     cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
@@ -823,13 +832,13 @@ def main(argv: list[str] | None = None):
     parse_tau_policy(cfg.get("tau_policy"))  # 조기 검증
     parse_fpr_cap(cfg.get("fpr_cap"))
     resolve_workers(cfg)
+    parse_amp(cfg.get("amp"))  # --set amp=true 는 apply_overrides 가 bool 로, 문자열 "1"/"0" 등도 허용
     cfg["config"] = str(a.config)
     if a.recalibrate is not None:
         return recalibrate(a.recalibrate, cfg)
     parse_degrade(cfg.get("degrade"))
     parse_select_metric(cfg.get("select_metric"))
     parse_backbone(cfg.get("backbone"))
-    parse_amp(cfg.get("amp"))
     return train(cfg)
 
 
