@@ -28,14 +28,39 @@ const RAW_ALLOWLIST = new Set([
   'count',
   'estimated_count',
   'confidence',
+  // v0.2.0 two-stage (스펙 v2.2 §3) — 숫자·문자열·소형 객체만
+  'vdi',
+  'vdi_display',
+  'vdi_raw',
+  'corrected',
+  'bee_total',
+  'bee_infested',
+  'sampling_ci95',
+  'quality',
+  'model_versions',
+  'engine_used',
+  'raw_payload',
 ]);
+/** two-stage raw_payload(중첩) 화이트리스트 — bbox 목록/샘플링 플래그만. */
+const RAW_PAYLOAD_ALLOWLIST = new Set(['boxes', 'sampled', 'sampled_count', 'n_boxes', 'tiles']);
 
 /** raw_response 화이트리스트 투영 — URL/GPS/PII/base64 등은 drop(이중 방어, §12.6). */
 function sanitizeRaw(raw: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!raw) return null;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
-    if (RAW_ALLOWLIST.has(k)) out[k] = v;
+    if (!RAW_ALLOWLIST.has(k)) continue;
+    if (k === 'raw_payload') {
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const nested: Record<string, unknown> = {};
+        for (const [nk, nv] of Object.entries(v as Record<string, unknown>)) {
+          if (RAW_PAYLOAD_ALLOWLIST.has(nk)) nested[nk] = nv;
+        }
+        out[k] = nested;
+      }
+      continue;
+    }
+    out[k] = v;
   }
   return out;
 }
@@ -48,6 +73,11 @@ export type DualRow = {
   varroaInfectionRisk: number | null;
   overallHealth: string | null;
   rawResponse: Record<string, unknown> | null;
+  vdi: number | null;
+  vdiCiLow: number | null;
+  vdiCiHigh: number | null;
+  beeTotal: number | null;
+  beeInfested: number | null;
 };
 
 export type AdminDeps = {

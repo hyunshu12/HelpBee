@@ -18,26 +18,27 @@ class SessionExpiryNotifier extends ChangeNotifier {
 }
 
 /// App-wide session-expiry bus. AuthController listens; AuthInterceptor fires.
-final sessionExpiryProvider =
-    Provider<SessionExpiryNotifier>((ref) => SessionExpiryNotifier());
+final sessionExpiryProvider = Provider<SessionExpiryNotifier>(
+  (ref) => SessionExpiryNotifier(),
+);
 
 const Duration _connectTimeout = Duration(seconds: 15);
 const Duration _receiveTimeout = Duration(seconds: 30);
 const Duration _sendTimeout = Duration(seconds: 30);
 
 BaseOptions _baseOptions() => BaseOptions(
-      baseUrl: AppConfig.apiBase,
-      connectTimeout: _connectTimeout,
-      receiveTimeout: _receiveTimeout,
-      sendTimeout: _sendTimeout,
-      headers: const {'Accept': 'application/json'},
-      // Treat only 2xx/3xx as success. 4xx/5xx must throw a DioException so the
-      // AuthInterceptor can see 401 AUTH_TOKEN_EXPIRED (refresh trigger) and
-      // repositories receive a typed AppException. The problem+json body is
-      // still parsed from `error.response.data`.
-      validateStatus: (status) => status != null && status >= 200 && status < 300,
-      responseType: ResponseType.json,
-    );
+  baseUrl: AppConfig.apiBase,
+  connectTimeout: _connectTimeout,
+  receiveTimeout: _receiveTimeout,
+  sendTimeout: _sendTimeout,
+  headers: const {'Accept': 'application/json'},
+  // Treat only 2xx/3xx as success. 4xx/5xx must throw a DioException so the
+  // AuthInterceptor can see 401 AUTH_TOKEN_EXPIRED (refresh trigger) and
+  // repositories receive a typed AppException. The problem+json body is
+  // still parsed from `error.response.data`.
+  validateStatus: (status) => status != null && status >= 200 && status < 300,
+  responseType: ResponseType.json,
+);
 
 /// Bare Dio with NO auth interceptor. Used by:
 /// - [RefreshCoordinator] (the /refresh call must not loop through auth),

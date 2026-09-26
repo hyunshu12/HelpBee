@@ -101,5 +101,6 @@ class RefreshCoordinator {
 }
 
 /// App-wide singleton refresh coordinator.
-final refreshCoordinatorProvider =
-    Provider<RefreshCoordinator>((ref) => RefreshCoordinator(ref));
+final refreshCoordinatorProvider = Provider<RefreshCoordinator>(
+  (ref) => RefreshCoordinator(ref),
+);

@@ -8,12 +8,7 @@ import 'package:helpbee/core/theme/app_spacing.dart';
 /// chevron. Pure presentation: the caller passes already-resolved display
 /// strings so the widget stays decoupled from the data layer and easy to test.
 class HiveCard extends StatelessWidget {
-  const HiveCard({
-    super.key,
-    required this.name,
-    this.subtitle,
-    this.onTap,
-  });
+  const HiveCard({super.key, required this.name, this.subtitle, this.onTap});
 
   final String name;
   final String? subtitle;
@@ -31,8 +26,7 @@ class HiveCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints:
-              const BoxConstraints(minHeight: AppSpacing.touchTarget),
+          constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
             vertical: AppSpacing.md,
@@ -43,8 +37,11 @@ class HiveCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.hive_rounded,
-                  color: AppColors.honeyBrand, size: 28),
+              const Icon(
+                Icons.hive_rounded,
+                color: AppColors.honeyBrand,
+                size: 28,
+              ),
               AppSpacing.wGapMd,
               Expanded(
                 child: Column(

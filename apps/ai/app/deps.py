@@ -11,7 +11,9 @@ import logging
 import os
 from functools import lru_cache
 
+from app.core.config import settings
 from app.services.openai_client import OpenAIVisionClient
+from app.services.two_stage_engine import OnnxTwoStageEngine
 from app.services.yolo_engine import OnnxYoloEngine
 
 _log = logging.getLogger(__name__)
@@ -25,6 +27,21 @@ def get_yolo_engine() -> OnnxYoloEngine:  # pragma: no cover - 런타임 의존
         # YOLO_CACHE_DIR overridable so the weight cache can live in a writable
         # path on dev machines (the prod default /var/cache needs root on macOS).
         cache_dir=os.getenv("YOLO_CACHE_DIR", "/var/cache/helpbee/yolo"),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_two_stage_engine() -> OnnxTwoStageEngine | None:  # pragma: no cover - 런타임 의존
+    """AI_ENGINE=two-stage(기본)면 two-stage 엔진, yolo-v1 이면 None(→ v0.1.0 경로 롤백).
+
+    번들은 TWO_STAGE_CACHE_DIR/<TWO_STAGE_MODEL_VERSION>/ 우선, 없으면 S3 two-stage/<ver>/.
+    """
+    if settings.ai_engine != "two-stage":
+        return None
+    return OnnxTwoStageEngine(
+        settings.two_stage_model_version,
+        cache_dir=settings.two_stage_cache_dir,
+        s3_bucket=settings.models_bucket,
     )
 
 

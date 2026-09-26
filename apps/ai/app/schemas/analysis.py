@@ -10,15 +10,25 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
-Tier = Literal["safe", "watch", "danger"]
+
+class BeeOut(BaseModel):
+    box: tuple[float, float, float, float]  # 원본 좌표 xyxy
+    p_infested: float
+    infested: bool
+
+# 구 계약(safe/watch/danger) + two-stage 계약(low/elevated/high/insufficient, 스펙 v2.2 §3).
+Tier = Literal["safe", "watch", "danger", "low", "elevated", "high", "insufficient"]
+TierLegacy = Literal["safe", "watch", "danger", "unknown"]
 Engine = Literal["yolo", "openai"]
 
 _DEFAULT_FAILURE_RECS = ["AI 분석에 실패했습니다. 잠시 후 다시 시도해 주세요."]
 
 
 class AnalysisResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # model_version(s) 필드 허용
+
     risk_score: int | None  # 0~100 (clamp). 실패 시 None.
     tier: Tier
     estimated_count: int | None = None  # 응애 개체 수(YOLO는 None)
@@ -31,6 +41,20 @@ class AnalysisResponse(BaseModel):
     raw_payload: dict = {}
     engine_used: Engine | None = None  # 실제 사용된 엔진 (실패 시 None)
     fallback_reason: str | None = None  # YOLO→OpenAI 폴백 사유
+
+    # ── two-stage 계약 (스펙 v2.2 §3) — 이중 출력 기간 동안 모두 optional ──
+    tier_legacy: TierLegacy | None = None  # low→safe, elevated→watch, high→danger, insufficient→unknown
+    vdi: float | None = None  # Rogan–Gladen 보정 지수(%)
+    vdi_display: str | None = None  # AI가 한 번만 반올림한 문자열 — tier는 이 값 기준
+    vdi_raw: float | None = None  # 보정 전 k/n×100
+    corrected: bool | None = None
+    sampling_ci95: tuple[float, float] | None = None
+    bee_total: int | None = None
+    bee_infested: int | None = None
+    bees: list[BeeOut] = []
+    evidence: list[dict] = []  # 상위 k 크롭 {index, box, p_infested, cam}
+    quality: dict | None = None  # {ok, blur_score, exposure_mean, px_per_mm_est, reasons, warnings}
+    model_versions: dict | None = None  # {stage1, stage2, vdi_config}
 
     @field_validator("risk_score")
     @classmethod

@@ -104,27 +104,32 @@ apps/ai/
 
 ---
 
-## 6. 응답 스키마 (`AnalysisResponse`)
+## 6. 응답 스키마 (`AnalysisResponse`) — 스펙 v2.2 §3 (two-stage, 이중 출력 기간)
 
-```python
-class AnalysisResponse(BaseModel):
-    risk_score: int            # 0~100, clamped
-    tier: Literal["safe", "watch", "danger"]   # risk_score 구간 매핑
-    estimated_count: int | None                # 추정 응애 수 (없으면 null)
-    confidence: float          # 0.0~1.0, 모델 자체 confidence
-    recommendations: list[str] # 한국어 처방·주의 문구 (≤5개)
+> 단일 기준: [`docs/superpowers/specs/2026-09-22-ai-two-stage-redesign-design.md`](../../docs/superpowers/specs/2026-09-22-ai-two-stage-redesign-design.md) §3 · 결정: [ADR-0002](../../docs/01-development/adr/ADR-0002-two-stage-vdi-redesign.md). 아래와 스펙이 다르면 스펙이 우선.
 
-    # 운영 메타
-    model_version: str         # "gpt-4o-mini-2024-07-18" 또는 "yolov8s-v0.1.0"
-    prompt_version: str | None # OpenAI 만 채움. e.g. "varroa@1.3"
-    latency_ms: int
-    cost_estimate_usd: float | None  # OpenAI 만 채움
-    raw_payload: dict          # 디버그용 원본 응답 (DB 미저장 옵션)
-```
+| 필드 | 정의 |
+|---|---|
+| `vdi` | **보정 지수**(Rogan–Gladen): `clip((raw − FPR)/(TPR − FPR), 0, 100)`, raw = k/n×100 (k = p > τ 성충 수, n = 탐지 성충 수). TPR/FPR = cal-B 측정값(`vdi.yaml`). `TPR − FPR < 0.5`면 `vdi = raw`, `corrected:false` |
+| `vdi_display` | AI가 **한 번만** 반올림한 문자열(`ROUND_HALF_UP`, 0.1). 클라이언트 재반올림 금지. **tier는 이 값에서만** |
+| `vdi_raw` · `corrected` | 보정 전 값 · 보정 적용 여부 |
+| `sampling_ci95` | raw k/n의 Jeffreys 구간 → Rogan–Gladen 사상(하한 0 floor). "표본 신뢰구간(분류기 오차 미포함)" |
+| `bee_total` · `bee_infested` | n · k (원시 카운트 — N장 합산의 원천). `bee_total < 30` → "표본 적음" 배지 |
+| `bees[]` | `{box(원본 좌표 xyxy), p_infested, infested}` |
+| `evidence[]` | 감염 판정 상위 k=6: `{index, box, crop_region, p_infested, cam}` (CAM = 닫힌 형식, "주목 영역 (응애 위치 아님)"). POST 응답으로만 — `raw_response` 미저장 |
+| `tier` | `low` [0,3) · `elevated` [3,10) · `high` [10,∞) (반열림, `vdi_display` 기준) · `insufficient` = 벌 0마리 또는 `quality.ok == false` |
+| `tier_legacy` | low→safe, elevated→watch, high→danger, insufficient→unknown (이중 출력 기간) |
+| `risk_score` | 이중 출력 기간: **`risk.py` `score_mapping(vdi)`** 0~100 점수(10%→70). `round(vdi)` 아님. 새 계약에서 null 가능 |
+| `quality` | `{ok, blur_score, exposure_mean, px_per_mm_est}` — 블러(1024 축소본 Laplacian < 100)·노출(평균 ∉ [40,215]) 실패 시 `ok:false`; px/mm는 경고만. 임계는 `vdi.yaml` `quality` (⚠️ Sample FHD 성충 47% 실패 — 실사진으로 보정 필요) |
+| `recommendations` | tier별 문구 + 다음 권장 점검 시기. `low`에는 방제 문구 없음 |
+| `model_versions` | `{stage1, stage2, vdi_config}` |
+| `engine_used` | 실패 판정은 `engine_used === null`뿐 (`risk_score` null은 실패 아님) |
 
-응답 실패는 **에러를 던지지 않고** `risk_score=null`, `tier="watch"`, `recommendations=["AI 분석 실패"...]`,
-`raw_payload.error_reason` 채워서 200 으로 반환 (UX 차단 방지). 진짜 4xx/5xx 는
-입력 검증 실패·인증 실패에만 사용.
+**항상 결과를 낸다**(박스·크롭 표시). `insufficient`는 게이트가 아니라 판독 불가 tier. 화면 고정 문구: "보정 전 시험 지표 — 사진은 봉개 유충방 속 응애를 볼 수 없습니다".
+
+**OpenAI 폴백 shim** (스펙 A5): OpenAI rate → `vdi_raw`, `corrected:false`, `bee_total/bee_infested/sampling_ci95 = null`, `bees[]` 없음, tier는 같은 반열림 규칙. `risk.py`/`risk.yaml`은 OpenAI·부스 전용으로 **동결**.
+
+`POST /aggregate`: N장 합산 — `counts[{bee_infested, bee_total}]`(1~50)를 Σk/Σn 원시 카운트로 재계산(`vdi.aggregate` 단일 소스, 내부 HMAC). 퍼센트 평균 금지.
 
 ---
 
@@ -172,12 +177,12 @@ class AnalysisResponse(BaseModel):
 ## 8. YOLO 파이프라인 원칙
 
 ### 8-1. 모델
-> **ADR-0001 (2026-06-05)**: v0.1.0 = **단일 스테이지 3-class YOLOv11s @ imgsz 640** (P2 미사용).
-> v0.2.0 = 2-stage 검출→분류 (라이선스 게이트 통과 시). 상세: `docs/01-development/adr/ADR-0001-yolo-engine-architecture.md`
-- v0.1.0 베이스라인: **YOLOv11s** (표준, P2 미사용), `imgsz=640`. (구 `yolov8s` 표기는 ADR-0001로 폐기)
-- `conf=0.25`, `iou=0.5` (운영 기본값, configs/yolo.yaml 에서 오버라이드)
+> **ADR-0002 (2026-09-25, 스펙 v2.2)가 ADR-0001을 대체.** v0.2.0 = **2-stage**: Stage-1 **YOLO11s 1-class `bee`(성충) @1024** (≥8MP면 2×2 타일·IoMin NMS, conf 0.15, max_det 1500) → Stage-1 예측 박스로 원본 해상도 크롭(여백 10%, 패딩 → **320 px**) → Stage-2 **ResNet-18** 감염 분류(64 청크, Platt, `p > τ`) → VDI. τ = cal-A Youden(FPR ≤ 1%) = 0.639. ShuffleNet-V2 @224는 게이트 실패 — CPU 폴백으로만 문서화. 엔진: `services/two_stage_engine.py` + `services/vdi.py` + `services/quality.py`, `AI_ENGINE`으로 주입.
+- v0.1.0 단일 스테이지 3-class YOLOv11s @640은 **퇴역** — `AI_ENGINE=yolo-v1` 롤백 경로 전용, 기준점 태그 `v0.1.0-single-stage`.
+- `MAX_EDGE=1024` 축소는 two-stage 경로에서만 우회(`decode_rgb`); v0.1.0·OpenAI 경로는 그대로.
 
 ### 8-2. 데이터
+- **v0.2.0 (스펙 §5)**: Stage-1 = 71667 성충 1-class(`--mapping adult1`, **xyxy 정정 파서**) + 밀집 71488; Stage-2 = 71667 예측 박스 크롭 + VarroaDataset·EV2 외부 크롭, cal-A(τ·Platt)/cal-B(TPR/FPR) 반분, golden colony 홀드아웃. 아래 3-class 매핑·`infestation_rate`는 **v0.1.0 기록**.
 - **v0.1.0 주 데이터셋**: **AI Hub 71667 (꿀벌 질병 진단 이미지 데이터)** — 312,000장 / 1,171,779 인스턴스
   - 상세·스키마·매핑·통계·제약 모두: **[apps/ai/training/datasets/AIHUB_71667.md](training/datasets/AIHUB_71667.md)**
   - 71667 7-class → 우리 3-class (`bee_normal` / `bee_with_varroa` / `bee_other_disease`) 매핑은
@@ -210,24 +215,18 @@ class AnalysisResponse(BaseModel):
 - 추론: MVP **CPU(ONNX)** 한 컨테이너. 트래픽 증가 시 별도 GPU 추론 서버로 분리
 
 ### 8-6. 가중치 (S3)
-- 경로: `s3://helpbee-models/yolo/v{X.Y.Z}/best.pt` (+ `metadata.json`)
-- 부팅 시: env `YOLO_MODEL_VERSION` 읽고 로컬 캐시 → 없으면 S3 다운로드
-- 캐시 위치: `/var/cache/helpbee/yolo/v{X.Y.Z}/best.pt` (Docker volume)
+- **two-stage (v0.2.0)**: `s3://helpbee-models/two-stage/v0.2.0/{stage1.onnx, stage2.onnx, vdi.yaml, metadata.json}` — env `TWO_STAGE_MODEL_VERSION`, 캐시 `TWO_STAGE_CACHE_DIR`(기본 `~/.cache/helpbee/two-stage/v0.2.0/`). Stage-2 ONNX 출력 = `logit` + `featmap`(512×10×10), CAM `fc_weight`는 `metadata.json`에서.
+- v0.1.0: `s3://helpbee-models/yolo/v{X.Y.Z}/best.pt` (+ `metadata.json`), env `YOLO_MODEL_VERSION`, 캐시 `/var/cache/helpbee/yolo/v{X.Y.Z}/best.pt`.
 
 ### 8-7. 배포 (Blue-Green Canary)
 - 새 버전 배포 시 트래픽 **5% canary** → 메트릭 1주 확인 → 100% promote
 - 메트릭: golden mAP, P95 latency, fp/fn 비율 (양봉가 피드백)
 - 롤백: env 한 줄 변경(`YOLO_MODEL_VERSION=v0.1.0`) + 재시작
 
-### 8-8. 위험도 산출 (`services/risk.py`)
-```
-risk_score = clamp(0, 100, mite_density * K_density + mite_count * K_count)
-tier       = "safe"   if risk < 30
-             "watch"  if risk < 70
-             "danger" otherwise
-```
-- `K_density`, `K_count`, 임계값은 `training/configs/risk.yaml` 에서 튜닝
-- 양봉가·수의학자 라벨링한 risk 라벨로 회귀 학습 후 가중치 갱신
+### 8-8. 위험도 산출 — two-stage는 `services/vdi.py`, `risk.py`는 shim
+- **two-stage**: §6 `vdi`/`tier` 정의(Rogan–Gladen 보정, Jeffreys CI, `vdi_display` 기준 반열림 tier). 설정 = `training/configs/vdi.yaml`(τ 0.639, TPR 0.516, FPR 0.0025, Platt, `quality`, `recommendations`).
+- **`services/risk.py` + `training/configs/risk.yaml`은 동결된 shim** — OpenAI 폴백·부스 앱 전용 + 이중 출력 기간 `risk_score := score_mapping(vdi)`. 새 로직을 추가하지 말 것.
+- (v0.1.0 기록) `risk_score = clamp(0,100, mite_density*K_density + mite_count*K_count)`, tier safe <30 / watch <70 / danger.
 
 ### 8-9. 재학습 루프
 - 베타 사용자가 "오진" 신고 → `feedback_queue` 에 누적
@@ -285,24 +284,32 @@ HELPBEE_API_INTERNAL_URL=http://api:3000
 
 ### 10-2. 회귀 테스트 (`app/tests/regression/` + `app/tests/fixtures/`)
 
-**스냅샷 회귀 게이트** — 서빙 경로(`run_analysis(engine="yolo")` = preprocess→YOLO(ONNX)→risk)를
-그대로 돌려 현재 출력을 박제하고, 이후 변경이 이를 흔드는지 감시한다. eval/train 경로가 아니라
-**서빙 경로**를 쓴다(과거 preprocess/decode skew 재발 방지 — `docs/05-implementation/2026-06-16-yolo-inference-decode-and-preprocess-fixes.md`).
+**스냅샷 회귀 게이트 v2 (two-stage, 2026-09-26)** — 서빙 경로(`run_analysis(engine="yolo", two_stage=OnnxTwoStageEngine)`
+= decode→Stage-1→Stage-2→VDI)를 그대로 돌려 현재 출력을 박제하고, 이후 변경이 이를 흔드는지 감시한다.
+eval/train 경로가 아니라 **서빙 경로**를 쓴다(과거 preprocess/decode skew 재발 방지 — `docs/05-implementation/2026-06-16-yolo-inference-decode-and-preprocess-fixes.md`).
 
-- **매니페스트 방식 (라이선스)**: 71667 원본 이미지는 재배포 금지(내국인 제약)라 **이미지를 git에
-  절대 커밋하지 않는다.** 대신 `app/tests/fixtures/regression_manifest.json` 하나만 커밋:
-  `[{path, sha256, expected_risk_score, expected_tier, class_folder}]` + 메타(model_version/conf/iou/imgsz).
-  경로는 `training/datasets/Sample/...`(gitignored) 상대경로.
-- **생성**: `make regression-fixtures` (= `python -m training.data.make_regression_fixtures`).
-  클래스별 seed 고정 선택 24장(응애 8/정상 8/기타질병 8, 성충·유충 혼합). 재실행 byte-identical.
-- **skip 규칙**: 로컬에 ONNX 모델(`~/.cache/helpbee/yolo/v0.1.0/best.onnx`) + Sample 데이터셋이
-  둘 다 있을 때만 실제로 돈다. 없으면(CI 등) 전 케이스 `pytest.skip`. sha256 불일치 시 그 케이스만 경고+skip.
+- **매니페스트 방식 (라이선스)**: 71667 원본/파생 이미지는 재배포 금지(내국인 제약)라 **이미지를 git에
+  절대 커밋하지 않는다.** 대신 `app/tests/fixtures/regression_manifest.json`(v2) 하나만 커밋:
+  `[{path, sha256, case, expected_vdi_display, expected_tier, expected_bee_total}]` + 메타
+  (`model_versions` stage1/stage2/vdi_config, `vdi_config_sha`·ONNX sha, `tau`, `quality` 임계, 허용 오차).
+  `path`는 **datasets 디렉터리 기준** 상대경로(`Sample/...`, `Sample_derived/...` — 둘 다 gitignored).
+- **datasets 탐색**: `$HELPBEE_DATASETS_DIR` → `apps/ai/training/datasets` → (git worktree면) 메인 체크아웃의 같은 경로.
+- **케이스 (7종, 24~30장, 각 ≥3)**: `boundary`(vdi_display가 3.0/10.0에 최근접) · `low_count`(벌 1~5) ·
+  `healthy`(성충_정상 + 감염 0) · `dense`(bee_total 상위) · `zero_bees`(합성 소비판/노이즈 → 벌 0) ·
+  `blur`(Sample GaussianBlur → quality.ok false) · `varroa_visible_no`(성충_응애 폴더인데 감염 0 = 숨은 응애).
+  EV2(`varroa_visible=false`)가 로컬에 없어 숨은 응애는 Sample 기반으로 대체. 선정 규칙 = `select_cases`
+  (단위 테스트 `app/tests/unit/test_regression_case_selection.py`).
+- **생성**: `make regression-fixtures` (= `python -m training.data.make_regression_fixtures`). Sample 330장 전수 스캔 +
+  `training/datasets/Sample_derived/`(합성 0마리 3·블러 3) 결정적 생성, seed 42. created_at 없음 → 재실행 byte-identical.
+- **skip 규칙**: two-stage 번들 캐시(`~/.cache/helpbee/two-stage/v0.2.0/`) + Sample 둘 다 있을 때만 실제로 돈다.
+  없으면(CI 등) 모듈 전체 skip. sha256 불일치 시 그 케이스만 경고+skip.
 - **회귀 게이트 트리거** (아래 변경 시 반드시 통과 — 의도된 변경이면 매니페스트 재생성):
-  - 프롬프트 변경 (`prompt_version` bump)
-  - OpenAI 모델 핀 변경
-  - YOLO 가중치 버전 변경
-  - 위험도 가중치(`risk.yaml`) 변경 / 전처리·디코드 변경
-- 허용 오차: `abs(expected - actual) <= 10` (tier 변경은 0 허용)
+  - two-stage 번들(stage1/stage2 ONNX, vdi.yaml τ·Platt·임계) 버전 변경
+  - crop/letterbox/NMS/타일링·품질 게이트·decode 변경
+  - 프롬프트/OpenAI 핀 변경(폴백 경로 — 게이트는 engine="yolo"라 직접 대상 아님)
+- 허용 오차: `|Δvdi_display| ≤ 1.0`, tier 변동 0, `bee_total` 상대 ±10%(기대 0이면 정확히 0).
+- **v1 퇴역**: v0.1.0 단일 스테이지 매니페스트는 `app/tests/fixtures/regression_manifest_v1.json`으로 보존만 한다
+  (v0.1.0은 `AI_ENGINE=yolo-v1` 롤백 경로 전용 — 게이트 대상 아님, 테스트 없음). 롤백을 실제로 쓰게 되면 v1 게이트를 되살릴 것.
 - ⚠️ golden holdout(`training/datasets/golden/`)이 로컬에 없어 fixture/golden 겹침을 정적 검증하지
   못한다. fixture 는 학습에 쓰이지 않으므로 누수 위험은 없으나, golden 확보 후 disjoint 확인 권장.
 

@@ -1,6 +1,6 @@
 # ADR-0001 — HelpBee 자체 YOLO 엔진 아키텍처 (단일 스테이지 v0.1.0 → 2-stage v0.2.0)
 
-> Status: **ACCEPTED** (2026-06-05)
+> Status: **SUPERSEDED** by [ADR-0002](ADR-0002-two-stage-vdi-redesign.md) (2026-09-25) — 원 결정 ACCEPTED 2026-06-05
 > Decision owner: AI팀 lead
 > Supersedes/relates: `docs/superpowers/specs/2026-05-07-yolo-two-stage-design.md` (v0.2.0 설계로 재범위)
 > 검증 출처: 16-에이전트 적대적 검증 워크플로 (재근거화 4 · 주장검증 7 · 다관점 판정 4 · 종합 1), 2026-06-05

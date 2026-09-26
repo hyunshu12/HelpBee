@@ -45,10 +45,10 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   String _planLabel(AppLocalizations l10n, String plan) => switch (plan) {
-        'basic' => l10n.planBasic,
-        'pro' => l10n.planPro,
-        _ => l10n.planFree,
-      };
+    'basic' => l10n.planBasic,
+    'pro' => l10n.planPro,
+    _ => l10n.planFree,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -87,7 +87,10 @@ class SettingsScreen extends ConsumerWidget {
               error: (_, _) => _InfoTile(label: l10n.planLabel, value: '-'),
               data: (s) => Column(
                 children: [
-                  _InfoTile(label: l10n.planLabel, value: _planLabel(l10n, s.plan)),
+                  _InfoTile(
+                    label: l10n.planLabel,
+                    value: _planLabel(l10n, s.plan),
+                  ),
                   _InfoTile(
                     label: l10n.quotaRemaining,
                     value: s.isUnlimited
@@ -113,8 +116,8 @@ class SettingsScreen extends ConsumerWidget {
                   Text(
                     l10n.themeMode,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                   AppSpacing.gapXs,
                   SegmentedButton<ThemeMode>(
@@ -145,7 +148,9 @@ class SettingsScreen extends ConsumerWidget {
 
             const SizedBox(height: AppSpacing.xl),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenH),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenH,
+              ),
               child: SecondaryButton(
                 label: l10n.logout,
                 onPressed: () => _confirmLogout(context, ref),
@@ -175,9 +180,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: AppColors.amberDeep,
-              fontWeight: FontWeight.w700,
-            ),
+          color: AppColors.amberDeep,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

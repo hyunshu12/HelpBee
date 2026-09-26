@@ -1,0 +1,65 @@
+{
+  "tier_confusion": {
+    "low": {
+      "low": 71,
+      "elevated": 9,
+      "high": 0
+    },
+    "elevated": {
+      "low": 9,
+      "elevated": 31,
+      "high": 0
+    },
+    "high": {
+      "low": 0,
+      "elevated": 16,
+      "high": 64
+    }
+  },
+  "tier_agreement": 0.83,
+  "trivial_all_low": 0.4,
+  "healthy_frames_under_3_pct": 1.0,
+  "vdi_mae": 1.9109260677148514,
+  "vdi_mae_by_target": {
+    "0": 0.8453768857084348,
+    "2": 0.8820891070710747,
+    "5": 1.394816662495165,
+    "12": 2.020781094753768,
+    "20": 4.411566588545815
+  },
+  "single_stage_baseline": {
+    "tier_confusion": {
+      "low": {
+        "low": 51,
+        "elevated": 1,
+        "high": 1,
+        "insufficient": 1
+      },
+      "elevated": {
+        "low": 7,
+        "elevated": 18,
+        "high": 0,
+        "insufficient": 0
+      },
+      "high": {
+        "low": 26,
+        "elevated": 19,
+        "high": 26,
+        "insufficient": 0
+      },
+      "insufficient": {
+        "low": 0,
+        "elevated": 0,
+        "high": 0,
+        "insufficient": 0
+      }
+    },
+    "tier_agreement": 0.6333333333333333,
+    "trivial_all_low": 0.36,
+    "healthy_frames_under_3_pct": 0.9629629629629629,
+    "n_images": 150,
+    "weights": "training\\runs\\yolo\\v0.2.0-baseline-single\\weights\\best.pt",
+    "imgsz": 1024,
+    "conf": 0.25
+  }
+}

@@ -7,11 +7,7 @@ import 'package:helpbee/core/theme/app_colors.dart';
 /// Wraps [child]; when [loading] is true, dims the screen and shows a centered
 /// spinner, absorbing pointer events so the underlying UI is non-interactive.
 class LoadingOverlay extends StatelessWidget {
-  const LoadingOverlay({
-    super.key,
-    required this.loading,
-    required this.child,
-  });
+  const LoadingOverlay({super.key, required this.loading, required this.child});
 
   final bool loading;
   final Widget child;

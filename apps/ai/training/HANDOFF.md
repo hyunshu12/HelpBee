@@ -125,6 +125,7 @@ make export-onnx   # imgsz 640
 > **2026-06-08 파이프라인 사전 감사 수정 (PR `feature/ai-v010-pipeline-fixes`)**
 > GPU 학습 전 다중 에이전트 감사로 확정 버그 다수를 수정하고 합성 데이터로 전 구간 드라이런 검증 완료:
 > - **golden leakage 차단**: `make split-data` 가 `golden/manifest.json` 으로 golden 을 풀에서 자동 제외 + train/val ∩ golden = ∅ 격리 assert. (golden → split 순서만 지키면 됨)
+> - ⚠️ (2026-09-23) `golden_holdout.py` 는 `split_manifest.json` 기반 `select_golden` 으로 교체됨 — `training/golden.json`(경로 목록)만 기록하고 `golden/manifest.json`·`data.yaml` 은 더 이상 만들지 않는다 (`python tasks.py golden`).
 > - **golden `data.yaml` 3-class 정합** (이전 nc:2/varroa_mite → bee_normal/bee_with_varroa/bee_other_disease) + `train:` 키 추가
 > - **eval/export imgsz 640** 으로 통일 (이전 Makefile 1280 — 학습과 불일치)
 > - **eval 지표 infestation_rate** (이전 VMIR=varroa/normal) — risk.yaml 정의와 일치, 결과 키 `infestation_rate_mae`

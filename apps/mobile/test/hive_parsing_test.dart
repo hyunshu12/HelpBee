@@ -75,12 +75,12 @@ void main() {
 
   test('Hive value equality holds for identical payloads', () {
     Map<String, dynamic> base() => {
-          'id': 'h1',
-          'userId': 'u1',
-          'name': 'n',
-          'createdAt': '2026-06-16T00:00:00Z',
-          'updatedAt': '2026-06-16T00:00:00Z',
-        };
+      'id': 'h1',
+      'userId': 'u1',
+      'name': 'n',
+      'createdAt': '2026-06-16T00:00:00Z',
+      'updatedAt': '2026-06-16T00:00:00Z',
+    };
     expect(Hive.fromJson(base()), Hive.fromJson(base()));
     expect(Hive.fromJson(base()).hashCode, Hive.fromJson(base()).hashCode);
   });

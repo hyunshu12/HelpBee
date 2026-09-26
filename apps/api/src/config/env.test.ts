@@ -20,6 +20,19 @@ describe('loadEnv', () => {
     expect(env.NODE_ENV).toBe('development');
   });
 
+  it('AI_TIMEOUT_MS_TWO_STAGE defaults to 90s (spec §8 timeout chain) and coerces', () => {
+    expect(loadEnv(valid).AI_TIMEOUT_MS_TWO_STAGE).toBe(90_000);
+    expect(loadEnv({ ...valid, AI_TIMEOUT_MS_TWO_STAGE: '60000' }).AI_TIMEOUT_MS_TWO_STAGE).toBe(60_000);
+  });
+
+  it('PORTFOLIO_MODE defaults false; only "true"/"1" enable it ("false" stays false)', () => {
+    expect(loadEnv(valid).PORTFOLIO_MODE).toBe(false);
+    expect(loadEnv({ ...valid, PORTFOLIO_MODE: 'true' }).PORTFOLIO_MODE).toBe(true);
+    expect(loadEnv({ ...valid, PORTFOLIO_MODE: '1' }).PORTFOLIO_MODE).toBe(true);
+    expect(loadEnv({ ...valid, PORTFOLIO_MODE: 'false' }).PORTFOLIO_MODE).toBe(false);
+    expect(loadEnv({ ...valid, PORTFOLIO_MODE: '' }).PORTFOLIO_MODE).toBe(false);
+  });
+
   it('coerces PORT from string', () => {
     expect(loadEnv({ ...valid, PORT: '4000' }).PORT).toBe(4000);
   });

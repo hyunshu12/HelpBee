@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +38,10 @@ class ReportScreen extends ConsumerWidget {
   /// Backend recommendations (with severity) when present; otherwise fall back
   /// to client-side tier copy so list-sourced rows (which omit them) still show
   /// guidance. Severity for the fallback is derived from the tier.
-  List<RecommendationDto> _recommendations(AppLocalizations l10n, RiskTier tier) {
+  List<RecommendationDto> _recommendations(
+    AppLocalizations l10n,
+    RiskTier tier,
+  ) {
     if (_a.recommendations.isNotEmpty) return _a.recommendations;
     final severity = _severityForTier(tier);
     final copy = recommendationsFor(l10n, tier);
@@ -106,18 +110,25 @@ class ReportScreen extends ConsumerWidget {
                     AppSpacing.lg,
                   ),
                   children: [
-                    Center(
-                      child: RiskGauge(
-                        score: success ? _a.varroaInfectionRisk : null,
-                        tier: tier,
-                        caption: gaugeCaption(l10n, tier),
+                    if (success && tier == RiskTier.insufficient)
+                      _InsufficientCard(l10n: l10n)
+                    else if (success && _a.isTwoStage)
+                      _VdiCard(l10n: l10n, a: _a, tier: tier)
+                    else
+                      Center(
+                        child: RiskGauge(
+                          score: success ? _a.varroaInfectionRisk : null,
+                          tier: tier,
+                          caption: gaugeCaption(l10n, tier),
+                        ),
                       ),
-                    ),
                     AppSpacing.gapLg,
                     Text(
-                      success
-                          ? l10n.reportRiskStageTitle
-                          : l10n.analyzingFailedTitle,
+                      !success
+                          ? l10n.analyzingFailedTitle
+                          : tier == RiskTier.insufficient
+                          ? l10n.reportInsufficientTitle
+                          : l10n.reportRiskStageTitle,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: AppColors.textPrimary,
@@ -131,6 +142,16 @@ class ReportScreen extends ConsumerWidget {
                       whenLabel: _whenLabel(l10n, _a),
                     ),
                     AppSpacing.gapMd,
+                    if (success &&
+                        args.imagePath != null &&
+                        _a.evidence.isNotEmpty) ...[
+                      _EvidenceGallery(
+                        l10n: l10n,
+                        imagePath: args.imagePath!,
+                        evidence: _a.evidence,
+                      ),
+                      AppSpacing.gapMd,
+                    ],
                     if (success && tier != RiskTier.unknown)
                       _RecommendationsCard(items: _recommendations(l10n, tier))
                     else
@@ -524,4 +545,216 @@ String _whenLabel(AppLocalizations l10n, Analysis a) {
   final int h12 = t.hour % 12 == 0 ? 12 : t.hour % 12;
   final String mm = t.minute.toString().padLeft(2, '0');
   return '$day ${am ? l10n.am : l10n.pm} $h12:$mm';
+}
+
+/// v0.2.0 two-stage: VDI(가시 감염 지수) 표시 카드. `vdiDisplay`는 서버가 한 번
+/// 반올림한 문자열이라 그대로 보여준다(재계산·재반올림 금지, spec v2.2 §3).
+class _VdiCard extends StatelessWidget {
+  const _VdiCard({required this.l10n, required this.a, required this.tier});
+
+  final AppLocalizations l10n;
+  final Analysis a;
+  final RiskTier tier;
+
+  String _ci(double v) => v.toStringAsFixed(1);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = riskTierColor(tier);
+    final display = a.vdiDisplay ?? '-';
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            l10n.reportVdiTitle,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          AppSpacing.gapSm,
+          Text(
+            '$display%',
+            key: const Key('vdi-display'),
+            style: theme.textTheme.displayMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          if (a.vdiCiLow != null && a.vdiCiHigh != null)
+            Text(
+              l10n.reportVdiCi(_ci(a.vdiCiLow!), _ci(a.vdiCiHigh!)),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          AppSpacing.gapSm,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              riskTierBadge(l10n, tier),
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          if (a.beeTotal != null) ...[
+            AppSpacing.gapSm,
+            Text(
+              l10n.reportBeeCounts(a.beeInfested ?? 0, a.beeTotal!),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
+          if (a.corrected == false)
+            Text(
+              l10n.reportVdiUncorrected,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 판독 불가(벌 0마리·품질 불량): 게이지 없이 재촬영 안내만.
+class _InsufficientCard extends StatelessWidget {
+  const _InsufficientCard({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _Card(
+      child: Column(
+        children: [
+          const Icon(
+            Icons.photo_camera_back_outlined,
+            size: 56,
+            color: AppColors.tierUnknown,
+          ),
+          AppSpacing.gapSm,
+          Text(
+            l10n.reportInsufficientBody,
+            key: const Key('insufficient-body'),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 감염 의심 벌 크롭 갤러리 — 서버 `evidence[].cropRegion`(원본 픽셀)을 로컬
+/// 원본 사진에서 잘라 그린다(크롭 URL은 없음). 최대 6장.
+class _EvidenceGallery extends StatefulWidget {
+  const _EvidenceGallery({
+    required this.l10n,
+    required this.imagePath,
+    required this.evidence,
+  });
+
+  final AppLocalizations l10n;
+  final String imagePath;
+  final List<Evidence> evidence;
+
+  @override
+  State<_EvidenceGallery> createState() => _EvidenceGalleryState();
+}
+
+class _EvidenceGalleryState extends State<_EvidenceGallery> {
+  ui.Image? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final bytes = await File(widget.imagePath).readAsBytes();
+      final img = await decodeImageFromList(bytes);
+      if (mounted) setState(() => _image = img);
+    } catch (_) {
+      // 로컬 사진을 못 읽으면 갤러리를 숨긴다.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _image;
+    if (img == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final items = widget.evidence.take(6).toList(growable: false);
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.l10n.reportEvidenceTitle,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          AppSpacing.gapSm,
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (_, i) => ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: CustomPaint(
+                    painter: _CropPainter(img, items[i].cropRegion),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CropPainter extends CustomPainter {
+  _CropPainter(this.image, this.region);
+
+  final ui.Image image;
+  final List<double> region; // x1,y1,x2,y2 in original pixels
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final src = Rect.fromLTRB(
+      region[0].clamp(0, image.width.toDouble()),
+      region[1].clamp(0, image.height.toDouble()),
+      region[2].clamp(0, image.width.toDouble()),
+      region[3].clamp(0, image.height.toDouble()),
+    );
+    if (src.isEmpty) return;
+    canvas.drawImageRect(image, src, Offset.zero & size, Paint());
+  }
+
+  @override
+  bool shouldRepaint(_CropPainter old) =>
+      old.image != image || old.region != region;
 }

@@ -23,7 +23,10 @@ export type SubscriptionsDeps = {
   }): Promise<void>;
 };
 
-export function subscriptionsRoutes(deps: SubscriptionsDeps) {
+export function subscriptionsRoutes(
+  deps: SubscriptionsDeps,
+  opts: { portfolioMode?: boolean } = {},
+) {
   const app = new Hono();
 
   // GET /v1/subscriptions/me (auth는 app.ts protectedMount)
@@ -44,7 +47,10 @@ export function subscriptionsRoutes(deps: SubscriptionsDeps) {
   });
 
   // GET /v1/subscriptions/plans (public — app.ts에서 인증 밖 마운트)
-  app.get('/plans', (c) => ok(c, PLAN_CATALOG));
+  // PORTFOLIO_MODE: 카탈로그는 그대로 두고 portfolio 플래그만 추가(클라이언트가 결제/쿼터 UI 숨김).
+  app.get('/plans', (c) =>
+    ok(c, opts.portfolioMode === true ? { ...PLAN_CATALOG, portfolio: true } : PLAN_CATALOG),
+  );
 
   // POST /v1/subscriptions/webhook (서명 가드 통과 후) — MVP inert
   app.post('/webhook', async (c) => {

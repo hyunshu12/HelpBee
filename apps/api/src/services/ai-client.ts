@@ -62,13 +62,63 @@ export function verifyInternalBearer(
 
 export type AiEngine = 'auto' | 'yolo';
 
+/**
+ * 구 계약(safe/watch/danger) + two-stage 계약(low/elevated/high/insufficient, 스펙 v2.2 §3).
+ * tier는 AI가 `vdi_display`에서만 계산 — API는 재반올림/재계산하지 않는다.
+ */
+export type Tier = 'safe' | 'watch' | 'danger' | 'low' | 'elevated' | 'high' | 'insufficient';
+
+/** two-stage 시각 증거 1건 — box/crop_region은 원본 픽셀 [x1,y1,x2,y2], cam은 크롭 기준 2D 히트맵. */
+export type EvidenceItem = {
+  index: number;
+  box: [number, number, number, number];
+  crop_region: [number, number, number, number];
+  p_infested: number;
+  cam: number[][];
+};
+
+/** N장 합산 입력 — 이미지별 원시 카운트(퍼센트 아님). */
+export type BeeCount = { bee_infested: number; bee_total: number };
+
+/** AI POST /aggregate 응답 (app/routers/aggregate.py). tier는 vdi_display 기준 AI 계산. */
+export type AiAggregateResult = {
+  vdi: number;
+  vdi_display: string;
+  vdi_raw: number;
+  sampling_ci95: [number, number];
+  bee_total: number;
+  bee_infested: number;
+  tier: Tier;
+  corrected: boolean;
+};
+
 export type AiAnalysisResult = {
+  /** 이중 출력 기간: AI가 score_mapping(vdi)로 채운 0~100 **점수**(round(vdi) 아님). 새 계약에선 null 가능. */
   risk_score: number | null;
-  tier: string;
+  tier: Tier;
+  tier_legacy?: 'safe' | 'watch' | 'danger' | 'unknown';
+  vdi?: number | null;
+  vdi_display?: string | null;
+  vdi_raw?: number | null;
+  corrected?: boolean;
+  sampling_ci95?: [number, number] | null;
+  bee_total?: number | null;
+  bee_infested?: number | null;
+  bees?: { box: [number, number, number, number]; p_infested: number; infested: boolean }[];
+  /** 시각 증거 top-k (Grad-CAM++ 표시 전용). POST 응답으로만 전달, raw_response 미저장. */
+  evidence?: EvidenceItem[] | null;
+  quality?: {
+    ok: boolean;
+    blur_score: number;
+    exposure_mean: number;
+    px_per_mm_est: number | null;
+  };
   estimated_count?: number | null;
   confidence?: number;
   recommendations: string[];
   model_version: string;
+  /** two-stage 계약에만 존재 — API가 ai_models 행(helpbee-two-stage) 선택에 사용. */
+  model_versions?: { stage1: string; stage2: string; vdi_config: string };
   prompt_version?: string | null;
   latency_ms?: number;
   cost_estimate_usd?: number | null;
@@ -85,9 +135,15 @@ export function createAiClient(cfg: {
   baseURL: string;
   hmacSecret: string;
   http: HttpLike;
+  /** 기본(구 파이프라인) 타임아웃. */
   timeoutMs?: number;
+  /**
+   * engine별 타임아웃 오버라이드. two-stage 파이프라인(≈450 GFLOP/요청)을 타는 engine은
+   * 90s — 타임아웃 체인: 모바일 ≥95s ≥ ai-client 90s ≥ AI 내부 예산 (스펙 §8).
+   */
+  engineTimeoutsMs?: Partial<Record<AiEngine, number>>;
 }) {
-  const timeout = cfg.timeoutMs ?? 30_000;
+  const defaultTimeout = cfg.timeoutMs ?? 30_000;
   return {
     async analyze(input: {
       imageUrl: string;
@@ -95,6 +151,7 @@ export function createAiClient(cfg: {
       requestId: string;
     }): Promise<AiAnalysisResult> {
       const bearer = signInternalBearer(cfg.hmacSecret, { requestId: input.requestId });
+      const timeout = cfg.engineTimeoutsMs?.[input.engine] ?? defaultTimeout;
       try {
         const res = await cfg.http.post(
           '/analyze',
@@ -112,6 +169,32 @@ export function createAiClient(cfg: {
       } catch {
         // 무재시도: 전송/5xx/타임아웃 모두 즉시 AI_UNAVAILABLE (라우트가 graceful 저장 처리)
         throw new AppError('AI_UNAVAILABLE', 'ai service request failed');
+      }
+    },
+
+    /** N장 합산 — 순수 계산이라 빠름(기본 타임아웃). 무재시도, 실패 → AI_UNAVAILABLE(503). */
+    async aggregate(input: {
+      counts: BeeCount[];
+      requestId: string;
+      qualityOk?: boolean;
+    }): Promise<AiAggregateResult> {
+      const bearer = signInternalBearer(cfg.hmacSecret, { requestId: input.requestId });
+      try {
+        const res = await cfg.http.post(
+          '/aggregate',
+          { counts: input.counts, quality_ok: input.qualityOk ?? true },
+          {
+            baseURL: cfg.baseURL,
+            timeout: defaultTimeout,
+            headers: {
+              authorization: `Bearer ${bearer}`,
+              'x-request-id': input.requestId,
+            },
+          },
+        );
+        return res.data as AiAggregateResult;
+      } catch {
+        throw new AppError('AI_UNAVAILABLE', 'ai aggregate request failed');
       }
     },
   };

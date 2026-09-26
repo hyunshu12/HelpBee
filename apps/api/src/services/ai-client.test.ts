@@ -76,4 +76,48 @@ describe('createAiClient.analyze', () => {
     ).rejects.toBeInstanceOf(AppError);
     expect(http.post).toHaveBeenCalledTimes(1); // 재시도 없음
   });
+
+  it('aggregate posts raw counts to /aggregate with signed bearer, no retry', async () => {
+    const data = { vdi: 1.59, vdi_display: '1.6', tier: 'low', bee_total: 940, bee_infested: 10 };
+    const http = { post: vi.fn(async () => ({ data })) };
+    const client = createAiClient({ baseURL: 'http://ai:8000', hmacSecret: SECRET, http });
+    const counts = [
+      { bee_infested: 1, bee_total: 40 },
+      { bee_infested: 9, bee_total: 900 },
+    ];
+    const res = await client.aggregate({ counts, requestId: 'req-agg' });
+    expect(res.bee_total).toBe(940);
+    const [path, body, cfg] = http.post.mock.calls[0] as any;
+    expect(path).toBe('/aggregate');
+    expect(body).toEqual({ counts, quality_ok: true });
+    expect(cfg.headers['x-request-id']).toBe('req-agg');
+    const token = cfg.headers.authorization.slice('Bearer '.length);
+    expect(verifyInternalBearer(SECRET, token).request_id).toBe('req-agg');
+
+    const failing = { post: vi.fn(async () => { throw new Error('ECONNREFUSED'); }) };
+    const c2 = createAiClient({ baseURL: 'http://ai:8000', hmacSecret: SECRET, http: failing });
+    await expect(c2.aggregate({ counts, requestId: 'r' })).rejects.toBeInstanceOf(AppError);
+    expect(failing.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the legacy 30s timeout by default', async () => {
+    const http = { post: vi.fn(async () => ({ data: aiResponse })) };
+    const client = createAiClient({ baseURL: 'http://ai:8000', hmacSecret: SECRET, http });
+    await client.analyze({ imageUrl: 'u', engine: 'yolo', requestId: 'r' });
+    expect((http.post.mock.calls[0] as any)[2].timeout).toBe(30_000);
+  });
+
+  it('applies per-engine timeout for the two-stage path (spec §8: 90s)', async () => {
+    const http = { post: vi.fn(async () => ({ data: aiResponse })) };
+    const client = createAiClient({
+      baseURL: 'http://ai:8000',
+      hmacSecret: SECRET,
+      http,
+      engineTimeoutsMs: { yolo: 90_000 },
+    });
+    await client.analyze({ imageUrl: 'u', engine: 'yolo', requestId: 'r' });
+    await client.analyze({ imageUrl: 'u', engine: 'auto', requestId: 'r' });
+    expect((http.post.mock.calls[0] as any)[2].timeout).toBe(90_000);
+    expect((http.post.mock.calls[1] as any)[2].timeout).toBe(30_000); // 미지정 engine → 기본
+  });
 });

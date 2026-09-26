@@ -39,3 +39,29 @@ export function label(map: Record<string, string>, key: string | null | undefine
   if (!key) return '-';
   return map[key] ?? key;
 }
+
+/**
+ * VDI 표시 문자열 — AI가 한 번만 반올림한 `raw_response.vdi_display`(tier의 근거)를 그대로 쓴다(스펙 §3, 재반올림 금지).
+ * numeric(6,3) 컬럼을 toFixed(1)로 다시 반올림하면 9.950→"9.9"처럼 tier(high)와 모순될 수 있어,
+ * 숫자 컬럼은 vdi_display가 없는 행(구 row 등)의 폴백으로만 쓴다. CI는 tier 근거가 아니므로 toFixed 허용.
+ */
+export function formatVdi(row: {
+  vdi: number | null;
+  vdiCiLow: number | null;
+  vdiCiHigh: number | null;
+  rawResponse: Record<string, unknown> | null;
+}): string {
+  const display = row.rawResponse?.vdi_display;
+  const main =
+    typeof display === 'string' && display !== ''
+      ? display
+      : row.vdi != null
+        ? row.vdi.toFixed(1)
+        : null;
+  if (main == null) return '-';
+  const ci =
+    row.vdiCiLow != null && row.vdiCiHigh != null
+      ? ` (${row.vdiCiLow.toFixed(1)}–${row.vdiCiHigh.toFixed(1)}%)`
+      : '';
+  return `${main}%${ci}`;
+}

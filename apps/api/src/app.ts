@@ -47,6 +47,7 @@ import {
 import { getDummyHash, hashPassword, verifyPassword } from './services/password-service';
 import * as quota from './services/quota-service';
 import * as s3 from './services/s3-client';
+import { toNewAnalysis } from './services/analysis-write';
 
 export function createApp() {
   // pragma: no cover - 통합(실 인프라) 대상
@@ -61,6 +62,12 @@ export function createApp() {
       '[net] TRUSTED_PROXY=xff in production — client IP is spoofable; set TRUSTED_PROXY=cloudflare behind Cloudflare',
     );
   }
+  if (env.NODE_ENV === 'production' && env.PORTFOLIO_MODE) {
+    logger.warn(
+      {},
+      '[portfolio] PORTFOLIO_MODE=true in production — quota/email gate bypassed, engine forced to yolo',
+    );
+  }
   const redis = new Redis(env.REDIS_URL);
   const s3client = new S3Client({ region: env.AWS_REGION });
   const http = axios.create({ baseURL: env.AI_BASE_URL });
@@ -68,6 +75,8 @@ export function createApp() {
     baseURL: env.AI_BASE_URL,
     hmacSecret: env.AI_INTERNAL_HMAC_SECRET,
     http,
+    // yolo(무료)·auto(유료, YOLO 1차) 모두 AI 서버의 two-stage 파이프라인을 탄다 (스펙 §8).
+    engineTimeoutsMs: { yolo: env.AI_TIMEOUT_MS_TWO_STAGE, auto: env.AI_TIMEOUT_MS_TWO_STAGE },
   });
   const bucket = env.S3_IMAGES_BUCKET;
 
@@ -105,24 +114,24 @@ export function createApp() {
     },
     refundQuota: (userId) => quota.refund(redis, userId),
     presignGet: (objectKey) => s3.presignGet(s3client, bucket, objectKey),
-    resolveModelId: async (provider) =>
-      (await queries.models.resolveActiveModel(db, provider))?.id,
+    resolveModelId: async (provider, pipeline) =>
+      (await queries.models.resolveActiveModel(db, provider, pipeline))?.id,
     analyze: (input) => aiClient.analyze(input),
+    countsByIds: (ids, userId) => queries.analyses.getCountsByIdsForUser(db, ids, userId),
+    aggregate: (counts, requestId) => aiClient.aggregate({ counts, requestId }),
     storeAnalysis: (input) =>
       queries.analyses.createSingleAnalysis(db, {
         hiveId: input.hiveId,
         imageId: input.imageId,
         modelId: input.modelId,
-        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
-        analysis: input.analysis as never,
+        analysis: toNewAnalysis(input.analysis),
         recommendations: input.recommendations,
       }),
     retryAnalysis: (input) =>
       queries.analyses.retryFailedAnalysis(db, {
         analysisId: input.analysisId,
         modelId: input.modelId,
-        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
-        analysis: input.analysis as never,
+        analysis: toNewAnalysis(input.analysis),
         recommendations: input.recommendations,
       }),
     listForUser: (hiveId, userId, opts) =>
@@ -319,7 +328,7 @@ export function createApp() {
       enabled: env.SUBSCRIPTION_WEBHOOK_ENABLED,
     }),
   );
-  subsApp.route('/', subscriptionsRoutes(subscriptionsDeps));
+  subsApp.route('/', subscriptionsRoutes(subscriptionsDeps, { portfolioMode: env.PORTFOLIO_MODE }));
 
   // Inquiries: 익명 공개 라우트. 남용 방지로 5회/시간/IP(브루트포스/스팸 방어). fail-closed.
   const inquiriesApp = new Hono();
@@ -349,7 +358,7 @@ export function createApp() {
   app.route('/v1/inquiries', inquiriesApp);
   app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
-  app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
+  app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps, { portfolioMode: env.PORTFOLIO_MODE })));
   app.route('/v1/admin', adminApp);
 
   return app;

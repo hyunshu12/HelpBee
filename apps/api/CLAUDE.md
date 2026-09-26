@@ -200,6 +200,7 @@ app.use('/admin/*', requireAuth(), requireRole('admin'));
 | POST | `/v1/analyses` | 🔐 | 이미지 분석 요청. quota 검사 후 AI 위임 |
 | GET  | `/v1/analyses` | 🔐 | 내 분석 이력(pagination) |
 | GET  | `/v1/analyses/:id` | 🔐 | 단일 결과(dual-result 모드 시 두 엔진 응답) |
+| GET  | `/v1/analyses/aggregate?ids=a,b` | 🔐 | N장 합산(1~10, 내 소유·success). Σk/Σn 원시 카운트를 AI `POST /aggregate`(vdi.aggregate 단일 소스)로 재계산 — 퍼센트 평균 금지. 구 row(beeTotal null)·insufficient row(tier insufficient/벌 0)는 제외→`excluded{legacy,insufficient}`, 사용 가능 row 0이면 400 `VALIDATION_FAILED`, 비소유 섞이면 404 |
 
 ### Images (`routes/images.ts`)
 | Method | Path | Auth | 설명 |
@@ -235,11 +236,14 @@ AI 추론은 별도 서비스(`services/ai`, FastAPI/Triton 등)에 위임. back
 ```
 
 **클라이언트 설정**:
-- `timeout: 30_000` (30초)
+- `timeout: 30_000` (30초) 기본 — **two-stage 경로(yolo·auto)는 `AI_TIMEOUT_MS_TWO_STAGE`(기본 90000)** 로 오버라이드(`engineTimeoutsMs`). 체인: 모바일 ≥95s ≥ 90s ≥ AI 내부 예산 (two-stage 스펙 §8)
+- **실패 판정은 `!result || engine_used === null` 뿐** — two-stage 계약은 `risk_score` null 가능. tier 매핑: safe/low→healthy·info, watch/elevated→warning·warn, danger/high→critical·danger, insufficient→null·info. `model_versions` 있으면 `ai_models('yolo','helpbee-two-stage')` 행 사용
 - **재시도 2회** — 지수 백오프(500ms → 1500ms), 5xx/네트워크 에러만. 4xx는 재시도 안 함.
 - **engine=auto fallback** — 기본 엔진 실패 시 fallback 엔진으로 자동 재시도. 양쪽 다 실패해야 503.
 - **dual-result 모드** — `?engine=dual` 파라미터 시 두 엔진 응답을 병렬 호출하고 둘 다 반환. 응답 스키마: `{ primary, secondary, agreement }`.
 - 모든 호출은 `request-id` 헤더 propagation.
+- **two-stage 계약 (스펙 v2.2 §3·§8, ADR-0002)**: AI 응답의 `vdi`·`vdi_display`·`tier`·`corrected`·`bee_total`·`bee_infested`·`sampling_ci95`·`quality`·`model_versions`를 정규화해 `raw_response`에 보존(`bees`/`evidence` 제외)하고 POST/GET 응답에 `vdi, vdiDisplay, tier, corrected, beeTotal, beeInfested, samplingCi95, quality, modelVersions`로 투영. `evidence[]`(`{index, box, crop_region, p_infested, cam}`)는 **POST 응답에만 pass-through**(미저장). **이중 출력 기간**: `risk_score`(= AI `score_mapping(vdi)` 점수)는 `varroaInfectionRisk`로 계속 저장·반환(`tier_legacy`는 AI 응답 타입에만 존재) — 구 필드 제거(계획 2 Task 8)는 develop 머지 + 1회 배포 후.
+- **N장 합산** `aggregate()` → AI `POST /aggregate`(기본 타임아웃, 무재시도, 실패 시 503 `AI_UNAVAILABLE`). 원시 카운트 Σk/Σn만 전달 — 퍼센트 평균 금지.
 
 **위치**: `services/ai-client.ts`. AI 응답 정규화는 여기서 수행하고 라우트는 그대로 envelope 처리.
 
@@ -327,6 +331,8 @@ pnpm --filter api dev      # tsx watch + .env.local 로드
 ```
 
 기본 포트: `3001` (`src/index.ts`의 `PORT ?? 3001`). health check: `GET http://localhost:3001/health`. Bruno 환경(`bruno/environments/local.bru`)도 동일 포트로 맞출 것.
+
+**two-stage/포트폴리오 env (`config/env.ts`)**: `AI_TIMEOUT_MS_TWO_STAGE`(기본 90000, yolo·auto 경로 ai-client 타임아웃) · `PORTFOLIO_MODE`(`true`/`1`만 활성, 기본 false — `POST /v1/analyses`의 quota reserve/refund·이메일 검증 게이트 우회 + engine 항상 `yolo`, `GET /v1/subscriptions/plans`에 `portfolio: true`. production+true면 부팅 경고). confirm 재인코딩은 치수 유지 + JPEG q95(mozjpeg), EXIF strip·50MP 가드 유지 — 다운스케일은 모바일 책임.
 
 **이메일 인증 env (P1-4, `config/env.ts`)**: `EMAIL_PROVIDER`(`console`|`resend`, 기본 `console`) · `RESEND_API_KEY`(resend일 때만 필수 — zod refine, 빈 문자열=미설정) · `EMAIL_FROM`(기본 `HelpBee <onboarding@resend.dev>`) · `EMAIL_VERIFY_BASE_URL`(기본 `http://localhost:3001`). 로컬은 `console`로 두면 인증 URL이 pino 로그로 찍힌다(`EMAIL_PROVIDER=console pnpm dev`). production+console이면 부팅 시 경고 로그. 미검증 Resend 도메인은 **계정 소유자 주소로만** 발송 가능(그 외는 403). 토큰은 stateless HMAC(JWT_SECRET, purpose `email-verify:`) — DB 테이블/마이그레이션 없음.
 

@@ -1,0 +1,30 @@
+# v0.2.0 Stage-2 — 벌 단위 응애 감염 이진 분류기. 기본값 = v0.2.0 최종(E3: ResNet-18 @320, cal-A 선택, Youden τ — 스펙 v2.2).
+# 스펙 §6 대비 이탈(의도): batch 128→64 (8GB VRAM), '그림자' 증강 미구현 (train_stage2.augment 참조).
+# 실행: python tasks.py train-stage2 [--degrade none|90] [--set key=value ...]
+#       python tasks.py recalibrate <run_dir> [--set tau_policy=fpr ...]   (학습 없이 Platt·τ 만 재선택)
+#       python tasks.py finalize-stage2 <run_dir> --ckpt last.pt --out <out_dir>   (체크포인트 → 보정·ONNX, <out_dir> 안에만)
+# 산출물: <project>/<name>/{best.pt,stage2.onnx,metadata.json,resolved_config.json},
+#         training/configs/vdi.yaml, training/eval_history/v0.2.0-stage2.json
+epochs: 50
+patience: 10
+batch: 64          # 스펙 §6 은 128 — RTX 4060 8GB VRAM 여유 때문에 64 (의도적 이탈)
+# eval_batch: 32   # (생략 = batch) 비학습 로더 배치 — 에폭별 val/cal-A·학습 후 보정·recalibrate·finalize (SWA BN 재계산은 batch).
+                   # AMP 학습 후 fp32 보정이 OOM 이면 --set eval_batch=32 처럼 낮춘다 (학습 로더는 batch 그대로)
+lr: 3.0e-4
+weight_decay: 0.01
+label_smoothing: 0.05
+degrade: none
+size_jitter: [0.7, 1.3]   # 학습 전용 크기 지터 (크롭 겉보기 크기 지름길 차단 — shakedown size_only_auroc 0.82~0.85)
+img_size: 320      # 모델 입력(정사각). crops 는 make_crops --crop-size 320 산출물(crops-320). v2 는 224
+backbone: resnet18 # resnet18 (v0.2.0 최종 E3, featmap 512ch) | shufflenet_v2_x1_0 (v2, 1024ch)
+                   # v0.2.1 실험: resnet34 (512ch) | resnet50 (2048ch) | efficientnet_b0 (1280ch) — --set backbone=... 로만
+select_metric: cal_a_auroc     # cal_a_auroc (71667 cal-A 만) | val_auroc (v2: 71667+VarroaDataset val) | last (조기 종료 없이 마지막 epoch). cal-B 는 선택에 절대 안 씀
+swa_epochs: 0     # >0 = 마지막 k epoch 가중치 등가 평균(SWA)+BN 재계산(학습 분포: 증강+가중 샘플러) → best.pt, 조기 종료 해제 (0 = 끔, v0.2.0 재현 경로)
+tau_policy: youden # youden = cal-A FPR ≤ fpr_cap 안에서 TPR−FPR 최대 | fpr = cal-A 음성 FPR 1% (target_fpr) 분위수 (구 동작)
+fpr_cap: 0.01      # Youden τ 의 cal-A FPR 상한 (스펙 v2.2 정정: 0.10→0.01 — colony 간 FPR 편차로 cap≥2%는 건강 벌통 오경보, 2026-09-25 스윕)
+seed: 42
+crops: training/crops-320
+project: training/runs/stage2
+name: v0.2.0-stage2
+workers: 4        # DataLoader 워커 (모든 플랫폼). CropDataset 이 모듈 최상위 클래스라 Windows spawn 피클 가능 (구 0 = epoch 7.5분)
+amp: false        # 혼합 정밀도(CUDA fp16 autocast+GradScaler) opt-in — resnet50@320 은 8GB 에 --set amp=true. false = v0.2.0 재현 경로

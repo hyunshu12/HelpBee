@@ -2,7 +2,9 @@
  * S3 스토리지 클라이언트 (backend-design §7 업로드, §3.8 SSRF, §13 업로드 보안).
  * - presignPut/presignGet: presigned URL 발급(서버는 바이너리 프록시 X).
  * - validateAndStrip: 매직넘버 sniff(jpeg/png/webp) + 10MB + decompression bomb 가드
- *   (sharp limitInputPixels) + EXIF/메타 strip(rotate 후 재인코딩) → polyglot 무력화.
+ *   (sharp limitInputPixels 50MP) + EXIF/메타 strip(rotate 후 재인코딩) → polyglot 무력화.
+ *   two-stage 패스스루(스펙 §8): **치수 유지(리사이즈 없음)** + JPEG q95(mozjpeg) — 응애(1~2mm)
+ *   판독 해상도 보존. 다운스케일은 모바일 책임.
  * - headObject/deleteObject: confirm/검증실패 정리.
  * 키 패턴: images/{userId}/{yyyy}/{mm}/{uuid}.{ext}.
  */
@@ -74,7 +76,7 @@ export async function validateAndStrip(bytes: Buffer): Promise<ValidatedImage> {
   try {
     const out = await sharp(bytes, { limitInputPixels: MAX_PIXELS })
       .rotate() // EXIF orientation 적용
-      .jpeg({ quality: 85 }) // 재인코딩 → 메타데이터/polyglot 제거
+      .jpeg({ quality: 95, mozjpeg: true }) // 재인코딩(치수 유지) → 메타데이터/polyglot 제거
       .toBuffer({ resolveWithObject: true });
     return {
       jpeg: out.data,

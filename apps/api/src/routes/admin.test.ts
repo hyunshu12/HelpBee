@@ -117,6 +117,11 @@ describe('GET /admin/analyses/:imageId/dual', () => {
       varroaInfectionRisk: 35,
       overallHealth: 'warning',
       rawResponse: { boxes: 7, score: 0.8, gps: '37.5,127', source_url: 'https://x' },
+      vdi: null,
+      vdiCiLow: null,
+      vdiCiHigh: null,
+      beeTotal: null,
+      beeInfested: null,
       ...over,
     };
   }
@@ -131,6 +136,42 @@ describe('GET /admin/analyses/:imageId/dual', () => {
     expect(data.secondary).toBeNull();
     expect(data.agreement).toBeNull();
     expect(data.primary.rawResponse).toEqual({ boxes: 7, score: 0.8 }); // gps/source_url 제거
+  });
+
+  it('200 two-stage row → vdi 컬럼 + raw 화이트리스트(vdi_display/tier/nested raw_payload.boxes)', async () => {
+    const deps = makeDeps({
+      getDualByImage: vi.fn(async () => [
+        dualRow({
+          modelName: 'helpbee-two-stage',
+          modelVersion: '0.2.0',
+          vdi: 4.2,
+          vdiCiLow: 2.4,
+          vdiCiHigh: 6.9,
+          beeTotal: 310,
+          beeInfested: 14,
+          rawResponse: {
+            engine_used: 'yolo',
+            tier: 'elevated',
+            vdi_display: '4.2',
+            bee_total: 310,
+            quality: { ok: true },
+            raw_payload: { boxes: [[1, 2, 3, 4]], sampled: false, crops_url: 'https://x' },
+            evidence_url: 'https://y',
+          },
+        }),
+      ]),
+    });
+    const { data } = await (await makeApp(deps).request(`/analyses/${IMG}/dual`)).json();
+    expect(data.primary.vdi).toBe(4.2);
+    expect(data.primary.beeTotal).toBe(310);
+    expect(data.primary.rawResponse).toEqual({
+      engine_used: 'yolo',
+      tier: 'elevated',
+      vdi_display: '4.2',
+      bee_total: 310,
+      quality: { ok: true },
+      raw_payload: { boxes: [[1, 2, 3, 4]], sampled: false },
+    });
   });
 
   it('200 dual → agreement(healthMatch/riskDiff)', async () => {

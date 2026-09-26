@@ -290,6 +290,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String vdiWithTier(String vdi, String tier) {
+    return '$vdi% ($tier)';
+  }
+
+  @override
   String get hiveLocationLabel => '위치(위도, 경도)';
 
   @override
@@ -327,6 +332,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get badgeUnknown => '진단 필요';
+
+  @override
+  String get badgeInsufficient => '판독 불가';
 
   @override
   String quotaBanner(int count) {
@@ -441,6 +449,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tierSafe => '안전';
 
   @override
+  String get tierInsufficient => '판독 불가';
+
+  @override
   String get tierWatch => '주의';
 
   @override
@@ -504,6 +515,31 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportTitle => '진단 결과 레포트';
 
   @override
+  String get reportVdiTitle => '가시 감염 지수 (VDI)';
+
+  @override
+  String reportVdiCi(String lo, String hi) {
+    return '95% 범위 $lo%–$hi%';
+  }
+
+  @override
+  String reportBeeCounts(int infested, int total) {
+    return '감염 의심 $infested마리 / 검출 $total마리';
+  }
+
+  @override
+  String get reportVdiUncorrected => '보정 없이 산출된 값이에요';
+
+  @override
+  String get reportEvidenceTitle => '감염 의심 벌';
+
+  @override
+  String get reportInsufficientTitle => '이 사진으로는 판독하지 못했어요';
+
+  @override
+  String get reportInsufficientBody => '벌이 보이도록 소비판을 가까이서, 흔들리지 않게 다시 촬영해 주세요.';
+
+  @override
   String get reportRiskStageTitle => '응애 감염 위험 단계';
 
   @override
@@ -532,6 +568,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get gaugeCaptionSafe => '양호 수준';
 
   @override
+  String get gaugeCaptionInsufficient => '판독 불가';
+
+  @override
   String get gaugeCaptionWatch => '주의 수준';
 
   @override
@@ -539,6 +578,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get gaugeCaptionUnknown => '측정 불가';
+
+  @override
+  String get recInsufficient1 => '벌이 보이도록 소비판을 가까이서 다시 촬영해 주세요.';
 
   @override
   String get recSafe1 => '현재 응애 위험은 낮아요. 정기 점검을 유지하세요';

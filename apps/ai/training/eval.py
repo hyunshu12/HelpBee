@@ -1,26 +1,23 @@
 """
-Golden holdout 평가 — 모델 버전 비교용.
+Stage-1(성충 1-class `bee`) golden 평가 — 모델 버전 비교 + 스펙 §7 Stage-1 게이트.
 
-Usage:
+Usage (apps/ai 에서):
     python -m training.eval \\
-        --weights runs/yolo/v0.1.0-baseline/weights/best.pt \\
-        --golden training/datasets/golden/data.yaml \\
-        --imgsz 640
+        --weights training/runs/yolo/v0.2.0-stage1/weights/best.pt \\
+        --golden training/golden.json \\
+        --label-root <aihub_to_yolo --mapping adult1 --manifest 산출>/labels/all \\
+        [--imgsz 1024] [--output training/eval_history/v0.2.0-stage1.json]
 
-⚠️ imgsz 는 학습값(yolo.yaml=640)과 반드시 일치해야 한다. 다른 해상도로 평가하면
-   mAP/recall 이 train 분포와 달라져 회귀 게이트 비교가 무의미해진다.
+golden.json (golden_holdout.py 산출) = {"varroa": [이미지 경로], "normal": [이미지 경로]} 두 목록을 합쳐
+1-class 검출 평가 셋으로 쓴다. 라벨은 manifest 모드(이미지 미복사) 라벨 루트에서
+yolo_list_dataset.label_path_for 규칙으로 찾는다 (patch_label_lookup).
 
-출력 (콘솔 + JSON):
-    - mAP@0.5
-    - mAP@0.5:0.95 (엄격)
-    - Precision, Recall (전체 + 클래스별)
-    - Recall@varroa (양봉가 입장 핵심: 응애 놓침 = false negative 비율)
-    - infestation_rate MAE (이미지별 추정 vs 라벨 감염률 평균 절대 오차; risk.yaml 정의)
-    - Confusion matrix (저장: weights와 같은 디렉토리)
+⚠️ imgsz 는 학습값(stage1.yaml=1024)과 일치해야 한다.
+mAP 는 conf=0.001 로 계산한다 (PR 곡선 전 구간 — 높은 conf 로 자르면 mAP 가 과소평가된다).
+recall 은 Ultralytics 가 보고하는 max-F1 지점의 `bee` recall.
 
-회귀 게이트 (apps/ai/CLAUDE.md §13):
-    - 새 버전이 이전 버전 대비 mAP 동등 이상이어야 PR merge.
-    - JSON 결과를 git에 커밋해 비교 추적 (training/eval_history/v0.X.Y.json).
+게이트 (스펙 §7 Stage-1): mAP@0.5 ≥ 0.85 AND bee recall ≥ 0.90. 미달 시 종료코드 1 (JSON 은 항상 기록).
+출력 JSON: {weights, golden, n_images, imgsz, conf, iou, mAP@0.5, mAP@0.5:0.95, precision, recall, gate}.
 """
 
 from __future__ import annotations
@@ -28,42 +25,52 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from collections import Counter, defaultdict
+import sys
+import tempfile
 from pathlib import Path
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
+MIN_MAP50 = 0.85
+MIN_RECALL = 0.90
 
-def compute_infestation_rate(
-    label_path: Path, varroa_id: int = 1, normal_id: int = 0, other_id: int = 2
-) -> float | None:
-    """라벨 파일 → infestation_rate(%) = bee_with_varroa 인스턴스 / 전체 벌 인스턴스 * 100.
 
-    risk.yaml / AIHUB_71667.md §10 의 단일 정의. 71667 은 응애 자체 bbox 가 없어(Q3=B)
-    표준 VMIR(mites per 100 bees)을 직접 계산할 수 없으므로 infestation_rate 를 쓴다.
-    분모 = bee_normal + bee_with_varroa + bee_other_disease (다른 질병도 '벌'로 카운트).
-    """
-    if not label_path.exists():
-        return None
-    counts: Counter = Counter()
-    for line in label_path.read_text().splitlines():
-        if line.strip():
-            counts[int(line.split()[0])] += 1
-    total_bees = counts.get(normal_id, 0) + counts.get(varroa_id, 0) + counts.get(other_id, 0)
-    if total_bees == 0:
-        return None
-    return counts.get(varroa_id, 0) / total_bees * 100
+def golden_images(golden: Path) -> list[str]:
+    g = json.loads(Path(golden).read_text(encoding="utf-8"))
+    return sorted({*g.get("varroa", []), *g.get("normal", [])})
+
+
+def write_golden_data_yaml(images: list[str], out_dir: Path) -> Path:
+    """golden 이미지 목록 → Ultralytics 1-class data yaml (train/val 모두 같은 목록 — val 만 쓰임)."""
+    out_dir = Path(out_dir)
+    (out_dir / "golden.txt").write_text("".join(f"{i}\n" for i in images), encoding="utf-8")
+    data = {"path": str(out_dir.resolve()), "train": "golden.txt", "val": "golden.txt", "nc": 1, "names": ["bee"]}
+    path = out_dir / "golden_data.yaml"
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def stage1_gate(map50: float, recall: float, min_map50: float = MIN_MAP50, min_recall: float = MIN_RECALL) -> dict:
+    ok_map, ok_rec = map50 >= min_map50, recall >= min_recall
+    return {"min_map50": min_map50, "min_recall": min_recall, "map50_ok": ok_map, "recall_ok": ok_rec,
+            "pass": ok_map and ok_rec}
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     p = argparse.ArgumentParser()
-    p.add_argument("--weights", type=Path, required=True, help="best.pt 경로")
-    p.add_argument("--golden", type=Path, required=True, help="golden data.yaml")
-    p.add_argument("--imgsz", type=int, default=640)  # 학습(yolo.yaml)과 일치 필수
-    p.add_argument("--conf", type=float, default=0.25)
-    p.add_argument("--iou", type=float, default=0.5)
+    p.add_argument("--weights", type=Path, required=True, help="Stage-1 best.pt 경로")
+    p.add_argument("--golden", type=Path, default=Path("training/golden.json"), help="golden_holdout.py 산출 JSON")
+    p.add_argument("--label-root", dest="label_root", type=Path, required=True,
+                   help="aihub_to_yolo --mapping adult1 --manifest 산출 labels/all")
+    p.add_argument("--imgsz", type=int, default=1024)  # 학습(stage1.yaml)과 일치 필수
+    p.add_argument("--conf", type=float, default=0.001)  # mAP 계산용 — 올리지 말 것
+    p.add_argument("--iou", type=float, default=0.7)  # Ultralytics val 기본값
+    p.add_argument("--min-map50", dest="min_map50", type=float, default=MIN_MAP50)
+    p.add_argument("--min-recall", dest="min_recall", type=float, default=MIN_RECALL)
     p.add_argument(
         "--output",
         type=Path,
@@ -75,102 +82,58 @@ def main():
     if not args.weights.exists():
         raise SystemExit(f"weights 없음: {args.weights}")
     if not args.golden.exists():
-        raise SystemExit(f"golden data.yaml 없음: {args.golden}")
+        raise SystemExit(f"golden.json 없음: {args.golden}")
+    images = golden_images(args.golden)
+    if not images:
+        raise SystemExit(f"golden.json 이 비어 있음: {args.golden}")
 
     from ultralytics import YOLO  # type: ignore
 
+    from training.data.yolo_list_dataset import patch_label_lookup
+
+    patch_label_lookup(args.label_root)
     model = YOLO(str(args.weights))
 
-    # ===== 1. Ultralytics val: mAP, P, R 자동 =====
-    logger.info(f"=== mAP 평가 시작 (imgsz={args.imgsz}) ===")
-    metrics = model.val(
-        data=str(args.golden),
-        imgsz=args.imgsz,
-        conf=args.conf,
-        iou=args.iou,
-        save_json=True,
-        plots=True,
-    )
+    with tempfile.TemporaryDirectory() as td:
+        data_yaml = write_golden_data_yaml(images, Path(td))
+        logger.info(f"=== golden mAP 평가 (n={len(images)}, imgsz={args.imgsz}, conf={args.conf}) ===")
+        metrics = model.val(
+            data=str(data_yaml),
+            imgsz=args.imgsz,
+            conf=args.conf,
+            iou=args.iou,
+            max_det=1500,
+            split="val",
+            plots=False,
+        )
 
-    map50 = float(metrics.box.map50)  # mAP@0.5
-    map5095 = float(metrics.box.map)  # mAP@0.5:0.95
-    p_per_class = list(map(float, metrics.box.p))  # precision per class
-    r_per_class = list(map(float, metrics.box.r))  # recall per class
-
-    # 클래스 인덱스 → 이름 (data.yaml의 names)
-    import yaml as _yaml
-
-    data_cfg = _yaml.safe_load(args.golden.read_text())
-    names: dict[int, str] = (
-        data_cfg["names"]
-        if isinstance(data_cfg["names"], dict)
-        else {i: n for i, n in enumerate(data_cfg["names"])}
-    )
-
-    per_class = {}
-    for idx, cls_name in names.items():
-        per_class[cls_name] = {
-            "precision": p_per_class[idx] if idx < len(p_per_class) else None,
-            "recall": r_per_class[idx] if idx < len(r_per_class) else None,
-        }
-
-    # ===== 2. infestation_rate MAE — golden val 셋에서 이미지별 비교 =====
-    logger.info("=== infestation_rate MAE 계산 ===")
-    golden_root = args.golden.parent
-    img_dir = golden_root / "images" / "val"
-    lbl_dir = golden_root / "labels" / "val"
-
-    rate_diffs: list[float] = []
-    if img_dir.exists():
-        # 모델 추론 + 라벨 infestation_rate 비교 (분모 = 전체 벌 인스턴스)
-        for img_path in sorted(img_dir.iterdir()):
-            if not img_path.is_file():
-                continue
-            lbl_path = lbl_dir / img_path.with_suffix(".txt").name
-            label_rate = compute_infestation_rate(lbl_path)
-            if label_rate is None:
-                continue
-            preds = model.predict(
-                source=str(img_path), imgsz=args.imgsz, conf=args.conf, verbose=False
-            )
-            if not preds:
-                continue
-            cls_tensor = preds[0].boxes.cls.cpu().numpy() if preds[0].boxes else []
-            counts = Counter(int(c) for c in cls_tensor)
-            normal_n = counts.get(0, 0)
-            varroa_n = counts.get(1, 0)
-            other_n = counts.get(2, 0)
-            total_n = normal_n + varroa_n + other_n
-            pred_rate = (varroa_n / total_n) * 100 if total_n > 0 else 0.0
-            rate_diffs.append(abs(pred_rate - label_rate))
-
-    rate_mae = sum(rate_diffs) / len(rate_diffs) if rate_diffs else None
-
-    # ===== 3. 결과 요약 =====
+    map50 = float(metrics.box.map50)
+    recall = float(metrics.box.r[0]) if len(metrics.box.r) else 0.0
     result = {
         "weights": str(args.weights),
         "golden": str(args.golden),
+        "n_images": len(images),
         "imgsz": args.imgsz,
+        "conf": args.conf,
+        "iou": args.iou,
         "mAP@0.5": round(map50, 4),
-        "mAP@0.5:0.95": round(map5095, 4),
-        "per_class": per_class,
-        "varroa_recall": per_class.get("bee_with_varroa", {}).get("recall"),
-        "infestation_rate_mae": round(rate_mae, 3) if rate_mae is not None else None,
-        "rate_n_images": len(rate_diffs),
+        "mAP@0.5:0.95": round(float(metrics.box.map), 4),
+        "precision": round(float(metrics.box.p[0]), 4) if len(metrics.box.p) else None,
+        "recall": round(recall, 4),
+        "gate": stage1_gate(map50, recall, args.min_map50, args.min_recall),
     }
 
     out_path = args.output or args.weights.parent / "eval_golden.json"
-    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("\n===== Golden Eval =====")
+    print("\n===== Stage-1 Golden Eval =====")
     for k, v in result.items():
-        if k == "per_class":
-            print(f"  per_class:")
-            for cls, m in v.items():
-                print(f"    {cls}: P={m['precision']}, R={m['recall']}")
-        else:
-            print(f"  {k}: {v}")
+        print(f"  {k}: {v}")
     print(f"\n결과 JSON: {out_path}")
+    if not result["gate"]["pass"]:
+        print(f"게이트 FAIL: mAP@0.5 ≥ {args.min_map50} AND recall ≥ {args.min_recall}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

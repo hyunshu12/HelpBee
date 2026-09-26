@@ -1,0 +1,42 @@
+{
+  "22": {
+    "recall": 0.34545454545454546,
+    "specificity": 0.9943422913719944,
+    "n_pos": 110,
+    "n_neg": 707
+  },
+  "15": {
+    "recall": 0.33636363636363636,
+    "specificity": 0.9957567185289957,
+    "n_pos": 110,
+    "n_neg": 707
+  },
+  "12": {
+    "recall": 0.3181818181818182,
+    "specificity": 0.9900990099009901,
+    "n_pos": 110,
+    "n_neg": 707
+  },
+  "9": {
+    "recall": 0.2818181818181818,
+    "specificity": 0.9915134370579916,
+    "n_pos": 110,
+    "n_neg": 707
+  },
+  "_meta": {
+    "weights": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\best.pt",
+    "split": "golden",
+    "n": 817,
+    "native_px_per_mm": 22.0,
+    "tau": 0.6390129125617522,
+    "platt": {
+      "a": 0.7148284816990116,
+      "b": -0.7103914061976415
+    },
+    "seed": 42,
+    "reference": "22",
+    "backbone": "resnet18",
+    "img_size": 320,
+    "collapse_px_per_mm": null
+  }
+}

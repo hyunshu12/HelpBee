@@ -1,0 +1,105 @@
+{
+  "version": "v0.2.0-stage2",
+  "model": "shufflenet_v2_x1_0",
+  "degrade": "none",
+  "best_epoch": 0,
+  "val_auroc": 0.9572085855745587,
+  "platt": {
+    "a": 0.3524116771827703,
+    "b": -3.243001830962844
+  },
+  "tau": 0.12569668168791742,
+  "target_fpr": 0.01,
+  "cal_b": {
+    "tpr": 0.017241379310344827,
+    "fpr": 0.0006272541947624275,
+    "corrected": false
+  },
+  "auroc": {
+    "cal_a": 0.698724341337734,
+    "cal_b": 0.7217884314859976
+  },
+  "ece15": {
+    "cal_a": 0.003929294658638136,
+    "cal_b": 0.011011300119630559,
+    "cal_b_uncalibrated": 0.08264379427007754
+  },
+  "counts": {
+    "train": {
+      "n": 16620,
+      "pos": 5687
+    },
+    "val": {
+      "n": 2047,
+      "pos": 456
+    },
+    "cal_a": {
+      "n": 3352,
+      "pos": 113
+    },
+    "cal_b": {
+      "n": 12812,
+      "pos": 58
+    }
+  },
+  "history": [
+    {
+      "epoch": 0,
+      "train_loss": 0.3873134603486558,
+      "val_auroc": 0.9572085855745587
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.2037580098424639,
+      "val_auroc": 0.9536854786242791
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1724944734320217,
+      "val_auroc": 0.9544036080143792
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.15809859387202613,
+      "val_auroc": 0.9559652982235601
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.15164160472430777,
+      "val_auroc": 0.9555807337325085
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.14071412237799766,
+      "val_auroc": 0.9483842777906425
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.13632821766335992,
+      "val_auroc": 0.9522643818849449
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.13292316278320482,
+      "val_auroc": 0.9502106145313
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.1333293289118752,
+      "val_auroc": 0.9543319329121043
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.1300233929026081,
+      "val_auroc": 0.9494277018756823
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.13234992492152917,
+      "val_auroc": 0.9445165790025031
+    }
+  ],
+  "weights": "training\\runs\\stage2\\v0.2.0-stage2-degnone\\best.pt",
+  "onnx": "training\\runs\\stage2\\v0.2.0-stage2-degnone\\stage2.onnx",
+  "vdi": "training\\configs\\vdi.yaml"
+}
