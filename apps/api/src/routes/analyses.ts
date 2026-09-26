@@ -13,12 +13,13 @@ import { Hono } from 'hono';
 import { created, ok } from '../lib/envelope';
 import { problem } from '../lib/problem';
 import {
+  aggregateQuerySchema,
   createAnalysisSchema,
   listAnalysesQuerySchema,
   trendQuerySchema,
 } from '../schemas/analyses';
 
-import type { AiAnalysisResult, Tier } from '../services/ai-client';
+import type { AiAggregateResult, AiAnalysisResult, BeeCount, Tier } from '../services/ai-client';
 
 /**
  * 라우트가 받는 AI 결과. ai-client 계약(AiAnalysisResult)을 따르되 DI 경계에서 관용적으로:
@@ -74,6 +75,13 @@ export type AnalysesDeps = {
     analysisId: string,
   ): Promise<{ order: number; content: string; severity: string }[]>;
   getTrend(hiveId: string, userId: string, from: Date, to: Date): Promise<unknown[]>;
+  /** N장 합산 원천: 내 소유 + status=success 분석의 원시 카운트(구 row는 null). 비소유/미존재 id는 빠진다. */
+  countsByIds(
+    ids: string[],
+    userId: string,
+  ): Promise<{ id: string; beeInfested: number | null; beeTotal: number | null }[]>;
+  /** AI POST /aggregate — 수식(합산·보정·CI·tier)의 단일 소스. 재시도 없음. */
+  aggregate(counts: BeeCount[], requestId: string): Promise<AiAggregateResult>;
 };
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -259,6 +267,8 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const modelId = await deps.resolveModelId(provider, pipeline);
     if (!modelId) return problem(c, 'AI_UNAVAILABLE'); // 모델 메타 없음(seed/매핑 오류)
     const recs = toRecommendations(tier, res.recommendations ?? []);
+    // 시각 증거(CAM top-k)는 응답으로만 전달 — 부피가 커서 raw_response에 저장하지 않는다(재조회 시 null).
+    const evidence = res.evidence ?? null;
     const analysis = {
       status: 'success',
       // 이중 출력 기간: AI가 score_mapping(vdi)로 채운 점수 단위 그대로 저장(round(vdi) 금지).
@@ -271,7 +281,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
       beeTotal: res.bee_total ?? null,
       beeInfested: res.bee_infested ?? null,
       // AI 정규화 결과 전체를 보존(tier·vdi_display·quality·model_versions 등 재조회용).
-      // 부피 큰 벌 단위/CAM 배열만 제외 — evidence엔 크롭 URL도 있어 저장하지 않는다.
+      // 부피 큰 벌 단위/CAM 배열(bees·evidence)만 제외 — evidence는 POST 응답 data.evidence로만 전달.
       rawResponse: { ...res, bees: undefined, evidence: undefined, raw_payload: res.raw_payload },
       latencyMs: res.latency_ms ?? null,
       error: null,
@@ -286,10 +296,10 @@ export function analysesRoutes(deps: AnalysesDeps) {
         recommendations: recs,
       });
       const finalRecs = await deps.getRecommendations((row as { id: string }).id);
-      return ok(c, withRecs(row, finalRecs));
+      return ok(c, { ...withRecs(row, finalRecs), evidence });
     }
     const row = await deps.storeAnalysis({ hiveId, imageId, modelId, analysis, recommendations: recs });
-    return created(c, withRecs(row, recs));
+    return created(c, { ...withRecs(row, recs), evidence });
   });
 
   app.get('/', zValidator('query', listAnalysesQuerySchema), async (c) => {
@@ -307,6 +317,37 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const fromDate = from ? new Date(from) : new Date(toDate.getTime() - THIRTY_DAYS_MS);
     const trend = await deps.getTrend(hiveId, userId, fromDate, toDate);
     return ok(c, trend);
+  });
+
+  // N장 합산 (스펙 §8-1): 저장은 이미지당 row, 읽기 시 Σk/Σn 원시 카운트로 재계산.
+  // 퍼센트 평균 금지(저장 vdi는 clip돼 역산 불가) — 수식은 AI /aggregate(vdi.aggregate)가 단일 소스.
+  // tier·vdi_display는 AI 값 그대로(재반올림 X). 구 row(beeTotal null)는 제외하고 excluded로 보고.
+  app.get('/aggregate', zValidator('query', aggregateQuerySchema), async (c) => {
+    const userId = c.get('userId') as string;
+    const requestId = (c.get('requestId') as string) ?? '';
+    const ids = [...new Set(c.req.valid('query').ids)];
+    const rows = await deps.countsByIds(ids, userId);
+    // 비소유·미존재·비success가 하나라도 있으면 NOT_FOUND(존재 누설 차단, §13)
+    if (rows.length !== ids.length) return problem(c, 'NOT_FOUND');
+    const usable = rows.filter(
+      (r): r is { id: string; beeInfested: number; beeTotal: number } =>
+        r.beeTotal !== null && r.beeInfested !== null,
+    );
+    if (usable.length === 0) {
+      return problem(c, 'VALIDATION_FAILED', 'no two-stage analyses with bee counts among ids');
+    }
+    const byId = new Map(usable.map((r) => [r.id, r]));
+    const ordered = ids.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
+    const result = await deps.aggregate(
+      ordered.map((r) => ({ bee_infested: r.beeInfested, bee_total: r.beeTotal })),
+      requestId,
+    );
+    return ok(c, {
+      ...result,
+      n_images: ordered.length,
+      excluded: rows.length - ordered.length,
+      analysisIds: ordered.map((r) => r.id),
+    });
   });
 
   app.get('/:id', async (c) => {

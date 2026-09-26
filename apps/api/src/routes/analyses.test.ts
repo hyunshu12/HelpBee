@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AppError } from '../lib/error-codes';
 import { errorHandler } from '../middleware/error-handler';
+import type { EvidenceItem } from '../services/ai-client';
 import { analysesRoutes, type AnalysesDeps } from './analyses';
 
 const HIVE = '11111111-1111-1111-1111-111111111111';
@@ -42,6 +43,17 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
     getByIdForUser: async () => ({ id: 'an1' }),
     getRecommendations: async () => [{ order: 0, content: '처치 검토', severity: 'warn' }],
     getTrend: async () => [{ bucket: '2026-06-10', avgRisk: 35, analysisCount: 2 }],
+    countsByIds: async (ids) => ids.map((id) => ({ id, beeInfested: 1, beeTotal: 40 })),
+    aggregate: async () => ({
+      vdi: 1.59,
+      vdi_display: '1.6',
+      vdi_raw: 1.06,
+      tier: 'low',
+      bee_total: 940,
+      bee_infested: 10,
+      sampling_ci95: [0.5, 1.9],
+      corrected: true,
+    }),
     ...over,
   };
 }
@@ -474,7 +486,15 @@ describe('POST /v1/analyses', () => {
       sampling_ci95: [2.4, 6.9] as [number, number],
       quality: { ok: true, blur_score: 210, exposure_mean: 120, px_per_mm_est: 4.1 },
       bees: [{ box: [1, 2, 3, 4] as [number, number, number, number], p_infested: 0.9, infested: true }],
-      evidence: [{ crop_url: 'https://s3/crop?sig=1', p_infested: 0.9 }],
+      evidence: [
+        {
+          index: 0,
+          box: [1, 2, 3, 4] as [number, number, number, number],
+          crop_region: [0, 0, 5, 6] as [number, number, number, number],
+          p_infested: 0.9,
+          cam: [[0.1]],
+        },
+      ],
       recommendations: ['가루설탕법으로 확인하세요'],
       model_version: 'two-stage-v0.2.0',
       model_versions: { stage1: 's1', stage2: 's2', vdi_config: 'v' },
@@ -629,5 +649,133 @@ describe('GET /v1/analyses', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data[0].bucket).toBe('2026-06-10');
+  });
+});
+
+const A = '33333333-3333-3333-3333-333333333333';
+const B = '44444444-4444-4444-4444-444444444444';
+
+describe('GET /v1/analyses/aggregate (N장 합산)', () => {
+  it('aggregate returns pooled vdi for owned two-stage rows (counts summed, not averaged)', async () => {
+    const aggregate = vi.fn(baseDeps().aggregate);
+    const countsByIds = vi.fn(async () => [
+      { id: A, beeInfested: 1, beeTotal: 40 },
+      { id: B, beeInfested: 9, beeTotal: 900 },
+    ]);
+    const res = await makeApp(baseDeps({ countsByIds, aggregate })).request(
+      `/v1/analyses/aggregate?ids=${A},${B}`,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.bee_total).toBe(940);
+    expect(body.data.tier).toBe('low');
+    expect(body.data.vdi_display).toBe('1.6'); // AI 표시값 그대로(재반올림 X)
+    expect(body.data.n_images).toBe(2);
+    expect(body.data.excluded).toBe(0);
+    expect(body.data.analysisIds).toEqual([A, B]);
+    expect(countsByIds).toHaveBeenCalledWith([A, B], 'u1');
+    // API는 원시 카운트만 넘긴다 — 수식은 AI vdi.aggregate 단일 소스
+    expect(aggregate).toHaveBeenCalledWith(
+      [
+        { bee_infested: 1, bee_total: 40 },
+        { bee_infested: 9, bee_total: 900 },
+      ],
+      'req-1',
+    );
+  });
+
+  it('aggregate rejects legacy rows without bee counts (none usable → 400)', async () => {
+    const aggregate = vi.fn(baseDeps().aggregate);
+    const deps = baseDeps({
+      countsByIds: async () => [{ id: A, beeInfested: null, beeTotal: null }],
+      aggregate,
+    });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A}`);
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('VALIDATION_FAILED');
+    expect(aggregate).not.toHaveBeenCalled();
+  });
+
+  it('mixed legacy + two-stage rows: legacy excluded and counted', async () => {
+    const aggregate = vi.fn(baseDeps().aggregate);
+    const deps = baseDeps({
+      countsByIds: async () => [
+        { id: A, beeInfested: null, beeTotal: null },
+        { id: B, beeInfested: 9, beeTotal: 900 },
+      ],
+      aggregate,
+    });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A},${B}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.excluded).toBe(1);
+    expect(body.data.n_images).toBe(1);
+    expect(body.data.analysisIds).toEqual([B]);
+    expect(aggregate.mock.calls[0][0]).toEqual([{ bee_infested: 9, bee_total: 900 }]);
+  });
+
+  it('404 when any id is not mine / not success (no existence leak)', async () => {
+    const deps = baseDeps({ countsByIds: async () => [{ id: A, beeInfested: 1, beeTotal: 40 }] });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A},${B}`);
+    expect(res.status).toBe(404);
+  });
+
+  it('dedupes ids', async () => {
+    const countsByIds = vi.fn(baseDeps().countsByIds);
+    const res = await makeApp(baseDeps({ countsByIds })).request(`/v1/analyses/aggregate?ids=${A},${A}`);
+    expect(res.status).toBe(200);
+    expect(countsByIds).toHaveBeenCalledWith([A], 'u1');
+  });
+
+  it('400 on missing / malformed / >10 ids', async () => {
+    const app = makeApp(baseDeps());
+    expect((await app.request('/v1/analyses/aggregate')).status).toBe(400);
+    expect((await app.request('/v1/analyses/aggregate?ids=nope')).status).toBe(400);
+    const eleven = Array.from({ length: 11 }, (_, i) => `55555555-5555-5555-5555-5555555555${String(i).padStart(2, '0')}`);
+    expect((await app.request(`/v1/analyses/aggregate?ids=${eleven.join(',')}`)).status).toBe(400);
+  });
+
+  it('503 when the AI aggregate call fails', async () => {
+    const deps = baseDeps({
+      aggregate: async () => {
+        throw new AppError('AI_UNAVAILABLE', 'down');
+      },
+    });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A}`);
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('POST /v1/analyses evidence pass-through', () => {
+  it('returns AI evidence in data.evidence but does not store it in raw_response', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const evidence: EvidenceItem[] = [
+      { index: 3, box: [10, 20, 60, 80], crop_region: [0, 5, 70, 95], p_infested: 0.91, cam: [[0, 0.5], [1, 0.2]] },
+    ];
+    const deps = baseDeps({
+      storeAnalysis,
+      analyze: async () => ({
+        engine_used: 'yolo',
+        tier: 'elevated',
+        vdi: 4.2,
+        vdi_display: '4.2',
+        bee_total: 310,
+        bee_infested: 14,
+        recommendations: [],
+        model_versions: { stage1: 's1', stage2: 's2', vdi_config: 'v' },
+        risk_score: 40,
+        evidence,
+      }),
+    });
+    const res = await post(makeApp(deps), { hiveId: HIVE, imageId: IMAGE });
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.evidence).toEqual(evidence);
+    const raw = storeAnalysis.mock.calls[0][0].analysis.rawResponse as Record<string, unknown>;
+    expect(raw.evidence).toBeUndefined();
+  });
+
+  it('evidence is null when the AI sends none (legacy contract)', async () => {
+    const res = await post(makeApp(baseDeps()), { hiveId: HIVE, imageId: IMAGE });
+    expect((await res.json()).data.evidence).toBeNull();
   });
 });

@@ -68,6 +68,30 @@ export type AiEngine = 'auto' | 'yolo';
  */
 export type Tier = 'safe' | 'watch' | 'danger' | 'low' | 'elevated' | 'high' | 'insufficient';
 
+/** two-stage 시각 증거 1건 — box/crop_region은 원본 픽셀 [x1,y1,x2,y2], cam은 크롭 기준 2D 히트맵. */
+export type EvidenceItem = {
+  index: number;
+  box: [number, number, number, number];
+  crop_region: [number, number, number, number];
+  p_infested: number;
+  cam: number[][];
+};
+
+/** N장 합산 입력 — 이미지별 원시 카운트(퍼센트 아님). */
+export type BeeCount = { bee_infested: number; bee_total: number };
+
+/** AI POST /aggregate 응답 (app/routers/aggregate.py). tier는 vdi_display 기준 AI 계산. */
+export type AiAggregateResult = {
+  vdi: number;
+  vdi_display: string;
+  vdi_raw: number;
+  sampling_ci95: [number, number];
+  bee_total: number;
+  bee_infested: number;
+  tier: Tier;
+  corrected: boolean;
+};
+
 export type AiAnalysisResult = {
   /** 이중 출력 기간: AI가 score_mapping(vdi)로 채운 0~100 **점수**(round(vdi) 아님). 새 계약에선 null 가능. */
   risk_score: number | null;
@@ -81,7 +105,8 @@ export type AiAnalysisResult = {
   bee_total?: number | null;
   bee_infested?: number | null;
   bees?: { box: [number, number, number, number]; p_infested: number; infested: boolean }[];
-  evidence?: { crop_url: string; p_infested: number }[];
+  /** 시각 증거 top-k (Grad-CAM++ 표시 전용). POST 응답으로만 전달, raw_response 미저장. */
+  evidence?: EvidenceItem[] | null;
   quality?: {
     ok: boolean;
     blur_score: number;
@@ -144,6 +169,32 @@ export function createAiClient(cfg: {
       } catch {
         // 무재시도: 전송/5xx/타임아웃 모두 즉시 AI_UNAVAILABLE (라우트가 graceful 저장 처리)
         throw new AppError('AI_UNAVAILABLE', 'ai service request failed');
+      }
+    },
+
+    /** N장 합산 — 순수 계산이라 빠름(기본 타임아웃). 무재시도, 실패 → AI_UNAVAILABLE(503). */
+    async aggregate(input: {
+      counts: BeeCount[];
+      requestId: string;
+      qualityOk?: boolean;
+    }): Promise<AiAggregateResult> {
+      const bearer = signInternalBearer(cfg.hmacSecret, { requestId: input.requestId });
+      try {
+        const res = await cfg.http.post(
+          '/aggregate',
+          { counts: input.counts, quality_ok: input.qualityOk ?? true },
+          {
+            baseURL: cfg.baseURL,
+            timeout: defaultTimeout,
+            headers: {
+              authorization: `Bearer ${bearer}`,
+              'x-request-id': input.requestId,
+            },
+          },
+        );
+        return res.data as AiAggregateResult;
+      } catch {
+        throw new AppError('AI_UNAVAILABLE', 'ai aggregate request failed');
       }
     },
   };

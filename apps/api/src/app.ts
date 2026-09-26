@@ -110,6 +110,8 @@ export function createApp() {
     resolveModelId: async (provider, pipeline) =>
       (await queries.models.resolveActiveModel(db, provider, pipeline))?.id,
     analyze: (input) => aiClient.analyze(input),
+    countsByIds: (ids, userId) => queries.analyses.getCountsByIdsForUser(db, ids, userId),
+    aggregate: (counts, requestId) => aiClient.aggregate({ counts, requestId }),
     storeAnalysis: (input) =>
       queries.analyses.createSingleAnalysis(db, {
         hiveId: input.hiveId,

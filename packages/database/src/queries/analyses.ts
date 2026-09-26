@@ -354,3 +354,39 @@ export async function retryFailedAnalysis(
     return fresh;
   });
 }
+
+/** N장 합산용 원시 카운트. 구 row(YOLO v1/OpenAI)는 beeTotal/beeInfested가 null. */
+export type AnalysisBeeCounts = {
+  id: string;
+  beeInfested: number | null;
+  beeTotal: number | null;
+};
+
+/**
+ * N장 합산(GET /v1/analyses/aggregate)의 원천: 내 소유(hives JOIN, soft delete 제외)이면서
+ * status='success'인 분석들의 (bee_infested, bee_total). 비소유/미존재/실패 id는 결과에서 빠진다
+ * (호출부가 길이 비교로 NOT_FOUND 판단). 집계 수식은 AI `vdi.aggregate`가 단일 소스 — 여기선 수집만.
+ */
+export async function getCountsByIdsForUser(
+  db: Database,
+  analysisIds: string[],
+  userId: string,
+): Promise<AnalysisBeeCounts[]> {
+  if (analysisIds.length === 0) return [];
+  return db
+    .select({
+      id: analyses.id,
+      beeInfested: analyses.beeInfested,
+      beeTotal: analyses.beeTotal,
+    })
+    .from(analyses)
+    .innerJoin(hives, eq(hives.id, analyses.hiveId))
+    .where(
+      and(
+        inArray(analyses.id, analysisIds),
+        eq(analyses.status, 'success'),
+        eq(hives.userId, userId),
+        isNull(hives.deletedAt),
+      ),
+    );
+}

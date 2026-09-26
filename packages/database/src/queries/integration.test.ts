@@ -199,4 +199,15 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
     expect(trend[0]!.avgVdi).toBeCloseTo(10.04, 3);
     expect(trend[0]!.analysisCount).toBe(3);
   });
+  it('getCountsByIdsForUser: 소유·success만, 구 row는 null 카운트', async () => {
+    const rows = await db.select().from(schema.analyses);
+    const ts = rows.find((r) => r.imageId === IMG2)!;
+    const legacy = rows.find((r) => r.imageId === IMG && r.modelId === yoloModelId)!;
+    const got = await queries.analyses.getCountsByIdsForUser(db, [ts.id, legacy.id], U1);
+    expect(got).toHaveLength(2);
+    expect(got.find((g) => g.id === ts.id)).toMatchObject({ beeInfested: 26, beeTotal: 250 });
+    expect(got.find((g) => g.id === legacy.id)).toMatchObject({ beeInfested: null, beeTotal: null });
+    expect(await queries.analyses.getCountsByIdsForUser(db, [ts.id], U2)).toHaveLength(0);
+    expect(await queries.analyses.getCountsByIdsForUser(db, [], U1)).toEqual([]);
+  });
 });
