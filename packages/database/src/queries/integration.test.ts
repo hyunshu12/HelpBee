@@ -206,6 +206,7 @@ describe.skipIf(!RUN)('DB integration (real PostgreSQL)', () => {
     const got = await queries.analyses.getCountsByIdsForUser(db, [ts.id, legacy.id], U1);
     expect(got).toHaveLength(2);
     expect(got.find((g) => g.id === ts.id)).toMatchObject({ beeInfested: 26, beeTotal: 250 });
+    expect(got.find((g) => g.id === ts.id)!.tier).toBeNull(); // raw_response 없음 → null
     expect(got.find((g) => g.id === legacy.id)).toMatchObject({ beeInfested: null, beeTotal: null });
     expect(await queries.analyses.getCountsByIdsForUser(db, [ts.id], U2)).toHaveLength(0);
     expect(await queries.analyses.getCountsByIdsForUser(db, [], U1)).toEqual([]);

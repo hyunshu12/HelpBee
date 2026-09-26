@@ -79,7 +79,9 @@ export type AnalysesDeps = {
   countsByIds(
     ids: string[],
     userId: string,
-  ): Promise<{ id: string; beeInfested: number | null; beeTotal: number | null }[]>;
+  ): Promise<
+    { id: string; beeInfested: number | null; beeTotal: number | null; tier?: string | null }[]
+  >;
   /** AI POST /aggregate — 수식(합산·보정·CI·tier)의 단일 소스. 재시도 없음. */
   aggregate(counts: BeeCount[], requestId: string): Promise<AiAggregateResult>;
 };
@@ -321,7 +323,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
 
   // N장 합산 (스펙 §8-1): 저장은 이미지당 row, 읽기 시 Σk/Σn 원시 카운트로 재계산.
   // 퍼센트 평균 금지(저장 vdi는 clip돼 역산 불가) — 수식은 AI /aggregate(vdi.aggregate)가 단일 소스.
-  // tier·vdi_display는 AI 값 그대로(재반올림 X). 구 row(beeTotal null)는 제외하고 excluded로 보고.
+  // tier·vdi_display는 AI 값 그대로(재반올림 X). 구 row·insufficient row는 제외하고 excluded{legacy,insufficient}로 보고.
   app.get('/aggregate', zValidator('query', aggregateQuerySchema), async (c) => {
     const userId = c.get('userId') as string;
     const requestId = (c.get('requestId') as string) ?? '';
@@ -329,12 +331,17 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const rows = await deps.countsByIds(ids, userId);
     // 비소유·미존재·비success가 하나라도 있으면 NOT_FOUND(존재 누설 차단, §13)
     if (rows.length !== ids.length) return problem(c, 'NOT_FOUND');
-    const usable = rows.filter(
-      (r): r is { id: string; beeInfested: number; beeTotal: number } =>
-        r.beeTotal !== null && r.beeInfested !== null,
-    );
+    // 제외 사유: legacy = 구 row(카운트 null) / insufficient = 품질 실패·벌 0(tier insufficient 또는 beeTotal 0).
+    // 풀링 결과는 판독 가능한 프레임만으로 계산 → AI 호출은 quality_ok=true 유지.
+    const excluded = { legacy: 0, insufficient: 0 };
+    const usable: { id: string; beeInfested: number; beeTotal: number }[] = [];
+    for (const r of rows) {
+      if (r.beeTotal === null || r.beeInfested === null) excluded.legacy += 1;
+      else if (r.tier === 'insufficient' || r.beeTotal === 0) excluded.insufficient += 1;
+      else usable.push({ id: r.id, beeInfested: r.beeInfested, beeTotal: r.beeTotal });
+    }
     if (usable.length === 0) {
-      return problem(c, 'VALIDATION_FAILED', 'no two-stage analyses with bee counts among ids');
+      return problem(c, 'VALIDATION_FAILED', 'no usable two-stage analyses with bee counts among ids');
     }
     const byId = new Map(usable.map((r) => [r.id, r]));
     const ordered = ids.filter((id) => byId.has(id)).map((id) => byId.get(id)!);
@@ -345,7 +352,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
     return ok(c, {
       ...result,
       n_images: ordered.length,
-      excluded: rows.length - ordered.length,
+      excluded,
       analysisIds: ordered.map((r) => r.id),
     });
   });

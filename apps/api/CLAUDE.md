@@ -200,7 +200,7 @@ app.use('/admin/*', requireAuth(), requireRole('admin'));
 | POST | `/v1/analyses` | 🔐 | 이미지 분석 요청. quota 검사 후 AI 위임 |
 | GET  | `/v1/analyses` | 🔐 | 내 분석 이력(pagination) |
 | GET  | `/v1/analyses/:id` | 🔐 | 단일 결과(dual-result 모드 시 두 엔진 응답) |
-| GET  | `/v1/analyses/aggregate?ids=a,b` | 🔐 | N장 합산(1~10, 내 소유·success). Σk/Σn 원시 카운트를 AI `POST /aggregate`(vdi.aggregate 단일 소스)로 재계산 — 퍼센트 평균 금지. 구 row(beeTotal null)는 제외→`excluded`, 전부 구 row면 400 `VALIDATION_FAILED`, 비소유 섞이면 404 |
+| GET  | `/v1/analyses/aggregate?ids=a,b` | 🔐 | N장 합산(1~10, 내 소유·success). Σk/Σn 원시 카운트를 AI `POST /aggregate`(vdi.aggregate 단일 소스)로 재계산 — 퍼센트 평균 금지. 구 row(beeTotal null)·insufficient row(tier insufficient/벌 0)는 제외→`excluded{legacy,insufficient}`, 사용 가능 row 0이면 400 `VALIDATION_FAILED`, 비소유 섞이면 404 |
 
 ### Images (`routes/images.ts`)
 | Method | Path | Auth | 설명 |

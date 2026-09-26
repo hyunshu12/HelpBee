@@ -360,6 +360,8 @@ export type AnalysisBeeCounts = {
   id: string;
   beeInfested: number | null;
   beeTotal: number | null;
+  /** raw_response.tier (AI 정규화 결과). 'insufficient'(품질 실패·벌 0)면 합산에서 제외 대상. */
+  tier: string | null;
 };
 
 /**
@@ -378,6 +380,7 @@ export async function getCountsByIdsForUser(
       id: analyses.id,
       beeInfested: analyses.beeInfested,
       beeTotal: analyses.beeTotal,
+      tier: sql<string | null>`${analyses.rawResponse}->>'tier'`,
     })
     .from(analyses)
     .innerJoin(hives, eq(hives.id, analyses.hiveId))

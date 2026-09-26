@@ -671,7 +671,7 @@ describe('GET /v1/analyses/aggregate (N장 합산)', () => {
     expect(body.data.tier).toBe('low');
     expect(body.data.vdi_display).toBe('1.6'); // AI 표시값 그대로(재반올림 X)
     expect(body.data.n_images).toBe(2);
-    expect(body.data.excluded).toBe(0);
+    expect(body.data.excluded).toEqual({ legacy: 0, insufficient: 0 });
     expect(body.data.analysisIds).toEqual([A, B]);
     expect(countsByIds).toHaveBeenCalledWith([A, B], 'u1');
     // API는 원시 카운트만 넘긴다 — 수식은 AI vdi.aggregate 단일 소스
@@ -708,10 +708,43 @@ describe('GET /v1/analyses/aggregate (N장 합산)', () => {
     const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A},${B}`);
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.excluded).toBe(1);
+    expect(body.data.excluded).toEqual({ legacy: 1, insufficient: 0 });
     expect(body.data.n_images).toBe(1);
     expect(body.data.analysisIds).toEqual([B]);
     expect(aggregate.mock.calls[0][0]).toEqual([{ bee_infested: 9, bee_total: 900 }]);
+  });
+
+  it('insufficient rows (tier insufficient / bee_total 0) are excluded from pooled counts', async () => {
+    const C = '66666666-6666-6666-6666-666666666666';
+    const D = '77777777-7777-7777-7777-777777777777';
+    const aggregate = vi.fn(baseDeps().aggregate);
+    const deps = baseDeps({
+      countsByIds: async () => [
+        { id: A, beeInfested: 1, beeTotal: 40, tier: 'low' },
+        { id: B, beeInfested: 9, beeTotal: 900, tier: 'low' },
+        { id: C, beeInfested: 3, beeTotal: 12, tier: 'insufficient' },
+        { id: D, beeInfested: 0, beeTotal: 0, tier: null },
+      ],
+      aggregate,
+    });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A},${B},${C},${D}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.excluded).toEqual({ legacy: 0, insufficient: 2 });
+    expect(body.data.n_images).toBe(2);
+    expect(body.data.analysisIds).toEqual([A, B]);
+    expect(aggregate.mock.calls[0][0]).toEqual([
+      { bee_infested: 1, bee_total: 40 },
+      { bee_infested: 9, bee_total: 900 },
+    ]);
+  });
+
+  it('400 when only insufficient rows remain', async () => {
+    const deps = baseDeps({
+      countsByIds: async () => [{ id: A, beeInfested: 2, beeTotal: 10, tier: 'insufficient' }],
+    });
+    const res = await makeApp(deps).request(`/v1/analyses/aggregate?ids=${A}`);
+    expect(res.status).toBe(400);
   });
 
   it('404 when any id is not mine / not success (no existence leak)', async () => {
