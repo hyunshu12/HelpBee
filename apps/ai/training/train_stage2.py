@@ -9,8 +9,9 @@ Usage (apps/ai 에서, 학습 박스):
 데이터: training/crops/crops.csv (make_crops.py 산출물). split 라우팅은 select_splits 참조 —
 VarroaDataset `test` 와 EV2 `holdout` 은 Task 12 평가용이라 여기서 절대 쓰지 않는다.
 
-모델: config `backbone` — ShuffleNet-V2 x1.0(기본, featmap 1024ch) 또는 ResNet-18(512ch), ImageNet 가중치 →
-GAP → Linear(C,1). ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
+모델: config `backbone` — ShuffleNet-V2 x1.0(기본, featmap 1024ch) · ResNet-18(512ch, v0.2.0 최종) ·
+v0.2.1 실험용 ResNet-34(512ch) / ResNet-50(2048ch) / EfficientNet-B0(1280ch), ImageNet 가중치 → GAP → Linear(C,1).
+ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
 계획 2(서빙)는 featmap 과 metadata.json 의 fc_weight 로 CAM 을 계산한다. 입력 크기는 config `img_size`(기본 224).
 
 모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
@@ -29,7 +30,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import sys
 import logging
 from pathlib import Path
 
@@ -49,9 +49,12 @@ TAU_POLICIES = ("youden", "fpr")
 DEFAULT_TAU_POLICY = "youden"
 DEFAULT_FPR_CAP = 0.10
 DEFAULT_TARGET_FPR = 0.01
-BACKBONES = {"shufflenet_v2_x1_0": 1024, "resnet18": 512}  # 이름 → featmap 채널 수 (= fc_weight 길이)
+# 이름 → featmap 채널 수 (= fc_weight 길이). resnet34/resnet50/efficientnet_b0 은 v0.2.1 실험용 (기본값 불변).
+BACKBONES = {"shufflenet_v2_x1_0": 1024, "resnet18": 512, "resnet34": 512, "resnet50": 2048,
+             "efficientnet_b0": 1280}
 DEFAULT_BACKBONE = "shufflenet_v2_x1_0"
 DEFAULT_IMG_SIZE = 224
+DEFAULT_WORKERS = 4  # DataLoader 워커 (모든 플랫폼 — CropDataset 은 피클 가능)
 
 # 계획 2가 읽는 제품 문구 (스펙 §3) — 한 글자도 바꾸지 말 것.
 RECOMMENDATIONS = {
@@ -387,25 +390,32 @@ def _stage2_class():
     global _STAGE2_CLS
     if _STAGE2_CLS is None:
         import torch.nn as nn
-        from torchvision.models import (ResNet18_Weights, ShuffleNet_V2_X1_0_Weights, resnet18,
-                                        shufflenet_v2_x1_0)
+        from torchvision import models as tvm
+
+        # backbone → (생성자, ImageNet 가중치 enum 이름). 가중치는 모두 IMAGENET1K_V1.
+        resnets = {"resnet18": (tvm.resnet18, "ResNet18_Weights"), "resnet34": (tvm.resnet34, "ResNet34_Weights"),
+                   "resnet50": (tvm.resnet50, "ResNet50_Weights")}
 
         class Stage2(nn.Module):
             def __init__(self, pretrained=True, backbone=DEFAULT_BACKBONE):
                 super().__init__()
                 backbone = parse_backbone(backbone)
-                if backbone == "resnet18":
-                    b = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
+                if backbone in resnets:
+                    ctor, wname = resnets[backbone]
+                    b = ctor(weights=getattr(tvm, wname).IMAGENET1K_V1 if pretrained else None)
                     self.features = nn.Sequential(b.conv1, b.bn1, b.relu, b.maxpool,
                                                   b.layer1, b.layer2, b.layer3, b.layer4)
+                elif backbone == "efficientnet_b0":
+                    b = tvm.efficientnet_b0(weights=tvm.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
+                    self.features = b.features  # 마지막 1×1 conv 까지 → 1280ch
                 else:
-                    b = shufflenet_v2_x1_0(weights=ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1 if pretrained else None)
+                    b = tvm.shufflenet_v2_x1_0(weights=tvm.ShuffleNet_V2_X1_0_Weights.IMAGENET1K_V1 if pretrained else None)
                     self.features = nn.Sequential(b.conv1, b.maxpool, b.stage2, b.stage3, b.stage4, b.conv5)
                 self.backbone = backbone
                 self.fc = nn.Linear(BACKBONES[backbone], 1)
 
             def forward(self, x):
-                f = self.features(x)  # (B,C,h,w) — shufflenet C=1024, resnet18 C=512, h=w=img_size/32
+                f = self.features(x)  # (B,C,h,w) — C=BACKBONES[backbone], h=w=img_size/32
                 return self.fc(f.mean((2, 3))).squeeze(1), f
 
         _STAGE2_CLS = Stage2
@@ -471,33 +481,86 @@ def read_crops(crops_dir: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+class CropDataset:
+    """crops.csv 행 → (정규화 텐서 (3,H,W), 라벨). 맵 스타일 — DataLoader 는 __len__/__getitem__ 만 쓴다
+    (torch Dataset 상속 불필요 → 이 모듈은 torch 없이 import 가능).
+
+    모듈 최상위 클래스라 Windows spawn 워커로 피클된다 (2026-09-24 박스: `_dataset` 안의 로컬 클래스는
+    EOFError in spawn → workers 0 강제, epoch 7.5분). 속성은 모두 피클 가능한 값(list/Path/int/tuple)만 둔다.
+
+    증강 RNG(학습 전용): 샘플마다 `[seed, i, torch.initial_seed(), worker id]` 로 새로 만든다 — workers=0 이면
+    2026-09-25 이전과 같은 값. workers>0 이면 워커 torch seed(= DataLoader base_seed + worker id)가 epoch 마다
+    새로 뽑혀(비영속 워커) 같은 샘플도 epoch 별로 다른 증강을 받는다."""
+
+    def __init__(self, rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: int,
+                 jitter: tuple[float, float] | None = None, img_size: int = DEFAULT_IMG_SIZE):
+        self.rows = list(rows)
+        self.crops_dir = Path(crops_dir)
+        self.train = bool(train)
+        self.degrade_lo = degrade_lo
+        self.seed = int(seed)
+        self.jitter = tuple(jitter) if jitter else None
+        self.img_size = int(img_size)
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, i):
+        import cv2
+        import torch
+
+        from training.data.make_crops import _imread  # 비ASCII(Windows 한국어) 경로 안전
+
+        r = self.rows[i]
+        bgr = _imread(self.crops_dir / r["path"])
+        if bgr is None:
+            raise FileNotFoundError(f"크롭 이미지 읽기 실패: {self.crops_dir / r['path']}")
+        img = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        img = to_input_size(img, self.img_size)
+        if self.train:
+            info = torch.utils.data.get_worker_info()
+            rng = np.random.default_rng([self.seed, i, torch.initial_seed() % (2**32), info.id if info else 0])
+            img = augment(img, rng, self.degrade_lo, self.jitter)
+        x = (img.astype(np.float32) / 255 - IMAGENET_MEAN) / IMAGENET_STD
+        return torch.from_numpy(x.transpose(2, 0, 1).copy()), torch.tensor(float(r["label"]))
+
+
 def _dataset(rows, crops_dir: Path, train: bool, degrade_lo: int | None, seed: int,
-             jitter: tuple[float, float] | None = None, img_size: int = DEFAULT_IMG_SIZE):
-    import cv2
+             jitter: tuple[float, float] | None = None, img_size: int = DEFAULT_IMG_SIZE) -> CropDataset:
+    """CropDataset 팩토리 (기존 호출부·eval_stage2 호환)."""
+    return CropDataset(rows, crops_dir, train, degrade_lo, seed, jitter, img_size)
+
+
+def seed_worker(worker_id: int) -> None:
+    """DataLoader worker_init_fn: 전역 numpy/random 을 워커 torch seed(base_seed + worker_id, 결정적)로 고정.
+    CropDataset 증강은 샘플별 자체 RNG 라 영향 없음 — 전역 RNG 를 쓰는 코드(cv2 제외 라이브러리)가 워커마다
+    같은 난수를 내지 않게 하는 안전장치. 모듈 최상위 함수라 spawn 피클 가능."""
+    import random
+
     import torch
-    from torch.utils.data import Dataset
 
-    from training.data.make_crops import _imread  # 비ASCII(Windows 한국어) 경로 안전
+    s = torch.initial_seed() % (2**32)
+    np.random.seed(s)
+    random.seed(s)
 
-    class CropDataset(Dataset):
-        def __len__(self):
-            return len(rows)
 
-        def __getitem__(self, i):
-            r = rows[i]
-            bgr = _imread(crops_dir / r["path"])
-            if bgr is None:
-                raise FileNotFoundError(f"크롭 이미지 읽기 실패: {crops_dir / r['path']}")
-            img = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            img = to_input_size(img, img_size)
-            if train:
-                info = torch.utils.data.get_worker_info()
-                rng = np.random.default_rng([seed, i, torch.initial_seed() % (2**32), info.id if info else 0])
-                img = augment(img, rng, degrade_lo, jitter)
-            x = (img.astype(np.float32) / 255 - IMAGENET_MEAN) / IMAGENET_STD
-            return torch.from_numpy(x.transpose(2, 0, 1).copy()), torch.tensor(float(r["label"]))
+def resolve_workers(cfg: dict) -> int:
+    """config `workers` (기본 4, 모든 플랫폼 — CropDataset 이 피클 가능해 Windows spawn 도 OK). 음수면 ValueError."""
+    w = int(cfg.get("workers", DEFAULT_WORKERS))
+    if w < 0:
+        raise ValueError(f"workers 는 0 이상: {w}")
+    return w
 
-    return CropDataset()
+
+def loader_kwargs(workers: int, seed: int) -> dict:
+    """DataLoader 공통 워커 인자. workers>0 이면 seed_worker + 전용 generator(base_seed 결정적, 전역 RNG 소비 무관).
+    workers=0 은 기존과 같은 인자만 (동작 동일)."""
+    if workers <= 0:
+        return {"num_workers": 0}
+    import torch
+
+    return {"num_workers": workers, "worker_init_fn": seed_worker,
+            "generator": torch.Generator().manual_seed(int(seed))}
 
 
 def _predict_logits(model, loader, device) -> tuple[np.ndarray, np.ndarray]:
@@ -538,15 +601,14 @@ def train(cfg: dict) -> dict:
     weights = sample_weights(labels, np.array([source_group(r["source"]) for r in sp["train"]]))
     sampler = WeightedRandomSampler(torch.as_tensor(weights, dtype=torch.double), num_samples=len(weights),
                                     replacement=True, generator=torch.Generator().manual_seed(cfg["seed"]))
-    # Windows(spawn)는 _dataset 안의 로컬 클래스를 피클할 수 없어 워커 0 (2026-09-24 박스 실측: EOFError in spawn).
-    workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
+    workers = resolve_workers(cfg)  # CropDataset 은 모듈 최상위라 Windows spawn 워커도 피클 가능
     train_dl = DataLoader(_dataset(sp["train"], crops_dir, True, degrade_lo, cfg["seed"], jitter, img_size),
-                          batch_size=cfg["batch"],
-                          sampler=sampler, num_workers=workers, pin_memory=True, drop_last=True)
+                          batch_size=cfg["batch"], sampler=sampler, pin_memory=True, drop_last=True,
+                          **loader_kwargs(workers, cfg["seed"]))
 
     def eval_dl(rows):
         return DataLoader(_dataset(rows, crops_dir, False, None, cfg["seed"], img_size=img_size), batch_size=cfg["batch"],
-                          shuffle=False, num_workers=workers, pin_memory=True)
+                          shuffle=False, pin_memory=True, **loader_kwargs(workers, cfg["seed"]))
 
     model = build_model(pretrained=True, backbone=backbone).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], weight_decay=cfg["weight_decay"])
@@ -660,13 +722,14 @@ def recalibrate(run_dir: Path, cfg: dict) -> dict:
     crops_dir = Path(cfg["crops"])
     sp = select_splits(read_crops(crops_dir))
     check_splits(sp, keys=("val", "cal_a", "cal_b"))
-    workers = int(cfg.get("workers", 0 if sys.platform == "win32" else 4))
+    workers = resolve_workers(cfg)
     model = build_model(pretrained=False, backbone=backbone).to(device)
     model.load_state_dict(torch.load(weights, map_location=device, weights_only=True))
 
     def logits(rows):
         dl = DataLoader(_dataset(rows, crops_dir, False, None, int(cfg.get("seed", 0)), img_size=img_size),
-                        batch_size=int(cfg.get("batch", 64)), shuffle=False, num_workers=workers)
+                        batch_size=int(cfg.get("batch", 64)), shuffle=False,
+                        **loader_kwargs(workers, int(cfg.get("seed", 0))))
         return _predict_logits(model, dl, device)
 
     (za, ya), (zb, yb), (zv, yv) = logits(sp["cal_a"]), logits(sp["cal_b"]), logits(sp["val"])
@@ -714,6 +777,7 @@ def main(argv: list[str] | None = None):
         cfg["degrade"] = a.degrade
     parse_tau_policy(cfg.get("tau_policy"))  # 조기 검증
     parse_fpr_cap(cfg.get("fpr_cap"))
+    resolve_workers(cfg)
     cfg["config"] = str(a.config)
     if a.recalibrate is not None:
         return recalibrate(a.recalibrate, cfg)

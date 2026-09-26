@@ -194,7 +194,7 @@ def test_stage2_yaml_loads():
                    "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 320,
                    "backbone": "resnet18", "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.01,
                    "seed": 42, "crops": "training/crops-320", "project": "training/runs/stage2",
-                   "name": "v0.2.0-stage2", "workers": 0}
+                   "name": "v0.2.0-stage2", "workers": 4}
 
 
 def test_parse_degrade():
@@ -243,8 +243,107 @@ def test_selection_over_history_differs_by_metric():
 
 def test_parse_backbone():
     assert parse_backbone(None) == "shufflenet_v2_x1_0" and parse_backbone("resnet18") == "resnet18"
+    for bb in ("resnet34", "resnet50", "efficientnet_b0"):  # v0.2.1 실험 백본
+        assert parse_backbone(bb) == bb
     with pytest.raises(ValueError):
-        parse_backbone("resnet50")
+        parse_backbone("vit_b_16")
+
+
+# ── v0.2.1: 백본 확장 · 피클 가능 Dataset · 워커 ──────────────────────────────
+V021_BACKBONES = [("resnet34", 512), ("resnet50", 2048), ("efficientnet_b0", 1280)]
+
+
+@pytest.mark.parametrize("backbone,channels", V021_BACKBONES)
+def test_v021_backbone_shapes_metadata_onnx(tmp_path, backbone, channels):
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    from training.train_stage2 import BACKBONES, build_model, write_metadata
+
+    assert BACKBONES[backbone] == channels
+    m = build_model(pretrained=False, backbone=backbone).eval()
+    with torch.no_grad():
+        logit, feat = m(torch.zeros(2, 3, 320, 320))
+    assert tuple(logit.shape) == (2,) and tuple(feat.shape) == (2, channels, 10, 10)
+    d = json.loads(Path(write_metadata(tmp_path / "m.json", m, (1.0, 0.0), 0.5, 320)).read_text(encoding="utf-8"))
+    assert d["backbone"] == backbone and d["feat_channels"] == channels and len(d["fc_weight"]) == channels
+    assert d["img_size"] == 320
+
+    pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    from training.train_stage2 import export_onnx
+
+    p = export_onnx(m, tmp_path / "s2.onnx", img_size=320)
+    s = ort.InferenceSession(str(p), providers=["CPUExecutionProvider"])
+    assert [o.name for o in s.get_outputs()] == ["logit", "featmap"]
+    assert onnx_input_size(s.get_inputs()[0].shape) == 320
+    lo, fe = s.run(None, {"image": np.zeros((2, 3, 320, 320), np.float32)})
+    assert lo.shape == (2,) and fe.shape == (2, channels, 10, 10)
+
+
+def _fake_rows(n=4):
+    return [{"path": f"c/{i}.png", "label": str(i % 2), "source": "71667-val", "split": "train"} for i in range(n)]
+
+
+def test_crop_dataset_is_picklable_without_torch(tmp_path):
+    """Windows spawn 워커는 Dataset 을 피클한다 — 로컬 클래스면 EOFError (2026-09-24). torch 없이도 통과해야 함."""
+    import pickle
+
+    from training.train_stage2 import CropDataset, _dataset
+
+    ds = _dataset(_fake_rows(), tmp_path, True, 90, 7, (0.7, 1.3), 320)
+    assert isinstance(ds, CropDataset) and len(ds) == 4
+    back = pickle.loads(pickle.dumps(ds))
+    assert type(back) is CropDataset and len(back) == 4
+    assert (back.rows, back.crops_dir, back.train, back.degrade_lo, back.seed, back.jitter, back.img_size) == \
+        (_fake_rows(), tmp_path, True, 90, 7, (0.7, 1.3), 320)
+    ev = pickle.loads(pickle.dumps(_dataset(_fake_rows(2), tmp_path, train=False, degrade_lo=None, seed=0, img_size=224)))
+    assert ev.train is False and ev.jitter is None and ev.img_size == 224
+
+
+def test_resolve_workers_and_loader_kwargs():
+    from training.train_stage2 import loader_kwargs, resolve_workers
+
+    assert resolve_workers({}) == 4  # 모든 플랫폼 기본 4
+    assert resolve_workers({"workers": 0}) == 0 and resolve_workers({"workers": "2"}) == 2
+    with pytest.raises(ValueError):
+        resolve_workers({"workers": -1})
+    assert loader_kwargs(0, 42) == {"num_workers": 0}  # workers=0 은 기존 인자와 동일
+
+
+def _write_crops(root: Path, n=4, size=64):
+    cv2 = pytest.importorskip("cv2")
+    (root / "c").mkdir(parents=True, exist_ok=True)
+    for i in range(n):
+        img = np.full((size, size, 3), 40 * i, np.uint8)
+        cv2.imwrite(str(root / "c" / f"{i}.png"), img)
+    return _fake_rows(n)
+
+
+def _collect(ds, workers, seed=42):
+    import torch
+    from torch.utils.data import DataLoader
+
+    from training.train_stage2 import loader_kwargs
+
+    dl = DataLoader(ds, batch_size=2, shuffle=False, **loader_kwargs(workers, seed))
+    xs, ys = zip(*[(x, y) for x, y in dl])
+    return torch.cat(xs), torch.cat(ys)
+
+
+def test_crop_dataset_spawn_workers_deterministic(tmp_path):
+    """macOS 기본 start method = spawn → Windows 와 같은 피클 경로. 같은 seed 면 워커 증강도 재현된다."""
+    torch = pytest.importorskip("torch")
+    from training.train_stage2 import _dataset
+
+    rows = _write_crops(tmp_path)
+    ds = _dataset(rows, tmp_path, True, None, 7, (0.7, 1.3), 64)
+    x1, y1 = _collect(ds, 2)
+    x2, y2 = _collect(ds, 2)
+    assert tuple(x1.shape) == (4, 3, 64, 64) and y1.tolist() == [0.0, 1.0, 0.0, 1.0]
+    assert torch.equal(x1, x2) and torch.equal(y1, y2)
+    # 평가(train=False)는 증강 없음 → 워커 수와 무관하게 같은 텐서
+    ev = _dataset(rows, tmp_path, False, None, 7, img_size=64)
+    assert torch.equal(_collect(ev, 0)[0], _collect(ev, 2)[0])
 
 
 def test_model_spec_reads_metadata_and_explicit_overrides(tmp_path):

@@ -91,6 +91,11 @@ def eval_e2e(args: list[str]) -> int:
     """합성 e2e tier 일치율 + 단일 스테이지 베이스라인 → training/eval_history/v0.2.0-e2e.json. --onnx/--crops 등 인자는 그대로 전달."""
     return _run([sys.executable, "-m", "training.eval_e2e", *args])
 
+def bench_stage2(args: list[str]) -> int:
+    """Stage-2 ONNX CPU 지연 벤치 → 크롭당 ms p50/p95 JSON. --onnx <path> [--img-size 320] [--batch 64] [--threads 4] [--iters 5]
+    인자는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.bench_stage2", *args])
+
 def subset(args: list[str]) -> int:
     """71667 Training 서브셋 (TL.zip 스트리밍 index → select → materialize) — DOWNLOAD.md §4-1.
     --tl-zip/--ts-zip/--out-root 필수. --work(기본 <out-root>/_subset), --n, --seed, --per-colony-cap,
@@ -129,7 +134,7 @@ TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": tra
                                                   "train-stage2": train_stage2, "recalibrate": recalibrate,
                                                   "gate0": gate0,
                                                   "eval-stage2": eval_stage2, "eval-e2e": eval_e2e,
-                                                  "subset": subset}
+                                                  "bench-stage2": bench_stage2, "subset": subset}
 
 def main() -> int:
     if len(sys.argv) < 2 or sys.argv[1] not in TARGETS:

@@ -25,3 +25,9 @@ def test_subset_runs_index_select_materialize_in_order(tmp_path):
     cmds = [l for l in out.stdout.splitlines() if l.startswith("+ ")]
     assert [c.split("training.data.aihub_subset ")[1].split()[0] for c in cmds] == ["index", "select", "materialize"]
     assert "--n 100" in cmds[1] and "--verify-listing" in cmds[2] and "vols/TS.zip" in cmds[2]
+
+def test_bench_stage2_target_passes_args_through():
+    out = subprocess.run([sys.executable, "tasks.py", "bench-stage2", "--help"], cwd=ROOT,
+                         capture_output=True, text=True, encoding="utf-8")
+    assert out.returncode == 0, out.stderr
+    assert "training.bench_stage2 --help" in out.stdout and "--threads" in out.stdout
