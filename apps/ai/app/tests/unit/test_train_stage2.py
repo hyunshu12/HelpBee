@@ -680,16 +680,32 @@ def test_parse_swa_epochs_bounds():
             parse_swa_epochs(bad, 5)
 
 
-def test_swa_bn_rows_deterministic_every_nth():
-    from training.train_stage2 import SWA_BN_MAX_ROWS, swa_bn_rows
+def test_swa_bn_loader_uses_training_distribution(tmp_path):
+    """SWA BN 로더 = 학습 분포: 증강 데이터셋(train=True, 열화·지터·img_size 전달) + 학습과 같은 sample_weights 의
+    WeightedRandomSampler(복원추출). num_samples = min(len, cap) 을 batch 배수로 내림(최소 1 batch), pin_memory=False.
+    (박스: 비증강·비샘플 행으로 재계산한 SWA cal-A AUROC 0.528 붕괴 vs 학습 분포 0.885)"""
+    torch = pytest.importorskip("torch")
+    from torch.utils.data import WeightedRandomSampler
 
-    rows = list(range(45))
-    assert swa_bn_rows(rows, cap=20) == rows[::3] and len(swa_bn_rows(rows, cap=20)) <= 20
-    assert swa_bn_rows(rows, cap=45) == rows and swa_bn_rows(rows, cap=100) == rows
-    assert swa_bn_rows(rows, cap=44) == rows[::2]
-    big = list(range(50_001))
-    sub = swa_bn_rows(big)
-    assert len(sub) <= SWA_BN_MAX_ROWS == 20_000 and sub == big[::3] and swa_bn_rows(big) == sub
+    from training.data.make_split_manifest import source_group
+    from training.train_stage2 import SWA_BN_MAX_ROWS, sample_weights, swa_bn_loader
+
+    rows = [{"path": f"{i}.png", "label": int(i % 5 == 0), "source": "71667-val" if i < 30 else "varroadataset"}
+            for i in range(45)]
+    kw = dict(degrade_lo=90, seed=7, jitter=(0.7, 1.3), img_size=64, workers=0)
+    dl = swa_bn_loader(rows, tmp_path, batch=4, **kw)
+    assert dl.dataset.train is True and dl.dataset.rows == rows and dl.dataset.crops_dir == tmp_path
+    assert dl.dataset.degrade_lo == 90 and dl.dataset.jitter == (0.7, 1.3) and dl.dataset.img_size == 64
+    assert isinstance(dl.sampler, WeightedRandomSampler) and dl.sampler.replacement
+    assert dl.batch_size == 4 and dl.pin_memory is False
+    assert len(dl.sampler) == 44 and len(dl) == 11  # 45 → batch 4 배수로 내림
+    labels = np.array([r["label"] for r in rows])
+    groups = np.array([source_group(r["source"]) for r in rows])
+    assert np.allclose(dl.sampler.weights.numpy(), sample_weights(labels, groups))
+    assert list(dl.sampler) == list(swa_bn_loader(rows, tmp_path, batch=4, **kw).sampler)  # 전용 seed → 결정적
+    assert len(swa_bn_loader(rows, tmp_path, batch=4, cap=10, **kw).sampler) == 8  # cap 적용 후 batch 배수
+    assert len(swa_bn_loader(rows[:3], tmp_path, batch=4, **kw).sampler) == 4  # 최소 1 batch (복원추출)
+    assert SWA_BN_MAX_ROWS == 20_000
 
 
 def test_main_validates_swa_epochs_and_accepts_last(tmp_path, monkeypatch):
@@ -739,8 +755,8 @@ def test_train_select_metric_last_runs_all_epochs_and_keeps_last(tmp_path, monke
 
 
 def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatch):
-    """swa_epochs=2, epochs=3: epoch 1·2 끝 가중치의 등가 평균 + 비증강 train 으로 BN 재계산 → best.pt ≠ last.pt,
-    ONNX(logit, featmap) 내보내기, report/metadata 에 swa_epochs=2."""
+    """swa_epochs=2, epochs=3: epoch 1·2 끝 가중치의 등가 평균 + 학습 분포(증강 + 가중 샘플러)로 BN 재계산
+    → best.pt ≠ last.pt, ONNX(logit, featmap) 내보내기, report/metadata 에 swa_epochs=2."""
     torch = pytest.importorskip("torch")
     pytest.importorskip("torchvision")
     pytest.importorskip("onnx")
@@ -771,7 +787,7 @@ def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatc
 
     assert len(rep["history"]) == 3 and rep["best_epoch"] == 2  # patience=0 이어도 조기 종료 없음
     assert rep["swa_epochs"] == 2 and rep["select_metric"] == "cal_a_auroc"
-    assert rep["swa"]["epochs"] == 2 and rep["swa"]["start_epoch"] == 1 and rep["swa"]["bn_rows"] == 8
+    assert rep["swa"]["epochs"] == 2 and rep["swa"]["start_epoch"] == 1 and rep["swa"]["bn_samples"] == 8
     assert rep["best_cal_a_auroc"] == rep["swa"]["cal_a_auroc"] == rep["auroc"]["cal_a"]
     assert rep["val_auroc"] == rep["swa"]["val_auroc"]
 
@@ -787,9 +803,10 @@ def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatc
     # BN 통계 재계산: 평균 모델 running stats ≠ 마지막 epoch, num_batches_tracked = BN 로더 배치 수(8/4=2)
     assert not torch.equal(best["features.1.running_mean"], last["features.1.running_mean"])
     assert int(best["features.1.num_batches_tracked"]) == 2 and int(last["features.1.num_batches_tracked"]) == 6
-    # BN 로더: 비증강·비샘플(순차)·train 행
+    # BN 로더: 학습 분포 — 증강 train 데이터셋 + 가중 샘플러(8 샘플 = 학습 batch 4 × 2)
     (bl,) = bn_loaders
-    assert bl.dataset.train is False and isinstance(bl.sampler, torch.utils.data.SequentialSampler)
+    assert bl.dataset.train is True and isinstance(bl.sampler, torch.utils.data.WeightedRandomSampler)
+    assert len(bl.sampler) == 8 and bl.batch_size == 4 and bl.pin_memory is False
     assert [r["split"] for r in bl.dataset.rows] == ["train"] * 8
 
     meta = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
@@ -935,8 +952,8 @@ def test_train_eval_batch_default_identical_and_smaller_runs(tmp_path, monkeypat
 
 def test_train_loaders_use_eval_batch_and_release_before_calibration(tmp_path, monkeypatch):
     """eval_batch=3 · batch=4 · SWA 1 epoch: train 로더만 batch·pin, 에폭별 평가 로더는 eval_batch·pin,
-    학습 후 SWA BN·보정 로더는 eval_batch·pin_memory=False. 학습 상태 해제(release_memory)가 학습 후 첫 로더
-    (SWA BN) 보다 먼저, SWA 사본 해제가 보정 로더보다 먼저."""
+    학습 후 SWA BN 로더는 학습 분포(batch·증강)·pin_memory=False, 보정 로더는 eval_batch·pin_memory=False.
+    학습 상태 해제(release_memory)가 학습 후 첫 로더(SWA BN) 보다 먼저, SWA 사본 해제가 보정 로더보다 먼저."""
     torch = pytest.importorskip("torch")
     pytest.importorskip("torchvision")
     pytest.importorskip("cv2")
@@ -964,7 +981,7 @@ def test_train_loaders_use_eval_batch_and_release_before_calibration(tmp_path, m
     crops = _mini_crops(tmp_path)
     cfg = {**_smoke_cfg(tmp_path, crops, "spy", False), "epochs": 2, "patience": 5, "swa_epochs": 1, "eval_batch": 3}
     rep = ts.train(cfg)
-    assert rep["swa"]["bn_rows"] == 8 and rep["best_epoch"] == 1
+    assert rep["swa"]["bn_samples"] == 8 and rep["best_epoch"] == 1
 
     dls = [e for e in events if e[0] == "dl"]
     train_dl, epoch_dls = dls[0], dls[1:3]
@@ -973,7 +990,7 @@ def test_train_loaders_use_eval_batch_and_release_before_calibration(tmp_path, m
     i_rel = events.index(("release", "학습 상태 해제"))
     i_swa = events.index(("release", "SWA 사본 해제"))
     after = events[i_rel + 1:]
-    assert after[0] == ("dl", 3, False, False, ("train",))  # SWA BN 재계산 로더
+    assert after[0] == ("dl", 4, False, True, ("train",))  # SWA BN 재계산 로더 = 학습 분포 (batch·증강)
     assert after[1] == ("release", "SWA 사본 해제") and i_swa == i_rel + 2
     assert after[2:] == [("dl", 3, False, False, ("cal_a",)), ("dl", 3, False, False, ("cal_b",)),
                          ("dl", 3, False, False, ("val",))]
@@ -1005,3 +1022,4 @@ def test_recalibrate_uses_eval_batch(tmp_path, monkeypatch):
     ts.recalibrate(run, {**cfg, "eval_batch": 3})
     ts.recalibrate(run, cfg)
     assert sizes == [3, 3, 3, 4, 4, 4]
+

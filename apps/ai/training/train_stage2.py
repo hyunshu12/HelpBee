@@ -17,14 +17,15 @@ ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
 모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이 epochs 전부(cosine 이 0 으로 수렴) → 마지막 epoch.
-`swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → 비증강·비샘플 train 부분집합
-(≤ SWA_BN_MAX_ROWS)으로 BN 통계 재계산(recompute_bn: BN 만 train 모드, fp32) → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
+`swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → **학습 분포**(증강 train +
+같은 가중 샘플러, ≤ SWA_BN_MAX_ROWS 샘플 — swa_bn_loader)로 BN 통계 재계산(recompute_bn: BN 만 train 모드, fp32)
+→ 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
 (cal-A 는 사실상 colony 하나라 epoch 별 AUROC 가 0.77↔0.88 로 튀어 "최고 epoch" 은 운 좋은 고-LR iterate 를 고른다.)
 
 메모리(v0.2.1): 학습 루프가 끝나면 옵티마이저·scheduler·GradScaler·train DataLoader(·SWA 사본)를 해제하고
 gc.collect + torch.cuda.empty_cache 뒤에 fp32 보정을 돈다 (AMP 학습 후 fp32 보정 OOM, 2026-09-26 박스).
 config `eval_batch`(기본 = `batch`) = 비학습 로더 배치 — 에폭별 val/cal-A, 학습 후 보정(pin_memory=False),
-SWA BN 재계산, --recalibrate. 학습 로더는 `batch`.
+--recalibrate. 학습 로더와 SWA BN 재계산 로더(학습 분포 재현)는 `batch`.
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
 `youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
@@ -55,7 +56,7 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
 # `last` = 고정 스케줄: 조기 종료 없이 epochs 전부 → 마지막 epoch 가중치를 best.pt 로 (epoch 지표로 고르지 않음).
 SELECT_METRICS = ("val_auroc", "cal_a_auroc", "last")
-SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 쓰는 train 행 상한 (등간격 부분집합)
+SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 뽑는 train 샘플 상한 (가중 샘플러 복원추출, batch 배수로 내림)
 TAU_POLICIES = ("youden", "fpr")
 DEFAULT_TAU_POLICY = "youden"
 DEFAULT_FPR_CAP = 0.10
@@ -138,8 +139,9 @@ def parse_swa_epochs(v, epochs=None) -> int:
 
 
 def parse_eval_batch(v, batch=64) -> int:
-    """config `eval_batch` — 비학습 DataLoader(에폭별 val/cal-A, 학습 후 보정, SWA BN 재계산, recalibrate) 배치.
-    None → `batch`(v0.2.0 동작 그대로). 1 이상 정수. bool·비정수·0 이하면 ValueError. 학습 로더는 항상 `batch`."""
+    """config `eval_batch` — 비학습 DataLoader(에폭별 val/cal-A, 학습 후 보정, recalibrate) 배치.
+    None → `batch`(v0.2.0 동작 그대로). 1 이상 정수. bool·비정수·0 이하면 ValueError.
+    학습 로더와 SWA BN 재계산 로더(학습 분포 재현)는 항상 `batch`."""
     if v is None:
         v = batch
     if isinstance(v, bool) or (isinstance(v, float) and not v.is_integer()):
@@ -151,13 +153,6 @@ def parse_eval_batch(v, batch=64) -> int:
     if n < 1:
         raise ValueError(f"eval_batch 는 1 이상 정수: {v!r}")
     return n
-
-
-def swa_bn_rows(rows: list, cap: int = SWA_BN_MAX_ROWS) -> list:
-    """SWA BN 재계산용 결정적 부분집합: cap 이하면 전부, 아니면 등간격(every n-th, n = ceil(len/cap))."""
-    rows = list(rows)
-    step = max(1, -(-len(rows) // int(cap)))
-    return rows[::step]
 
 
 def pick_metric(row: dict, select_metric: str) -> float:
@@ -637,6 +632,31 @@ def loader_kwargs(workers: int, seed: int) -> dict:
             "generator": torch.Generator().manual_seed(int(seed))}
 
 
+def swa_bn_loader(rows, crops_dir: Path, *, degrade_lo: int | None, seed: int, jitter: tuple[float, float] | None,
+                  img_size: int, batch: int, workers: int = 0, cap: int = SWA_BN_MAX_ROWS):
+    """SWA 평균 모델 BN 재추정용 로더 — **학습과 같은 분포**: 증강 train 데이터셋(열화·크기 지터 포함, train() 과 같은
+    `_dataset(..., True, ...)`) + 학습 sampler 와 같은 `sample_weights` 의 WeightedRandomSampler(복원추출, 전용 seed
+    generator). num_samples = min(len(rows), cap) 을 batch 배수로 내림(최소 1 batch). batch = 학습 `batch`,
+    pin_memory=False(학습 후 1회성), 워커 인자는 loader_kwargs.
+
+    근거 (2026-09-26 박스, ResNet-34 @320 30 epoch, SWA 마지막 10, cal-A AUROC 고정 부분표본): 마지막 epoch 0.886 ·
+    비증강·비샘플 train 행으로 BN 재계산한 SWA **0.528(붕괴)** · SWA 파라미터 + 마지막 epoch BN 버퍼 0.870 ·
+    학습 분포(증강 + 같은 가중 샘플러, 64×150 batch)로 재계산한 SWA **0.885**. 가중 샘플러는 클래스·소스를 ~50/50 으로
+    맞추는데 원 train 행은 양성 ~20% 라, BN 통계는 모델이 학습한 분포에서 다시 추정해야 한다."""
+    import torch
+    from torch.utils.data import DataLoader, WeightedRandomSampler
+
+    rows = list(rows)
+    batch = int(batch)
+    labels = np.array([int(r["label"]) for r in rows])
+    weights = sample_weights(labels, np.array([source_group(r["source"]) for r in rows]))
+    num_samples = max(1, min(len(rows), int(cap)) // batch) * batch
+    sampler = WeightedRandomSampler(torch.as_tensor(weights, dtype=torch.double), num_samples=num_samples,
+                                    replacement=True, generator=torch.Generator().manual_seed(int(seed)))
+    return DataLoader(_dataset(rows, crops_dir, True, degrade_lo, seed, jitter, img_size), batch_size=batch,
+                      sampler=sampler, pin_memory=False, **loader_kwargs(workers, seed))
+
+
 def _autocast(enabled: bool):
     """enabled 면 CUDA fp16 autocast, 아니면 nullcontext (fp32 경로 그대로)."""
     import contextlib
@@ -839,16 +859,20 @@ def train(cfg: dict) -> dict:
     del opt, sched, scaler, train_dl, sampler, val_loader, cal_a_loader
     release_memory(device, mem0, "학습 상태 해제")
 
-    bn_rows = None
+    bn_samples = None
     if swa is not None:
-        # BN 재계산: 비증강·비샘플 train 부분집합, 셔플 없음, fp32(autocast 없음), BN 만 train 모드.
-        bn_rows = swa_bn_rows(sp["train"])
-        logger.info(f"SWA: epoch {swa_start}~{cfg['epochs'] - 1} 평균 → BN 재계산 ({len(bn_rows)} train 크롭, 비증강)")
-        recompute_bn(eval_dl(bn_rows, pin_memory=False), swa.module, device=device)
+        # BN 재계산: 학습 분포(증강 train + 같은 가중 샘플러, batch = 학습 batch), fp32(autocast 없음), BN 만 train 모드.
+        # 비증강·비샘플 행으로 재계산하면 SWA 모델이 붕괴한다 (swa_bn_loader docstring 의 박스 근거: cal-A 0.528 vs 0.885).
+        bn_dl = swa_bn_loader(sp["train"], crops_dir, degrade_lo=degrade_lo, seed=cfg["seed"], jitter=jitter,
+                              img_size=img_size, batch=cfg["batch"], workers=workers)
+        bn_samples = len(bn_dl.sampler)
+        logger.info(f"SWA: epoch {swa_start}~{cfg['epochs'] - 1} 평균 → BN 재계산 "
+                    f"({bn_samples} 샘플, 증강 + 가중 샘플러 = 학습 분포)")
+        recompute_bn(bn_dl, swa.module, device=device)
         torch.save(swa.module.state_dict(), save_dir / "best.pt")
         best_ep = len(history) - 1
         mem0 = cuda_mem_mib(device)
-        del swa  # 평균 모델 사본 — best.pt 로 저장됐다. 이후 SWA 여부는 bn_rows 로 판단
+        del swa, bn_dl  # 평균 모델 사본 — best.pt 로 저장됐다. 이후 SWA 여부는 bn_samples 로 판단
         release_memory(device, mem0, "SWA 사본 해제")
     elif select_metric == "last":
         torch.save(model.state_dict(), save_dir / "best.pt")  # 마지막 epoch = 선택 모델
@@ -861,8 +885,8 @@ def train(cfg: dict) -> dict:
     zb, yb = _predict_logits(model, eval_dl(sp["cal_b"], pin_memory=False), device)
     zv, yv = _predict_logits(model, eval_dl(sp["val"], pin_memory=False), device)
     swa_report = None
-    if bn_rows is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
-        swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_rows": len(bn_rows),
+    if bn_samples is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
+        swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_samples": bn_samples,
                       "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya)}
         logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
                     f"cal_a_auroc={swa_report['cal_a_auroc']:.4f}")
