@@ -7,7 +7,13 @@ import { useParams } from 'next/navigation';
 import { Banner } from '@/src/components/Banner';
 import { apiFetch } from '@/src/lib/api';
 import { ApiError } from '@/src/lib/errors';
-import { ANALYSIS_STATUS_LABEL, HEALTH_LABEL, label, PROVIDER_LABEL } from '@/src/lib/format';
+import {
+  ANALYSIS_STATUS_LABEL,
+  formatVdi,
+  HEALTH_LABEL,
+  label,
+  PROVIDER_LABEL,
+} from '@/src/lib/format';
 import { queryKeys } from '@/src/lib/query-keys';
 import type { DualComparison, DualEngineRow } from '@/src/lib/types';
 
@@ -93,15 +99,7 @@ function EngineCard({ title, row }: { title: string; row: DualEngineRow }) {
         />
         <Field
           label="VDI"
-          value={
-            row.vdi != null
-              ? `${row.vdi.toFixed(1)}%${
-                  row.vdiCiLow != null && row.vdiCiHigh != null
-                    ? ` (${row.vdiCiLow.toFixed(1)}–${row.vdiCiHigh.toFixed(1)}%)`
-                    : ''
-                }`
-              : '-'
-          }
+          value={formatVdi(row)}
         />
         <Field
           label="벌 수"

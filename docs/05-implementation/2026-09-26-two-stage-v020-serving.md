@@ -35,6 +35,15 @@ v0.2.0 two-stage 번들(YOLO11s 1-class @1024 + ResNet-18 320 + `vdi.yaml`)을 A
 - **수용 리스크**: FHD 프레임은 벌 5~19마리라 감염 1마리 = `high`; 표본 CI에 반영.
 - `capture_floor_px_per_mm` = null (Gate 0 붕괴점 없음) — 품질 게이트는 블러·노출만.
 
+## 배포 순서 (필수)
+
+> **마이그레이션 0003 → api → ai.** ai만 먼저 올리는 배포는 금지다.
+> - 구 api + 신 ai 조합이면 구 HEALTH/SEVERITY 매핑에 `low/elevated/high/insufficient`가 없다. 그래서 severity가 undefined가 되고, recommendations NOT NULL insert가 실패한다.
+> - api 기동 **전에** `drizzle-kit migrate`(0003: vdi/CI/bee 컬럼)를 먼저 적용한다. 이 순서를 어기면 신 api가 없는 컬럼에 쓰다가 실패한다.
+> - 베타(`deploy-beta.yml` → `scripts/deploy-ec2.sh`)는 api와 ai를 **같은 커밋**에서 함께 배포하므로 실무상 안전하다. 수동 롤포워드나 부분 재배포 때 위 순서를 지킨다.
+> - 롤백은 역순이다. ai를 `AI_ENGINE=yolo-v1`로 되돌린 뒤 api를 되돌린다. 0003은 순수 `ADD COLUMN`이라 되돌리지 않아도 구 api와 호환된다.
+> - ai는 기동할 때 two-stage 번들(≈83 MB)을 prewarm한다(best-effort, `AI_PREWARM=0`이면 끔). 헬스체크 대기 시간에 이 다운로드 시간을 포함한다.
+
 ## 검증 (Verification)
 
 - API vitest 251/251, API·DB type-check clean (Task 6 기준); DB itest 24/24 (Task 3 기준).
