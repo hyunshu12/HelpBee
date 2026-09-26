@@ -510,6 +510,31 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reportTitle => '진단 결과 레포트';
 
   @override
+  String get reportVdiTitle => '가시 감염 지수 (VDI)';
+
+  @override
+  String reportVdiCi(String lo, String hi) {
+    return '95% 범위 $lo%–$hi%';
+  }
+
+  @override
+  String reportBeeCounts(int infested, int total) {
+    return '감염 의심 $infested마리 / 검출 $total마리';
+  }
+
+  @override
+  String get reportVdiUncorrected => '보정 없이 산출된 값이에요';
+
+  @override
+  String get reportEvidenceTitle => '감염 의심 벌';
+
+  @override
+  String get reportInsufficientTitle => '이 사진으로는 판독하지 못했어요';
+
+  @override
+  String get reportInsufficientBody => '벌이 보이도록 소비판을 가까이서, 흔들리지 않게 다시 촬영해 주세요.';
+
+  @override
   String get reportRiskStageTitle => '응애 감염 위험 단계';
 
   @override

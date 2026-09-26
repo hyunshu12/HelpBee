@@ -1072,6 +1072,48 @@ abstract class AppLocalizations {
   /// **'진단 결과 레포트'**
   String get reportTitle;
 
+  /// No description provided for @reportVdiTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'가시 감염 지수 (VDI)'**
+  String get reportVdiTitle;
+
+  /// No description provided for @reportVdiCi.
+  ///
+  /// In ko, this message translates to:
+  /// **'95% 범위 {lo}%–{hi}%'**
+  String reportVdiCi(String lo, String hi);
+
+  /// No description provided for @reportBeeCounts.
+  ///
+  /// In ko, this message translates to:
+  /// **'감염 의심 {infested}마리 / 검출 {total}마리'**
+  String reportBeeCounts(int infested, int total);
+
+  /// No description provided for @reportVdiUncorrected.
+  ///
+  /// In ko, this message translates to:
+  /// **'보정 없이 산출된 값이에요'**
+  String get reportVdiUncorrected;
+
+  /// No description provided for @reportEvidenceTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'감염 의심 벌'**
+  String get reportEvidenceTitle;
+
+  /// No description provided for @reportInsufficientTitle.
+  ///
+  /// In ko, this message translates to:
+  /// **'이 사진으로는 판독하지 못했어요'**
+  String get reportInsufficientTitle;
+
+  /// No description provided for @reportInsufficientBody.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌이 보이도록 소비판을 가까이서, 흔들리지 않게 다시 촬영해 주세요.'**
+  String get reportInsufficientBody;
+
   /// No description provided for @reportRiskStageTitle.
   ///
   /// In ko, this message translates to:
