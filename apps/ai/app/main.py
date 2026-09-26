@@ -30,9 +30,10 @@ async def health_check():
         "version": "0.1.0"
     }
 
-from .routers import analyze  # noqa: E402
+from .routers import aggregate, analyze  # noqa: E402
 
 app.include_router(analyze.router)
+app.include_router(aggregate.router)
 
 if __name__ == "__main__":
     port = int(os.getenv("AI_PORT", 8000))
