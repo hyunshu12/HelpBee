@@ -4,6 +4,7 @@ import type { Database } from '../client';
 import { type Analysis, analyses, type NewAnalysis } from '../schema/analyses';
 import { hives } from '../schema/hives';
 import { recommendations } from '../schema/recommendations';
+import { rawResponseField } from './_raw';
 
 /** 응답용 권장 조치(표시 순서 order 오름차순). id/analysisId/createdAt은 제외. */
 export type AnalysisRecommendation = { order: number; content: string; severity: string };
@@ -296,7 +297,7 @@ export async function findFailedAnalysisByImage(
 export type RetryAnalysisInput = {
   analysisId: string;
   modelId: string;
-  analysis: Omit<NewAnalysis, 'hiveId' | 'imageId' | 'modelId'>;
+  analysis: Omit<NewAnalysis, 'id' | 'hiveId' | 'imageId' | 'modelId' | 'createdAt' | 'updatedAt'>;
   recommendations: { order: number; content: string; severity: string }[];
 };
 
@@ -318,15 +319,9 @@ export async function retryFailedAnalysis(
     const updated = await tx
       .update(analyses)
       .set({
+        // create 경로와 동일 필드 전량(two-stage vdi/CI/bee 카운트 포함) — 누락 시 재시도 성공 행이 영구 손상.
+        ...input.analysis,
         modelId: input.modelId,
-        status: input.analysis.status,
-        varroaInfectionRisk: input.analysis.varroaInfectionRisk,
-        estimatedVarroaCount: input.analysis.estimatedVarroaCount,
-        overallHealth: input.analysis.overallHealth,
-        rawResponse: input.analysis.rawResponse,
-        latencyMs: input.analysis.latencyMs,
-        error: input.analysis.error,
-        analyzedAt: input.analysis.analyzedAt,
         updatedAt: new Date(),
       })
       .where(and(eq(analyses.id, input.analysisId), eq(analyses.status, 'failed')))
@@ -380,7 +375,7 @@ export async function getCountsByIdsForUser(
       id: analyses.id,
       beeInfested: analyses.beeInfested,
       beeTotal: analyses.beeTotal,
-      tier: sql<string | null>`${analyses.rawResponse}->>'tier'`,
+      tier: rawResponseField('tier'),
     })
     .from(analyses)
     .innerJoin(hives, eq(hives.id, analyses.hiveId))

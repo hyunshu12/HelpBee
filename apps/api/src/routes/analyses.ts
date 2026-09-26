@@ -33,11 +33,32 @@ export type AiResult = Omit<AiAnalysisResult, 'tier' | 'model_version'> & {
 /** 결과를 낸 파이프라인 — model_versions 유무로 판별 → ai_models 행 선택 (스펙 §8-1). */
 export type ModelPipeline = 'two-stage' | 'v1';
 
+/**
+ * 라우트가 저장 계층에 넘기는 분석 행(신규 insert·failed 재시도 UPDATE 공통).
+ * 필드 목록이 계약 — app.ts가 NewAnalysis로 명시 변환하므로 누락/드리프트는 type-check에서 잡힌다.
+ * vdi·CI는 number(API 도메인) → DB numeric(string) 변환은 app.ts 책임.
+ */
+export type AnalysisWrite = {
+  status: 'success' | 'failed';
+  varroaInfectionRisk: number | null;
+  estimatedVarroaCount: number | null;
+  overallHealth: string | null;
+  vdi: number | null;
+  vdiCiLow: number | null;
+  vdiCiHigh: number | null;
+  beeTotal: number | null;
+  beeInfested: number | null;
+  rawResponse: unknown;
+  latencyMs: number | null;
+  error: string | null;
+  analyzedAt: Date;
+};
+
 export type StoreAnalysisInput = {
   hiveId: string;
   imageId: string;
   modelId: string;
-  analysis: Record<string, unknown>;
+  analysis: AnalysisWrite;
   recommendations: { order: number; content: string; severity: string }[];
 };
 
@@ -61,7 +82,7 @@ export type AnalysesDeps = {
   retryAnalysis(input: {
     analysisId: string;
     modelId: string;
-    analysis: Record<string, unknown>;
+    analysis: AnalysisWrite;
     recommendations: { order: number; content: string; severity: string }[];
   }): Promise<unknown>;
   /** hiveId=undefined → 내 모든 벌통의 이력(진단 이력 탭). 지정 시 해당 벌통만. */
@@ -241,8 +262,17 @@ export function analysesRoutes(deps: AnalysesDeps, opts: AnalysesOptions = {}) {
     // ⑤-a 실패: 무료면 환불, status=failed 저장, graceful 200(비차단)
     if (failed) {
       if (metered) await deps.refundQuota(userId);
-      const modelId = (await deps.resolveModelId('yolo', 'v1')) ?? '';
-      const analysis = {
+      // 실패 행의 model_id: 실제 탄 파이프라인의 활성 행. yolo·auto 모두 two-stage가 기본 경로
+      // (ai-client two-stage 타임아웃과 동일 전제) → two-stage 우선, 롤백(AI_ENGINE=yolo-v1)이면 v1.
+      // AI가 model_versions를 줬으면 그것이 정답. 활성 행이 하나도 없으면 FK 위반(500) 대신
+      // 저장하지 않은 graceful failed를 돌려준다('' 금지).
+      const order: ModelPipeline[] = result?.model_versions ? ['two-stage'] : ['two-stage', 'v1'];
+      let modelId: string | undefined;
+      for (const p of order) {
+        modelId = await deps.resolveModelId('yolo', p);
+        if (modelId) break;
+      }
+      const analysis: AnalysisWrite = {
         status: 'failed',
         varroaInfectionRisk: null,
         estimatedVarroaCount: null,
@@ -257,6 +287,17 @@ export function analysesRoutes(deps: AnalysesDeps, opts: AnalysesOptions = {}) {
         error: 'ai_unavailable',
         analyzedAt,
       };
+      if (!modelId) {
+        return ok(c, {
+          ...(isRetry ? { id: failedRow!.id } : {}),
+          hiveId,
+          imageId,
+          modelId: null,
+          ...analysis,
+          error: 'ai_unavailable; no active ai_models row (model_unavailable) — not persisted',
+          recommendations: [],
+        });
+      }
       // 재시도면 기존 failed 행을 제자리 갱신(id 보존, fresh error/analyzedAt), 신규면 insert.
       if (isRetry) {
         const row = await deps.retryAnalysis({
@@ -283,7 +324,7 @@ export function analysesRoutes(deps: AnalysesDeps, opts: AnalysesOptions = {}) {
     const recs = toRecommendations(tier, res.recommendations ?? []);
     // 시각 증거(CAM top-k)는 응답으로만 전달 — 부피가 커서 raw_response에 저장하지 않는다(재조회 시 null).
     const evidence = res.evidence ?? null;
-    const analysis = {
+    const analysis: AnalysisWrite = {
       status: 'success',
       // 이중 출력 기간: AI가 score_mapping(vdi)로 채운 점수 단위 그대로 저장(round(vdi) 금지).
       varroaInfectionRisk: res.risk_score ?? null,

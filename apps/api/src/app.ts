@@ -47,6 +47,7 @@ import {
 import { getDummyHash, hashPassword, verifyPassword } from './services/password-service';
 import * as quota from './services/quota-service';
 import * as s3 from './services/s3-client';
+import { toNewAnalysis } from './services/analysis-write';
 
 export function createApp() {
   // pragma: no cover - 통합(실 인프라) 대상
@@ -123,16 +124,14 @@ export function createApp() {
         hiveId: input.hiveId,
         imageId: input.imageId,
         modelId: input.modelId,
-        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
-        analysis: input.analysis as never,
+        analysis: toNewAnalysis(input.analysis),
         recommendations: input.recommendations,
       }),
     retryAnalysis: (input) =>
       queries.analyses.retryFailedAnalysis(db, {
         analysisId: input.analysisId,
         modelId: input.modelId,
-        // route가 NewAnalysis 필드와 동일 형태로 구성 (런타임 정합)
-        analysis: input.analysis as never,
+        analysis: toNewAnalysis(input.analysis),
         recommendations: input.recommendations,
       }),
     listForUser: (hiveId, userId, opts) =>

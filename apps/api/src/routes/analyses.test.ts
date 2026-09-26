@@ -275,6 +275,87 @@ describe('POST /v1/analyses', () => {
     expect(retryAnalysis.mock.calls[0][0].recommendations).toEqual([]);
   });
 
+  it('retry: failed row → two-stage success passes vdi/CI/bee counts to retryAnalysis (C1)', async () => {
+    const retryAnalysis = vi.fn(baseDeps().retryAnalysis);
+    const res = await post(
+      makeApp(
+        baseDeps({
+          findFailedByImage: async () => ({ id: 'an-failed' }),
+          retryAnalysis,
+          resolveModelId: async (_p, pipeline) => (pipeline === 'two-stage' ? 'model-2s' : 'model-v1'),
+          analyze: async () => ({
+            engine_used: 'yolo',
+            tier: 'high',
+            vdi: 10.04,
+            vdi_display: '10.0',
+            bee_total: 250,
+            bee_infested: 26,
+            sampling_ci95: [6.5, 14.2],
+            recommendations: ['방제 검토'],
+            model_versions: { stage1: 'a', stage2: 'b', vdi_config: 'c' },
+            risk_score: 70,
+          }),
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    const input = retryAnalysis.mock.calls[0][0];
+    expect(input.modelId).toBe('model-2s');
+    expect(input.analysis).toMatchObject({
+      status: 'success',
+      vdi: 10.04,
+      vdiCiLow: 6.5,
+      vdiCiHigh: 14.2,
+      beeTotal: 250,
+      beeInfested: 26,
+    });
+  });
+
+  it('failed path: prefers two-stage model row, falls back to v1 (M5)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const calls: (string | undefined)[] = [];
+    const res = await post(
+      makeApp(
+        baseDeps({
+          storeAnalysis,
+          resolveModelId: async (_p, pipeline) => {
+            calls.push(pipeline);
+            return pipeline === 'v1' ? 'model-v1' : undefined; // two-stage 행 비활성
+          },
+          analyze: async () => {
+            throw new AppError('AI_UNAVAILABLE');
+          },
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(['two-stage', 'v1']);
+    expect(storeAnalysis.mock.calls[0][0].modelId).toBe('model-v1');
+  });
+
+  it('failed path: no active model row → graceful failed 200, nothing stored, never empty id (M5)', async () => {
+    const storeAnalysis = vi.fn(baseDeps().storeAnalysis);
+    const res = await post(
+      makeApp(
+        baseDeps({
+          storeAnalysis,
+          resolveModelId: async () => undefined,
+          analyze: async () => {
+            throw new AppError('AI_UNAVAILABLE');
+          },
+        }),
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.status).toBe('failed');
+    expect(body.data.error).toMatch(/model_unavailable/);
+    expect(storeAnalysis).not.toHaveBeenCalled();
+  });
+
   it('retry: existing success short-circuits BEFORE checking failed row', async () => {
     const findFailedByImage = vi.fn(async () => undefined);
     const retryAnalysis = vi.fn(baseDeps().retryAnalysis);

@@ -1,6 +1,7 @@
-import { and, avg, count, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 
 import type { Database } from '../client';
+import { rawResponseField } from './_raw';
 import { analyses } from '../schema/analyses';
 import { hives, type Hive } from '../schema/hives';
 
@@ -133,6 +134,7 @@ export type HiveTrendPoint = {
  *   → 호출 라우트가 검증을 깜빡해도 IDOR 발생 X.
  *   → 다른 user의 hiveId로 호출 시 빈 배열 반환.
  * - 시리즈 분리(스펙 v2.2 §8-1): two-stage row(vdi 또는 bee_total 이 채워진 행)는 avgVdi,
+ *   단 raw_response.tier='insufficient' 행과 OpenAI shim 행(corrected=false·bee_total null)은 avgVdi 제외.
  *   구 row는 avgRisk. 이중 출력 기간엔 two-stage row에도 risk_score(점수 단위)가 채워지지만
  *   avgRisk에서 제외 — 한 버킷에 두 시리즈가 모두 있을 수 있으며 프론트가 구분한다.
  * - dual-engine 환경에서는 같은 image_id에 2 row가 있을 수 있어 단순 평균이 두 모델 합 평균이 됨.
@@ -156,7 +158,11 @@ export async function getHiveTrend(
       avgRisk: sql<string | null>`avg(case when ${analyses.vdi} is null and ${analyses.beeTotal} is null then ${analyses.varroaInfectionRisk} end)`.mapWith(
         Number,
       ),
-      avgVdi: avg(analyses.vdi).mapWith(Number),
+      // 판독 불가(tier=insufficient, 품질 실패로 vdi는 채워짐)와 OpenAI 폴백 shim(corrected=false, 원시 카운트 없음 →
+      // vdi=미보정 rate)은 보정 VDI 시리즈에서 제외 — aggregate 의 제외 규칙과 정합.
+      avgVdi: sql<string | null>`avg(case when coalesce(${rawResponseField('tier')}, '') <> 'insufficient' and not (${analyses.beeTotal} is null and coalesce(${rawResponseField('corrected')}, '') = 'false') then ${analyses.vdi} end)`.mapWith(
+        Number,
+      ),
       analysisCount: count(analyses.id).mapWith(Number),
     })
     .from(analyses)
