@@ -65,6 +65,12 @@ export interface DualEngineRow {
   varroaInfectionRisk: number | null;
   overallHealth: string | null;
   rawResponse: Record<string, unknown> | null;
+  // v0.2.0 two-stage (구 row는 null)
+  vdi: number | null;
+  vdiCiLow: number | null;
+  vdiCiHigh: number | null;
+  beeTotal: number | null;
+  beeInfested: number | null;
 }
 
 export interface DualComparison {

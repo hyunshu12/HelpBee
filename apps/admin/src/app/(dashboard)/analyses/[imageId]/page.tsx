@@ -81,7 +81,36 @@ function EngineCard({ title, row }: { title: string; row: DualEngineRow }) {
           label="응애 위험도"
           value={row.varroaInfectionRisk != null ? String(row.varroaInfectionRisk) : '-'}
         />
-        <Field label="건강도" value={label(HEALTH_LABEL, row.overallHealth)} />
+        <Field
+          label="건강도"
+          value={
+            row.overallHealth
+              ? label(HEALTH_LABEL, row.overallHealth)
+              : row.beeTotal != null
+                ? '판독 불가'
+                : '-'
+          }
+        />
+        <Field
+          label="VDI"
+          value={
+            row.vdi != null
+              ? `${row.vdi.toFixed(1)}%${
+                  row.vdiCiLow != null && row.vdiCiHigh != null
+                    ? ` (${row.vdiCiLow.toFixed(1)}–${row.vdiCiHigh.toFixed(1)}%)`
+                    : ''
+                }`
+              : '-'
+          }
+        />
+        <Field
+          label="벌 수"
+          value={
+            row.beeTotal != null
+              ? `감염 의심 ${row.beeInfested ?? 0} / 검출 ${row.beeTotal}`
+              : '-'
+          }
+        />
       </dl>
       {row.rawResponse && Object.keys(row.rawResponse).length > 0 && (
         <div>
