@@ -40,6 +40,33 @@ describe('objectKey', () => {
   });
 });
 
+async function noisyJpeg(w: number, h: number): Promise<Buffer> {
+  // 노이즈 이미지 — 품질 설정이 파일 크기에 뚜렷이 반영되도록.
+  const raw = Buffer.alloc(w * h * 3);
+  let x = 12345;
+  for (let i = 0; i < raw.length; i++) {
+    x = (x * 1103515245 + 12345) & 0x7fffffff;
+    // 그라디언트 + 약한 노이즈 → 10MB 업로드 가드 이내이면서 품질 차이가 크기에 반영됨.
+    const px = Math.floor(i / 3);
+    raw[i] = (((px % w) + Math.floor(px / w)) & 0xff) ^ (x & 0x0f);
+  }
+  return sharp(raw, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+}
+
+describe('validateAndStrip — two-stage 패스스루 (q95, 치수 유지)', () => {
+  it('4000×3000 JPEG keeps its dimensions (no resize) and re-encodes at q95 (> q85 size)', async () => {
+    const input = await noisyJpeg(4000, 3000);
+    const out = await validateAndStrip(input);
+    expect(out.width).toBe(4000);
+    expect(out.height).toBe(3000);
+    const meta = await sharp(out.jpeg).metadata();
+    expect(meta.width).toBe(4000);
+    expect(meta.height).toBe(3000);
+    const q85 = await sharp(input).rotate().jpeg({ quality: 85 }).toBuffer(); // 이전 설정
+    expect(out.jpeg.length).toBeGreaterThan(q85.length);
+  }, 60_000);
+});
+
 describe('validateAndStrip', () => {
   it('accepts png, returns stripped jpeg with dimensions', async () => {
     const out = await validateAndStrip(await pngBuf(20, 12));
