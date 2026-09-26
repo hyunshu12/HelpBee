@@ -19,6 +19,7 @@ img_size: 320      # 모델 입력(정사각). crops 는 make_crops --crop-size 
 backbone: resnet18 # resnet18 (v0.2.0 최종 E3, featmap 512ch) | shufflenet_v2_x1_0 (v2, 1024ch)
                    # v0.2.1 실험: resnet34 (512ch) | resnet50 (2048ch) | efficientnet_b0 (1280ch) — --set backbone=... 로만
 select_metric: cal_a_auroc     # cal_a_auroc (71667 cal-A 만) | val_auroc (v2: 71667+VarroaDataset val) | last (조기 종료 없이 마지막 epoch). cal-B 는 선택에 절대 안 씀
+                               # | cal_a_tpr1 (cal-A 음성 FPR 1% 지점 TPR — 운용 영역, v0.2.1 opt-in: --set select_metric=cal_a_tpr1)
 swa_epochs: 0     # >0 = 마지막 k epoch 가중치 등가 평균(SWA)+BN 재계산(학습 분포: 증강+가중 샘플러) → best.pt, 조기 종료 해제 (0 = 끔, v0.2.0 재현 경로)
 tau_policy: youden # youden = cal-A FPR ≤ fpr_cap 안에서 TPR−FPR 최대 | fpr = cal-A 음성 FPR 1% (target_fpr) 분위수 (구 동작)
 fpr_cap: 0.01      # Youden τ 의 cal-A FPR 상한 (스펙 v2.2 정정: 0.10→0.01 — colony 간 FPR 편차로 cap≥2%는 건강 벌통 오경보, 2026-09-25 스윕)

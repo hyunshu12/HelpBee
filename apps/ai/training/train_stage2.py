@@ -15,6 +15,10 @@ ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
 계획 2(서빙)는 featmap 과 metadata.json 의 fc_weight 로 CAM 을 계산한다. 입력 크기는 config `img_size`(기본 224).
 
 모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
+v0.2.1: `cal_a_tpr1` = cal-A 음성 FPR 1% 지점의 TPR (tpr_at_fpr) — 제품 운용 영역(Youden τ, fpr_cap 0.01)만 본다.
+전체 AUROC 가 높은 모델이 FPR ≤ 1% 영역에선 더 나빴다(교차 보정 진단: cal-A 주 colony TPR@1%FPR 신규 0.07–0.49 vs
+출하 모델 0.506). epoch history 에는 선택 지표와 무관하게 항상 `cal_a_tpr1` 이 남고, 학습 후 리포트에는
+`tpr_at_fpr1: {cal_a, cal_b}`(fp32 logit, 각 셋 자기 1% 임계)가 남는다.
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이 epochs 전부(cosine 이 0 으로 수렴) → 마지막 epoch.
 `swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → **학습 분포**(증강 train +
@@ -60,7 +64,9 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
 # `last` = 고정 스케줄: 조기 종료 없이 epochs 전부 → 마지막 epoch 가중치를 best.pt 로 (epoch 지표로 고르지 않음).
-SELECT_METRICS = ("val_auroc", "cal_a_auroc", "last")
+# `cal_a_tpr1` = cal-A 에서 FPR 1% 지점 TPR (tpr_at_fpr, 높을수록 좋음 — 다른 지표와 같은 pick_metric/is_improvement 경로).
+SELECT_METRICS = ("val_auroc", "cal_a_auroc", "cal_a_tpr1", "last")
+OPERATING_FPR = 0.01  # 제품 운용점 (Youden τ fpr_cap 0.01) — history `cal_a_tpr1` · 리포트 `tpr_at_fpr1`
 SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 뽑는 train 샘플 상한 (가중 샘플러 복원추출, batch 배수로 내림)
 FINALIZE_REPORT = "stage2-eval.json"  # --finalize 리포트 파일명 (<out_dir> 안)
 TAU_POLICIES = ("youden", "fpr")
@@ -393,6 +399,27 @@ def select_tau(p, y, policy: str = DEFAULT_TAU_POLICY, fpr_cap: float = DEFAULT_
     if parse_tau_policy(policy) == "youden":
         return choose_tau_youden(p, y, fpr_cap)
     return choose_tau(p, y, target_fpr)
+
+
+def tpr_at_fpr(scores, y, fpr: float = OPERATING_FPR) -> float:
+    """음성 FPR `fpr` 지점의 TPR. 임계 t = 음성 점수의 (1−fpr) 분위수 = 오름차순 음성[n − ⌊fpr·n⌋ − 1]
+    (choose_tau 와 같은 규칙, 부동소수 오차에 강한 정수식), 판정은 measure_rates 처럼 `score > t`.
+    동점: t 와 같은 점수는 (음성·양성 모두) 음성 판정 — 결정적이고 실제 FPR ≤ fpr 이 항상 성립한다.
+    엄격 단조 증가 변환(Platt σ(a·z+b), a>0 등)에 불변 — 순서·동점이 보존되므로 logit 에 바로 써도 된다.
+    한 클래스라도 비어 있거나 fpr ∉ [0, 1) 이면 ValueError."""
+    s = np.asarray(scores, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    if len(s) != len(y):
+        raise ValueError(f"tpr_at_fpr: scores/y 길이 불일치 ({len(s)} != {len(y)})")
+    fpr = float(fpr)
+    if not 0.0 <= fpr < 1.0:
+        raise ValueError(f"tpr_at_fpr: fpr 은 [0, 1): {fpr!r}")
+    pos, neg = s[y == 1], np.sort(s[y == 0])
+    if not len(pos) or not len(neg):
+        raise ValueError(f"tpr_at_fpr: 양성·음성 모두 필요 (n_pos={len(pos)}, n_neg={len(neg)})")
+    allowed = int(np.floor(fpr * len(neg) + 1e-9))  # 허용 위양성 수
+    thr = neg[len(neg) - allowed - 1]
+    return float((pos > thr).mean())
 
 
 def measure_rates(p, y, tau):
@@ -818,7 +845,7 @@ def train(cfg: dict) -> dict:
     scaler = _grad_scaler() if use_amp else None
     eps = float(cfg["label_smoothing"])
     val_loader = eval_dl(sp["val"])
-    cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
+    cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc|cal_a_tpr1 선택 기준. cal_b 는 선택에 안 씀.
     best_score, best_ep, history = -1.0, -1, []
     swa = None  # swa_epochs>0: 마지막 k epoch 끝 가중치의 등가 평균 (파라미터만 — BN 통계는 학습 후 recompute_bn)
     for ep in range(cfg["epochs"]):
@@ -844,10 +871,12 @@ def train(cfg: dict) -> dict:
         sched.step()
         zv, yv = _predict_logits(model, val_loader, device, use_amp)  # 선택 지표용 — autocast 허용
         zca, yca = _predict_logits(model, cal_a_loader, device, use_amp)
-        row = {"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(zca, yca)}
+        row = {"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(zca, yca),
+               "cal_a_tpr1": tpr_at_fpr(zca, yca, OPERATING_FPR)}
         history.append(row)
         logger.info(f"epoch {ep}: loss={row['train_loss']:.4f} val_auroc={row['val_auroc']:.4f} "
-                    f"cal_a_auroc={row['cal_a_auroc']:.4f} (select={select_metric})")
+                    f"cal_a_auroc={row['cal_a_auroc']:.4f} cal_a_tpr1={row['cal_a_tpr1']:.4f} "
+                    f"(select={select_metric})")
         if swa_epochs and ep >= swa_start:
             if swa is None:
                 swa = swa_utils.AveragedModel(model)  # 기본 avg_fn = 등가 누적 평균
@@ -900,9 +929,10 @@ def train(cfg: dict) -> dict:
     swa_report = None
     if bn_samples is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
         swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_samples": bn_samples,
-                      "val_auroc": post["val_auroc"], "cal_a_auroc": post["cal_a_auroc"]}
+                      "val_auroc": post["val_auroc"], "cal_a_auroc": post["cal_a_auroc"],
+                      "cal_a_tpr1": post["cal_a_tpr1"]}
         logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
-                    f"cal_a_auroc={swa_report['cal_a_auroc']:.4f}")
+                    f"cal_a_auroc={swa_report['cal_a_auroc']:.4f} cal_a_tpr1={swa_report['cal_a_tpr1']:.4f}")
     # best_{metric} = 선택 모델의 지표 값 (SWA 면 평균 모델 fp32 값). select_metric=last 는 epoch 지표로 안 고르므로 키 없음.
     selection = {"select_metric": select_metric, "swa_epochs": swa_epochs}
     if select_metric != "last":
@@ -947,6 +977,8 @@ def calibrate(za, ya, zb, yb, zv, yv, sp: dict[str, list[dict]], cfg: dict) -> d
         "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
         "by_source_at_tau": by_source_at_tau,
         "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
+        # 운용 영역 품질: 각 셋 자기 음성 1% 분위 임계에서의 TPR (logit 기준 — Platt 은 단조라 불변)
+        "tpr_at_fpr1": {"cal_a": tpr_at_fpr(za, ya, OPERATING_FPR), "cal_b": tpr_at_fpr(zb, yb, OPERATING_FPR)},
         "ece15": {"cal_a": ece(pa, ya), "cal_b": ece(pb, yb), "cal_b_uncalibrated": ece(sigmoid(zb), yb)},
     }
     return {"platt": platt, "tau": tau, "tpr": tpr, "fpr": fpr, "tau_policy": policy, "fpr_cap": fpr_cap,
@@ -972,7 +1004,8 @@ def _calibrate_export(model, weights: Path, out_dir: Path, sp: dict[str, list[di
     Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
     eval_dl(rows, pin_memory) 는 batch = eval_batch 비학습 로더, 1회성이라 pin_memory=False
     (AMP 후 OOM 이 난 곳이 pin-memory 스레드였다). eval JSON 은 호출자가 쓴다.
-    반환: {"cal": calibrate 결과, "val_auroc", "cal_a_auroc"(fp32, 이 가중치), "vdi": 첫 vdi 경로}."""
+    반환: {"cal": calibrate 결과, "val_auroc", "cal_a_auroc", "cal_a_tpr1"(fp32, 이 가중치), "vdi": 첫 vdi 경로}.
+    리포트 `tpr_at_fpr1: {cal_a, cal_b}` 는 calibrate() 의 report 조각에 들어 있다 (train·finalize·recalibrate 공통)."""
     import torch
 
     out_dir = Path(out_dir)
@@ -987,7 +1020,8 @@ def _calibrate_export(model, weights: Path, out_dir: Path, sp: dict[str, list[di
     write_metadata(out_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
                    amp=amp, select_metric=select_metric, swa_epochs=swa_epochs)
     vdi = _write_vdi(cal, *vdi_paths)
-    return {"cal": cal, "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya), "vdi": vdi}
+    return {"cal": cal, "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya),
+            "cal_a_tpr1": tpr_at_fpr(za, ya, OPERATING_FPR), "vdi": vdi}
 
 
 def recalibrate(run_dir: Path, cfg: dict) -> dict:
@@ -1117,6 +1151,7 @@ def finalize(run_dir: Path, ckpt: str, out_dir: Path, cfg: dict) -> dict:
     out = out_dir / FINALIZE_REPORT
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info(f"finalized τ={cal['tau']:.4f} ({cal['tau_policy']}) cal-A AUROC={post['cal_a_auroc']:.4f} "
+                f"TPR@1%FPR cal-A={post['cal_a_tpr1']:.3f} cal-B={cal['report']['tpr_at_fpr1']['cal_b']:.3f} "
                 f"cal-B TPR={cal['tpr']:.3f} FPR={cal['fpr']:.4f} → {out}")
     return report
 

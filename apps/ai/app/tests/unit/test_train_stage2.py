@@ -11,7 +11,7 @@ from training.train_stage2 import (auroc, build_parser, calibrate, check_splits,
                                    fit_platt, is_improvement, measure_rates, model_spec, onnx_input_size,
                                    parse_backbone, parse_fpr_cap, parse_select_metric, parse_size_jitter,
                                    parse_tau_policy, pick_metric, rates_by_source, sample_weights, select_splits,
-                                   select_tau, write_vdi_yaml)
+                                   select_tau, sigmoid, tpr_at_fpr, write_vdi_yaml)
 
 
 def test_phone_degrade_shape_and_range():
@@ -239,6 +239,113 @@ def test_selection_over_history_differs_by_metric():
 
     assert best("val_auroc") == (1, 0.95)
     assert best("cal_a_auroc") == (2, 0.86)  # NaN 은 개선 아님
+
+
+# ── v0.2.1: 운용 영역 선택 지표 cal_a_tpr1 (tpr_at_fpr) ─────────────────────────────
+def _labels(neg, pos):
+    return np.r_[neg, pos].astype(np.float64), np.r_[np.zeros(len(neg)), np.ones(len(pos))].astype(int)
+
+
+def test_tpr_at_fpr_hand_computed():
+    """음성 0..99: fpr=0.01 → 허용 위양성 1 → t = 98, fpr=0 → t = 99(음성 최고점), fpr=0.05 → t = 94. 판정 score > t."""
+    s, y = _labels(np.arange(100), [98, 98.5, 99, 100, 50])
+    assert tpr_at_fpr(s, y, 0.01) == pytest.approx(3 / 5)  # 98.5, 99, 100 (98 == t 는 음성)
+    assert tpr_at_fpr(s, y, 0.0) == pytest.approx(1 / 5)  # 100 만
+    assert tpr_at_fpr(s, y, 0.05) == pytest.approx(4 / 5)
+    assert tpr_at_fpr(s, y) == tpr_at_fpr(s, y, 0.01)  # 기본 = 제품 운용점 1%
+    assert tpr_at_fpr([0.0, 1.0], [0, 1]) == 1.0 and tpr_at_fpr([1.0, 0.0], [0, 1]) == 0.0
+
+
+def test_tpr_at_fpr_ties_are_deterministic_and_keep_fpr_under_cap():
+    # 음성 전부 동점 → t = 1.0, t 와 같은 양성은 음성 판정
+    s, y = _labels(np.ones(200), [1.0, 1.0, 2.0, 0.5])
+    assert tpr_at_fpr(s, y, 0.01) == pytest.approx(0.25)
+    # 음성 상위 3 개 동점(5): 1% 허용(1개)이어도 t = 5 → 실제 FPR 0 ≤ 1%
+    neg = np.r_[np.zeros(97), [5.0, 5.0, 5.0]]
+    s, y = _labels(neg, [5.0, 6.0, 4.0])
+    assert tpr_at_fpr(s, y, 0.01) == pytest.approx(1 / 3)
+    assert measure_rates(s, y, 5.0)[1] == 0.0
+    perm = np.random.default_rng(0).permutation(len(s))  # 입력 순서 무관
+    assert tpr_at_fpr(s[perm], y[perm], 0.01) == tpr_at_fpr(s, y, 0.01)
+
+
+def test_tpr_at_fpr_matches_choose_tau_and_measure_rates():
+    rng = np.random.default_rng(5)
+    s, y = _labels(rng.normal(-1, 1, 2000), rng.normal(1.5, 1, 150))
+    for f in (0.0, 0.01, 0.05):
+        tpr, fpr = measure_rates(s, y, choose_tau(s, y, f))
+        assert tpr_at_fpr(s, y, f) == pytest.approx(tpr) and fpr <= f + 1e-12
+
+
+def test_tpr_at_fpr_invariant_under_monotone_transform():
+    """Platt(a>0)·exp 같은 엄격 단조 증가 변환은 순서·동점을 보존 → logit 에 바로 써도 확률과 같은 값."""
+    rng = np.random.default_rng(6)
+    z, y = _labels(rng.normal(-0.5, 1, 1500), rng.normal(0.8, 1, 120))
+    base = tpr_at_fpr(z, y, 0.01)
+    assert 0.0 < base < 1.0
+    for t in (sigmoid(0.7 * z - 1.3), np.exp(z), 3 * z + 10, z ** 3):
+        assert tpr_at_fpr(t, y, 0.01) == base
+
+
+def test_tpr_at_fpr_rejects_bad_input():
+    with pytest.raises(ValueError, match="양성"):
+        tpr_at_fpr([0.1, 0.2], [0, 0])  # 양성 없음
+    with pytest.raises(ValueError, match="양성"):
+        tpr_at_fpr([0.1, 0.2], [1, 1])  # 음성 없음
+    with pytest.raises(ValueError, match="양성"):
+        tpr_at_fpr([], [])
+    for f in (1.0, -0.01, 1.5):
+        with pytest.raises(ValueError, match="fpr"):
+            tpr_at_fpr([0.1, 0.9], [0, 1], f)
+    with pytest.raises(ValueError, match="길이"):
+        tpr_at_fpr([0.1, 0.9, 0.5], [0, 1])
+
+
+def test_select_metric_cal_a_tpr1_parses_and_selects_operating_region():
+    """cal_a_tpr1 = 유효 선택 지표(높을수록 좋음). AUROC 최고 epoch 과 운용 영역 최고 epoch 이 갈린다."""
+    assert parse_select_metric("cal_a_tpr1") == "cal_a_tpr1"
+    for bad in ("cal_b_tpr1", "tpr1", "cal_a_tpr"):
+        with pytest.raises(ValueError):
+            parse_select_metric(bad)
+    hist = [{"cal_a_auroc": 0.80, "cal_a_tpr1": 0.50}, {"cal_a_auroc": 0.88, "cal_a_tpr1": 0.30},
+            {"cal_a_auroc": 0.85, "cal_a_tpr1": 0.52}, {"cal_a_auroc": 0.84, "cal_a_tpr1": float("nan")}]
+
+    def best(metric):
+        b, be = -1.0, -1
+        for ep, r in enumerate(hist):
+            v = pick_metric(r, metric)
+            if is_improvement(v, b):
+                b, be = v, ep
+        return be, b
+
+    assert best("cal_a_auroc") == (1, 0.88)
+    assert best("cal_a_tpr1") == (2, 0.52)  # NaN 은 개선 아님
+
+
+def test_stage2_yaml_documents_cal_a_tpr1_and_keeps_default():
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "training/configs/stage2.yaml").read_text(encoding="utf-8")
+    assert "cal_a_tpr1" in text and yaml.safe_load(text)["select_metric"] == "cal_a_auroc"
+
+
+def test_calibrate_reports_tpr_at_fpr1_on_logits():
+    rng = np.random.default_rng(10)
+
+    def split(n_neg, n_pos, src):
+        y = np.r_[np.zeros(n_neg), np.ones(n_pos)].astype(int)
+        z = np.r_[rng.normal(-1, 1, n_neg), rng.normal(1.2, 1, n_pos)]
+        return z, y, [{"source": src, "label": str(v)} for v in y]
+
+    za, ya, ra = split(1500, 200, "71667-val")
+    zb, yb, rb = split(3000, 100, "71667-val")
+    zv, yv, rv = split(300, 60, "varroadataset")
+    cal = calibrate(za, ya, zb, yb, zv, yv, {"cal_a": ra, "cal_b": rb, "val": rv}, {"fpr_cap": 0.01})
+    t = cal["report"]["tpr_at_fpr1"]
+    assert set(t) == {"cal_a", "cal_b"}
+    assert t["cal_a"] == tpr_at_fpr(za, ya, 0.01) and t["cal_b"] == tpr_at_fpr(zb, yb, 0.01)
+    a, b = cal["platt"]  # Platt(a>0) 확률에서 재도 같다 — 각 셋 자기 1% 임계
+    assert a > 0 and t["cal_b"] == tpr_at_fpr(sigmoid(a * zb + b), yb, 0.01)
+    json.dumps(cal["report"])  # eval JSON 직렬화 가능 (float)
 
 
 def test_parse_backbone():
@@ -658,6 +765,30 @@ def test_train_smoke_amp_recorded_and_onnx_fp32(tmp_path, monkeypatch):
     assert s.get_inputs()[0].type == "tensor(float)" and s.get_outputs()[0].type == "tensor(float)"
     logit, feat = s.run(None, {"image": np.zeros((2, 3, 64, 64), np.float32)})
     assert logit.dtype == np.float32 and feat.shape == (2, 512, 2, 2)
+    # 운용 영역 지표: epoch history 행마다 cal_a_tpr1, 학습 후 리포트에 tpr_at_fpr1{cal_a, cal_b}
+    assert rep["history"] and all(0.0 <= r["cal_a_tpr1"] <= 1.0 for r in rep["history"])
+    assert set(rep["tpr_at_fpr1"]) == {"cal_a", "cal_b"}
+    assert all(0.0 <= v <= 1.0 for v in rep["tpr_at_fpr1"].values())
+    ev = json.loads((tmp_path / "eval_amp.json").read_text(encoding="utf-8"))
+    assert ev["tpr_at_fpr1"] == rep["tpr_at_fpr1"] and "cal_a_tpr1" in ev["history"][0]
+
+
+def test_train_select_metric_cal_a_tpr1_with_swa(tmp_path, monkeypatch):
+    """select_metric=cal_a_tpr1 + SWA: 평균 모델의 fp32 cal-A TPR@1%FPR 이 best_cal_a_tpr1 = swa.cal_a_tpr1
+    = 리포트 tpr_at_fpr1.cal_a (swa_report 에 키가 없으면 KeyError 나던 경로)."""
+    pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    import training.train_stage2 as ts
+
+    _no_pretrained(monkeypatch, ts)
+    crops = _mini_crops(tmp_path)
+    cfg = {**_smoke_cfg(tmp_path, crops, "tpr1", False), "epochs": 2, "patience": 0, "swa_epochs": 1,
+           "select_metric": "cal_a_tpr1"}
+    rep = ts.train(cfg)
+    assert rep["select_metric"] == "cal_a_tpr1" and len(rep["history"]) == 2
+    assert all("cal_a_tpr1" in r for r in rep["history"])
+    assert rep["best_cal_a_tpr1"] == rep["swa"]["cal_a_tpr1"] == rep["tpr_at_fpr1"]["cal_a"]
 
 
 # ── v0.2.1: 선택 프로토콜 — select_metric=last · SWA ─────────────────────────────
@@ -1113,7 +1244,7 @@ def test_finalize_smoke_writes_only_out_dir_and_matches_train(tmp_path, monkeypa
     assert rep["select_metric"] == "last" and rep["swa_epochs"] == 0 and rep["history"] == trep["history"]
     assert rep["weights"] == str(out / "best.pt") and rep["vdi"] == str(out / "vdi.yaml")
     # 같은 가중치(last == best) → train() 학습 후 경로와 같은 보정
-    for k in ("tau", "platt", "cal_b", "auroc", "ece15", "by_source_at_tau", "counts"):
+    for k in ("tau", "platt", "cal_b", "auroc", "tpr_at_fpr1", "ece15", "by_source_at_tau", "counts"):
         assert rep[k] == trep[k], k
     assert rep["val_auroc"] == trep["val_auroc"]
 
