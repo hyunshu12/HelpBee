@@ -100,8 +100,8 @@ packages/database/
 | **refresh_tokens** | JWT refresh 회전 + 재사용 감지용 해시 저장소. |
 | **hives** | 사용자별 벌통 (위치, 메모, 설치일). soft delete 대상. |
 | **analysis_images** | S3 storage_url 메타 (mime, 크기, checksum, 촬영 시각). |
-| **ai_models** | provider(openai|yolo) + name + version. UNIQUE(provider, name, version). |
-| **analyses** | 분석 결과 (risk 0-100, tier, jsonb raw, latency). UNIQUE(image_id, model_id). two-stage(v0.2.0~) 행은 nullable `vdi`/`vdi_ci_low`/`vdi_ci_high` numeric(6,3) + `bee_total`/`bee_infested` int (0003, 스펙 §8-1). 트렌드는 vdi / risk 시리즈 분리. |
+| **ai_models** | provider(openai|yolo) + name + version. UNIQUE(provider, name, version). two-stage 행 = `('yolo','helpbee-two-stage','0.2.0')` (시드 `seeds/dev.ts`·`seeds/prod.ts`, ADR-0002) — v0.1.0 `('yolo','helpbee-yolov11s','0.1.0')`과 동시 활성, `resolveActiveModel(db, provider, pipeline)`로 구분. |
+| **analyses** | 분석 결과 (risk 0-100, tier, jsonb raw, latency). UNIQUE(image_id, model_id). two-stage(v0.2.0~) 행은 nullable `vdi`/`vdi_ci_low`/`vdi_ci_high` numeric(6,3) + `bee_total`/`bee_infested` int (0003, 스펙 v2.2 §8-1). 구 row는 NULL. 트렌드는 two-stage=`vdi` / 구 row=`varroa_infection_risk` 시리즈 분리(단위 상이, coalesce 금지). `overall_health` 매핑: low→healthy, elevated→warning, high→critical, insufficient→NULL. N장 합산은 저장 안 함 — 읽기 시 Σbee_infested/Σbee_total로 재계산(저장된 `vdi`는 clip돼 역산 불가). |
 | **recommendations** | analysis_id에 종속된 권장 조치 (i18n/검색을 위해 분리 테이블). |
 | **subscriptions** | user_id UNIQUE, plan(free|basic|pro), trial_ends_at. |
 | **audit_log** | bigserial PK. actor_id/action/entity/entity_id/jsonb metadata. (entity, entity_id) 인덱스. |

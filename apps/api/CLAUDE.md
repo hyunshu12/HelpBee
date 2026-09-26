@@ -242,6 +242,8 @@ AI 추론은 별도 서비스(`services/ai`, FastAPI/Triton 등)에 위임. back
 - **engine=auto fallback** — 기본 엔진 실패 시 fallback 엔진으로 자동 재시도. 양쪽 다 실패해야 503.
 - **dual-result 모드** — `?engine=dual` 파라미터 시 두 엔진 응답을 병렬 호출하고 둘 다 반환. 응답 스키마: `{ primary, secondary, agreement }`.
 - 모든 호출은 `request-id` 헤더 propagation.
+- **two-stage 계약 (스펙 v2.2 §3·§8, ADR-0002)**: AI 응답의 `vdi`·`vdi_display`·`tier`·`corrected`·`bee_total`·`bee_infested`·`sampling_ci95`·`quality`·`model_versions`를 정규화해 `raw_response`에 보존(`bees`/`evidence` 제외)하고 POST/GET 응답에 `vdi, vdiDisplay, tier, corrected, beeTotal, beeInfested, samplingCi95, quality, modelVersions`로 투영. `evidence[]`(`{index, box, crop_region, p_infested, cam}`)는 **POST 응답에만 pass-through**(미저장). **이중 출력 기간**: `risk_score`(= AI `score_mapping(vdi)` 점수)는 `varroaInfectionRisk`로 계속 저장·반환(`tier_legacy`는 AI 응답 타입에만 존재) — 구 필드 제거(계획 2 Task 8)는 develop 머지 + 1회 배포 후.
+- **N장 합산** `aggregate()` → AI `POST /aggregate`(기본 타임아웃, 무재시도, 실패 시 503 `AI_UNAVAILABLE`). 원시 카운트 Σk/Σn만 전달 — 퍼센트 평균 금지.
 
 **위치**: `services/ai-client.ts`. AI 응답 정규화는 여기서 수행하고 라우트는 그대로 envelope 처리.
 
