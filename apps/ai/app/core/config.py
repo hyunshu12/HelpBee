@@ -18,6 +18,13 @@ class Settings:
     ai_internal_hmac_secret: str
     image_allowlist_hosts: list[str]
     image_fetch_allow_http: bool
+    # two-stage 서빙 (스펙 v2.2 §8). AI_ENGINE=two-stage 면 engine=yolo/auto 요청의 1차 엔진이
+    # two-stage, yolo-v1 이면 기존 v0.1.0 단일 스테이지(롤백용).
+    ai_engine: str = "two-stage"
+    two_stage_model_version: str = "v0.2.0"
+    two_stage_cache_dir: str = str(Path.home() / ".cache" / "helpbee" / "two-stage")
+    models_bucket: str = "helpbee-models"
+    ai_internal_budget_s: float = 80.0  # 타임아웃 체인: 모바일 ≥95s ≥ ai-client 90s ≥ 이 값
 
 
 def load_settings() -> Settings:
@@ -28,6 +35,13 @@ def load_settings() -> Settings:
         ai_internal_hmac_secret=os.environ.get("AI_INTERNAL_HMAC_SECRET", ""),
         image_allowlist_hosts=[h.strip() for h in hosts.split(",") if h.strip()],
         image_fetch_allow_http=os.getenv("IMAGE_FETCH_ALLOW_HTTP", "false").lower() == "true",
+        ai_engine=os.getenv("AI_ENGINE", "two-stage"),
+        two_stage_model_version=os.getenv("TWO_STAGE_MODEL_VERSION", "v0.2.0"),
+        two_stage_cache_dir=os.getenv(
+            "TWO_STAGE_CACHE_DIR", str(Path.home() / ".cache" / "helpbee" / "two-stage")
+        ),
+        models_bucket=os.getenv("AWS_S3_MODELS_BUCKET", "helpbee-models"),
+        ai_internal_budget_s=float(os.getenv("AI_INTERNAL_BUDGET_S", "80")),
     )
 
 

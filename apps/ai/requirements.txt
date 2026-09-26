@@ -21,3 +21,6 @@ sentry-sdk>=2,<3
 
 # VDI 수식 (Jeffreys CI) — app/services/vdi.py (평가·서빙 공용)
 scipy>=1.11
+
+# two-stage 서빙 — Laplacian 블러(quality.py) + 학습과 동일 크롭 규칙(training.data.make_crops.crop_pad_224)
+opencv-python-headless>=4.8,<5
