@@ -43,8 +43,10 @@ class HiveDetailScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.commonDelete,
-                style: const TextStyle(color: AppColors.error)),
+            child: Text(
+              l10n.commonDelete,
+              style: const TextStyle(color: AppColors.error),
+            ),
           ),
         ],
       ),
@@ -136,14 +138,19 @@ class _Body extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final analyses = ref.watch(hiveAnalysesProvider(hive.id)).asData?.value ??
+    final analyses =
+        ref.watch(hiveAnalysesProvider(hive.id)).asData?.value ??
         const <Analysis>[];
     final Analysis? latest = analyses.isEmpty ? null : analyses.first;
     final tier = latest?.tier ?? RiskTier.unknown;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
-          AppSpacing.screenH, AppSpacing.md, AppSpacing.screenH, AppSpacing.xxl),
+        AppSpacing.screenH,
+        AppSpacing.md,
+        AppSpacing.screenH,
+        AppSpacing.xxl,
+      ),
       children: [
         _RiskSummaryCard(tier: tier, score: latest?.varroaInfectionRisk),
         AppSpacing.gapMd,
@@ -171,9 +178,9 @@ class _Body extends ConsumerWidget {
         Text(
           l10n.historyRecentTitle,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         AppSpacing.gapSm,
         if (analyses.isEmpty)
@@ -181,10 +188,9 @@ class _Body extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Text(
               l10n.noAnalysisYet,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: AppColors.textSecondary),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
           )
         else
@@ -224,8 +230,9 @@ class _RiskSummaryCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   l10n.hiveRiskSubtitle,
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(color: AppColors.textSecondary),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
               if (score != null)
@@ -233,19 +240,29 @@ class _RiskSummaryCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text('$score',
-                        style: theme.textTheme.displaySmall
-                            ?.copyWith(color: color, fontWeight: FontWeight.w800)),
+                    Text(
+                      '$score',
+                      style: theme.textTheme.displaySmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(width: 2),
-                    Text(l10n.scoreSuffix,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(color: AppColors.textSecondary)),
+                    Text(
+                      l10n.scoreSuffix,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 )
               else
-                Text(l10n.noAnalysisYet,
-                    style: theme.textTheme.bodyLarge
-                        ?.copyWith(color: AppColors.textSecondary)),
+                Text(
+                  l10n.noAnalysisYet,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
             ],
           ),
         ],
@@ -280,15 +297,19 @@ class _LocationCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(l10n.hiveLocationCard,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700)),
+                Text(
+                  l10n.hiveLocationCard,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
                   (address != null && address!.isNotEmpty) ? address! : '-',
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(color: AppColors.textSecondary),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -313,14 +334,21 @@ class _MiniCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          Text(
+            label,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 4),
           valueChild ??
-              Text(value,
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(color: AppColors.textSecondary)),
+              Text(
+                value,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
         ],
       ),
     );
@@ -347,11 +375,12 @@ class _StatusCard extends StatelessWidget {
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
-          Text(riskTierBadge(l10n, tier),
-              style: Theme.of(context)
-                  .textTheme
-                  .bodyLarge
-                  ?.copyWith(color: AppColors.textPrimary)),
+          Text(
+            riskTierBadge(l10n, tier),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textPrimary),
+          ),
         ],
       ),
     );
@@ -371,13 +400,20 @@ class _MemoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l10n.memoTitle,
-              style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          Text(
+            l10n.memoTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(note,
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(color: AppColors.textSecondary)),
+          Text(
+            note,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -403,16 +439,21 @@ class _TimelineRow extends StatelessWidget {
       valueText = l10n.errAiUnavailable;
     } else if (analysis.varroaInfectionRisk != null) {
       valueText = l10n.scoreWithTier(
-          analysis.varroaInfectionRisk!, _tierShort(l10n, tier));
+        analysis.varroaInfectionRisk!,
+        _tierShort(l10n, tier),
+      );
     } else {
       valueText = l10n.noAnalysisYet;
     }
 
     final labelStyle = theme.textTheme.bodyLarge?.copyWith(
-        color: AppColors.textPrimary, fontWeight: FontWeight.w700);
+      color: AppColors.textPrimary,
+      fontWeight: FontWeight.w700,
+    );
     final valueStyle = theme.textTheme.bodyLarge?.copyWith(
-        color: analysis.isFailed ? AppColors.textSecondary : color,
-        fontWeight: FontWeight.w700);
+      color: analysis.isFailed ? AppColors.textSecondary : color,
+      fontWeight: FontWeight.w700,
+    );
 
     return IntrinsicHeight(
       child: Row(
@@ -439,13 +480,18 @@ class _TimelineRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('${_fmtDate(when)}(${_relative(l10n, when)})',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: AppColors.textSecondary)),
+                  Text(
+                    '${_fmtDate(when)}(${_relative(l10n, when)})',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.bgLight,
                       borderRadius: AppRadius.inputRadius,
@@ -465,8 +511,10 @@ class _TimelineRow extends StatelessWidget {
                         : Row(
                             children: [
                               Expanded(
-                                child:
-                                    Text(l10n.aiAutoDiagnosis, style: labelStyle),
+                                child: Text(
+                                  l10n.aiAutoDiagnosis,
+                                  style: labelStyle,
+                                ),
                               ),
                               Text(valueText, style: valueStyle),
                             ],
@@ -503,18 +551,22 @@ class _Card extends StatelessWidget {
 }
 
 String _tierShort(AppLocalizations l10n, RiskTier tier) => switch (tier) {
-      RiskTier.safe => l10n.tierSafe,
-      RiskTier.watch => l10n.tierWatch,
-      RiskTier.danger => l10n.tierDanger,
-      RiskTier.unknown => l10n.tierUnknown,
-    };
+  RiskTier.safe => l10n.tierSafe,
+  RiskTier.watch => l10n.tierWatch,
+  RiskTier.danger => l10n.tierDanger,
+  RiskTier.insufficient => l10n.tierInsufficient,
+  RiskTier.unknown => l10n.tierUnknown,
+};
 
 String _relative(AppLocalizations l10n, DateTime d) {
   final now = DateTime.now();
-  final l = d.toLocal(); // backend timestamps are UTC; match _fmtDate's local day
-  final days = DateTime(now.year, now.month, now.day)
-      .difference(DateTime(l.year, l.month, l.day))
-      .inDays;
+  final l = d
+      .toLocal(); // backend timestamps are UTC; match _fmtDate's local day
+  final days = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).difference(DateTime(l.year, l.month, l.day)).inDays;
   if (days <= 0) return l10n.today;
   if (days == 1) return l10n.yesterday;
   return l10n.daysAgo(days);

@@ -80,7 +80,7 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen>
       );
       final controller = CameraController(
         back,
-        ResolutionPreset.high,
+        ResolutionPreset.max, // spec v2.2 §8: 원본 해상도 캡처 (two-stage 판독)
         enableAudio: false,
       );
       await controller.initialize();

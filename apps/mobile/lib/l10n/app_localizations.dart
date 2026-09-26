@@ -718,6 +718,12 @@ abstract class AppLocalizations {
   /// **'진단 필요'**
   String get badgeUnknown;
 
+  /// No description provided for @badgeInsufficient.
+  ///
+  /// In ko, this message translates to:
+  /// **'판독 불가'**
+  String get badgeInsufficient;
+
   /// Home free-tier quota banner. count = monthly allowance (remaining not exposed by API).
   ///
   /// In ko, this message translates to:
@@ -934,6 +940,12 @@ abstract class AppLocalizations {
   /// **'안전'**
   String get tierSafe;
 
+  /// No description provided for @tierInsufficient.
+  ///
+  /// In ko, this message translates to:
+  /// **'판독 불가'**
+  String get tierInsufficient;
+
   /// No description provided for @tierWatch.
   ///
   /// In ko, this message translates to:
@@ -1114,6 +1126,12 @@ abstract class AppLocalizations {
   /// **'양호 수준'**
   String get gaugeCaptionSafe;
 
+  /// No description provided for @gaugeCaptionInsufficient.
+  ///
+  /// In ko, this message translates to:
+  /// **'판독 불가'**
+  String get gaugeCaptionInsufficient;
+
   /// No description provided for @gaugeCaptionWatch.
   ///
   /// In ko, this message translates to:
@@ -1131,6 +1149,12 @@ abstract class AppLocalizations {
   /// In ko, this message translates to:
   /// **'측정 불가'**
   String get gaugeCaptionUnknown;
+
+  /// No description provided for @recInsufficient1.
+  ///
+  /// In ko, this message translates to:
+  /// **'벌이 보이도록 소비판을 가까이서 다시 촬영해 주세요.'**
+  String get recInsufficient1;
 
   /// No description provided for @recSafe1.
   ///
