@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BeeOut(BaseModel):
@@ -27,6 +27,8 @@ _DEFAULT_FAILURE_RECS = ["AI 분석에 실패했습니다. 잠시 후 다시 시
 
 
 class AnalysisResponse(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())  # model_version(s) 필드 허용
+
     risk_score: int | None  # 0~100 (clamp). 실패 시 None.
     tier: Tier
     estimated_count: int | None = None  # 응애 개체 수(YOLO는 None)
