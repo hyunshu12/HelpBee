@@ -175,7 +175,16 @@ function withRecs(row: unknown, recs: Recommendation[]) {
   return { ...normalizeRow(row), recommendations: recs };
 }
 
-export function analysesRoutes(deps: AnalysesDeps) {
+export type AnalysesOptions = {
+  /**
+   * PORTFOLIO_MODE(비영리 포트폴리오 전제, 스펙 §1): quota reserve/refund·이메일 검증 게이트 우회,
+   * engine은 plan과 무관하게 항상 'yolo'(two-stage) — 유료 OpenAI 폴백('auto') 금지.
+   */
+  portfolioMode?: boolean;
+};
+
+export function analysesRoutes(deps: AnalysesDeps, opts: AnalysesOptions = {}) {
+  const portfolioMode = opts.portfolioMode === true;
   const app = new Hono();
 
   app.post('/', zValidator('json', createAnalysisSchema), async (c) => {
@@ -202,16 +211,19 @@ export function analysesRoutes(deps: AnalysesDeps) {
     const isRetry = !!failedRow;
 
     // ③ 무료: 이메일 검증 게이트 + quota reserve(reserve-then-refund)
-    const plan = await deps.getPlan(userId);
+    //    portfolio 모드: 게이트·quota 전부 우회(reserve 없음 → refund도 없음).
+    const plan = portfolioMode ? 'free' : await deps.getPlan(userId);
     const isFree = plan === 'free';
-    if (isFree) {
+    const metered = isFree && !portfolioMode;
+    if (metered) {
       const emailVerifiedAt = await deps.getEmailVerifiedAt(userId);
       if (!emailVerifiedAt) return problem(c, 'AUTH_EMAIL_NOT_VERIFIED');
       await deps.reserveQuota(userId); // QUOTA_EXCEEDED → error-handler 402
     }
 
     // ④ plan별 engine (무료=YOLO 단독, 유료=auto 폴백) → presigned GET → ai 위임
-    const engine: 'auto' | 'yolo' = isFree ? 'yolo' : 'auto';
+    //    portfolio 모드는 plan 무관 항상 yolo(유료 OpenAI 폴백 금지).
+    const engine: 'auto' | 'yolo' = isFree || portfolioMode ? 'yolo' : 'auto';
     const imageUrl = await deps.presignGet(image.storageUrl);
 
     let result: AiResult | null = null;
@@ -228,7 +240,7 @@ export function analysesRoutes(deps: AnalysesDeps) {
 
     // ⑤-a 실패: 무료면 환불, status=failed 저장, graceful 200(비차단)
     if (failed) {
-      if (isFree) await deps.refundQuota(userId);
+      if (metered) await deps.refundQuota(userId);
       const modelId = (await deps.resolveModelId('yolo', 'v1')) ?? '';
       const analysis = {
         status: 'failed',

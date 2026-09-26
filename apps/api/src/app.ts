@@ -61,6 +61,12 @@ export function createApp() {
       '[net] TRUSTED_PROXY=xff in production — client IP is spoofable; set TRUSTED_PROXY=cloudflare behind Cloudflare',
     );
   }
+  if (env.NODE_ENV === 'production' && env.PORTFOLIO_MODE) {
+    logger.warn(
+      {},
+      '[portfolio] PORTFOLIO_MODE=true in production — quota/email gate bypassed, engine forced to yolo',
+    );
+  }
   const redis = new Redis(env.REDIS_URL);
   const s3client = new S3Client({ region: env.AWS_REGION });
   const http = axios.create({ baseURL: env.AI_BASE_URL });
@@ -323,7 +329,7 @@ export function createApp() {
       enabled: env.SUBSCRIPTION_WEBHOOK_ENABLED,
     }),
   );
-  subsApp.route('/', subscriptionsRoutes(subscriptionsDeps));
+  subsApp.route('/', subscriptionsRoutes(subscriptionsDeps, { portfolioMode: env.PORTFOLIO_MODE }));
 
   // Inquiries: 익명 공개 라우트. 남용 방지로 5회/시간/IP(브루트포스/스팸 방어). fail-closed.
   const inquiriesApp = new Hono();
@@ -353,7 +359,7 @@ export function createApp() {
   app.route('/v1/inquiries', inquiriesApp);
   app.route('/v1/hives', protectedMount(hivesRoutes(hivesDeps)));
   app.route('/v1/images', protectedMount(imagesRoutes(imagesDeps)));
-  app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps)));
+  app.route('/v1/analyses', protectedMount(analysesRoutes(analysesDeps, { portfolioMode: env.PORTFOLIO_MODE })));
   app.route('/v1/admin', adminApp);
 
   return app;

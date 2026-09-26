@@ -5,7 +5,12 @@ import { errorHandler } from '../middleware/error-handler';
 import { requestId } from '../middleware/request-id';
 import { subscriptionsRoutes, type SubscriptionsDeps } from './subscriptions';
 
-function makeApp(deps: SubscriptionsDeps, userId = 'u1', webhookBody?: unknown) {
+function makeApp(
+  deps: SubscriptionsDeps,
+  userId = 'u1',
+  webhookBody?: unknown,
+  opts?: { portfolioMode?: boolean },
+) {
   const app = new Hono();
   app.onError(errorHandler);
   app.use('*', requestId);
@@ -17,7 +22,7 @@ function makeApp(deps: SubscriptionsDeps, userId = 'u1', webhookBody?: unknown) 
     c.set('webhookBody', webhookBody ?? {});
     await next();
   });
-  app.route('/', subscriptionsRoutes(deps));
+  app.route('/', subscriptionsRoutes(deps, opts));
   return app;
 }
 
@@ -56,6 +61,21 @@ describe('GET /subscriptions/plans', () => {
     const { data } = await res.json();
     expect(data.plans).toHaveLength(3);
     expect(data.plans[0].id).toBe('free');
+  });
+});
+
+describe('GET /subscriptions/plans — PORTFOLIO_MODE', () => {
+  it('default: no portfolio flag', async () => {
+    const { data } = await (await makeApp(deps()).request('/plans')).json();
+    expect(data.portfolio).toBeUndefined();
+  });
+
+  it('portfolioMode=true → portfolio: true (catalog still present)', async () => {
+    const res = await makeApp(deps(), 'u1', undefined, { portfolioMode: true }).request('/plans');
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.portfolio).toBe(true);
+    expect(data.plans).toHaveLength(3);
   });
 });
 

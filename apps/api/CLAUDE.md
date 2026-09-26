@@ -330,6 +330,8 @@ pnpm --filter api dev      # tsx watch + .env.local 로드
 
 기본 포트: `3001` (`src/index.ts`의 `PORT ?? 3001`). health check: `GET http://localhost:3001/health`. Bruno 환경(`bruno/environments/local.bru`)도 동일 포트로 맞출 것.
 
+**two-stage/포트폴리오 env (`config/env.ts`)**: `AI_TIMEOUT_MS_TWO_STAGE`(기본 90000, yolo·auto 경로 ai-client 타임아웃) · `PORTFOLIO_MODE`(`true`/`1`만 활성, 기본 false — `POST /v1/analyses`의 quota reserve/refund·이메일 검증 게이트 우회 + engine 항상 `yolo`, `GET /v1/subscriptions/plans`에 `portfolio: true`. production+true면 부팅 경고). confirm 재인코딩은 치수 유지 + JPEG q95(mozjpeg), EXIF strip·50MP 가드 유지 — 다운스케일은 모바일 책임.
+
 **이메일 인증 env (P1-4, `config/env.ts`)**: `EMAIL_PROVIDER`(`console`|`resend`, 기본 `console`) · `RESEND_API_KEY`(resend일 때만 필수 — zod refine, 빈 문자열=미설정) · `EMAIL_FROM`(기본 `HelpBee <onboarding@resend.dev>`) · `EMAIL_VERIFY_BASE_URL`(기본 `http://localhost:3001`). 로컬은 `console`로 두면 인증 URL이 pino 로그로 찍힌다(`EMAIL_PROVIDER=console pnpm dev`). production+console이면 부팅 시 경고 로그. 미검증 Resend 도메인은 **계정 소유자 주소로만** 발송 가능(그 외는 403). 토큰은 stateless HMAC(JWT_SECRET, purpose `email-verify:`) — DB 테이블/마이그레이션 없음.
 
 ### Bruno

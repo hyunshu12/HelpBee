@@ -58,7 +58,7 @@ function baseDeps(over: Partial<AnalysesDeps> = {}): AnalysesDeps {
   };
 }
 
-function makeApp(deps: AnalysesDeps, opts: { userId?: string } = {}) {
+function makeApp(deps: AnalysesDeps, opts: { userId?: string; portfolioMode?: boolean } = {}) {
   const app = new Hono();
   app.onError(errorHandler);
   app.use('*', async (c, next) => {
@@ -66,7 +66,7 @@ function makeApp(deps: AnalysesDeps, opts: { userId?: string } = {}) {
     c.set('requestId', 'req-1');
     await next();
   });
-  app.route('/v1/analyses', analysesRoutes(deps));
+  app.route('/v1/analyses', analysesRoutes(deps, { portfolioMode: opts.portfolioMode }));
   return app;
 }
 
@@ -591,6 +591,52 @@ describe('POST /v1/analyses', () => {
       role: 'admin',
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /v1/analyses — PORTFOLIO_MODE', () => {
+  it('free + unverified email → 201, quota never reserved, engine yolo', async () => {
+    const reserveQuota = vi.fn(async () => {});
+    const getEmailVerifiedAt = vi.fn(async () => null);
+    const analyze = vi.fn(baseDeps().analyze);
+    const res = await post(
+      makeApp(baseDeps({ reserveQuota, getEmailVerifiedAt, analyze }), { portfolioMode: true }),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(201);
+    expect(reserveQuota).not.toHaveBeenCalled();
+    expect(analyze.mock.calls[0]![0].engine).toBe('yolo');
+  });
+
+  it('paid plan still forced to yolo (no paid OpenAI fallback)', async () => {
+    const analyze = vi.fn(baseDeps().analyze);
+    const res = await post(
+      makeApp(baseDeps({ getPlan: async () => 'pro', analyze }), { portfolioMode: true }),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(201);
+    expect(analyze.mock.calls[0]![0].engine).toBe('yolo');
+  });
+
+  it('ai failure → graceful 200 without refund (nothing reserved)', async () => {
+    const reserveQuota = vi.fn(async () => {});
+    const refundQuota = vi.fn(async () => {});
+    const res = await post(
+      makeApp(
+        baseDeps({
+          reserveQuota,
+          refundQuota,
+          analyze: async () => {
+            throw new AppError('AI_UNAVAILABLE');
+          },
+        }),
+        { portfolioMode: true },
+      ),
+      { hiveId: HIVE, imageId: IMAGE },
+    );
+    expect(res.status).toBe(200);
+    expect(reserveQuota).not.toHaveBeenCalled();
+    expect(refundQuota).not.toHaveBeenCalled();
   });
 });
 

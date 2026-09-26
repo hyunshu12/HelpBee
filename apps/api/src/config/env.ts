@@ -36,6 +36,12 @@ const envSchema = z
     WEBHOOK_HMAC_SECRET: z.string().min(32).optional(), // 결제 webhook 서명(§11.4). 미설정 시 WEBHOOK_DISABLED.
     SUBSCRIPTION_WEBHOOK_ENABLED: z.coerce.boolean().default(false), // MVP inert 기본
     SENTRY_DSN: z.string().optional(),
+    // 비영리 포트폴리오 모드(스펙 §1): quota·이메일 게이트 우회, engine 항상 yolo, /plans에 portfolio:true.
+    // z.coerce.boolean은 'false'→true 라 쓰지 않는다 — 'true'/'1'만 활성.
+    PORTFOLIO_MODE: z
+      .string()
+      .optional()
+      .transform((v) => v === 'true' || v === '1'),
     // 이메일 인증 발송(P1-4). console=로그만(로컬 기본) / resend=Resend REST API.
     EMAIL_PROVIDER: z.enum(['console', 'resend']).default('console'),
     // 빈 문자열은 미설정으로 취급(refine에서 resend일 때만 필수).
