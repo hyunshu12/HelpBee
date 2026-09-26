@@ -14,3 +14,8 @@ def test_two_stage_env_override(monkeypatch):
     monkeypatch.setenv("TWO_STAGE_MODEL_VERSION", "v0.2.1")
     s = load_settings()
     assert s.ai_engine == "yolo-v1" and s.two_stage_model_version == "v0.2.1"
+
+
+def test_empty_cache_dir_uses_default(monkeypatch):
+    monkeypatch.setenv("TWO_STAGE_CACHE_DIR", "")
+    assert load_settings().two_stage_cache_dir.endswith("helpbee/two-stage")

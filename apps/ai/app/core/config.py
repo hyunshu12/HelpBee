@@ -37,9 +37,8 @@ def load_settings() -> Settings:
         image_fetch_allow_http=os.getenv("IMAGE_FETCH_ALLOW_HTTP", "false").lower() == "true",
         ai_engine=os.getenv("AI_ENGINE", "two-stage"),
         two_stage_model_version=os.getenv("TWO_STAGE_MODEL_VERSION", "v0.2.0"),
-        two_stage_cache_dir=os.getenv(
-            "TWO_STAGE_CACHE_DIR", str(Path.home() / ".cache" / "helpbee" / "two-stage")
-        ),
+        two_stage_cache_dir=os.getenv("TWO_STAGE_CACHE_DIR")
+        or str(Path.home() / ".cache" / "helpbee" / "two-stage"),  # 빈 값 = 기본
         models_bucket=os.getenv("AWS_S3_MODELS_BUCKET", "helpbee-models"),
         ai_internal_budget_s=float(os.getenv("AI_INTERNAL_BUDGET_S", "80")),
     )
