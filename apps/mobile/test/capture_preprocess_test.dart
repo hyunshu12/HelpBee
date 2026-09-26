@@ -59,6 +59,27 @@ Uint8List _jpegWithSof(int w, int h) {
 
 // M4: 50 MP 가드 — JPEG 헤더에서 치수를 읽어 초과 시 긴 변을 제한한다.
 void _m4Tests() {
+  test(
+    'compressBoxForLongSide bounds the LONG side (lib min box = short side)',
+    () {
+      expect(compressBoxForLongSide(7000, 9248, 6936), (
+        7000,
+        5250,
+      )); // 64 MP 4:3 → 36.8 MP
+      expect(compressBoxForLongSide(4000, 3000, 4000), (
+        3000,
+        4000,
+      )); // portrait
+      expect(compressBoxForLongSide(4000, 4000, 3000), (
+        4000,
+        3000,
+      )); // already at cap
+      expect(compressBoxForLongSide(4000, null, null), (
+        4000,
+        4000,
+      )); // HEIC fallback
+    },
+  );
   test('jpegDimensions parses SOF0 and returns null for non-JPEG', () {
     expect(jpegDimensions(_jpegWithSof(4000, 3000)), (4000, 3000));
     expect(jpegDimensions(Uint8List.fromList([0, 1, 2, 3])), isNull);

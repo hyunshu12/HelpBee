@@ -64,7 +64,8 @@ def prewarm_two_stage() -> bool:
 async def _prewarm_on_startup() -> None:
     import asyncio
 
-    await asyncio.to_thread(prewarm_two_stage)
+    # 백그라운드로 — 83 MB S3 다운로드가 /health·첫 요청을 막지 않게 한다(재리뷰 nit).
+    asyncio.get_running_loop().create_task(asyncio.to_thread(prewarm_two_stage))
 
 
 app.router.on_startup.append(_prewarm_on_startup)

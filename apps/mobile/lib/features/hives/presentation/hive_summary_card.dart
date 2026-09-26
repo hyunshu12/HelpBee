@@ -33,6 +33,7 @@ class HiveSummaryCard extends ConsumerWidget {
     final RiskTier tier = analysis?.tier ?? RiskTier.unknown;
     final tierColor = riskTierColor(tier);
     final int? score = analysis?.varroaInfectionRisk;
+    final String? vdiDisplay = analysis?.vdiDisplay; // two-stage 우선
 
     // Distinguish "no analysis yet" from "still loading" / "failed to load" so
     // a transient/errored fetch doesn't masquerade as a never-diagnosed hive.
@@ -122,13 +123,21 @@ class HiveSummaryCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  if (score != null)
+                  if (tier == RiskTier.insufficient)
+                    Text(
+                      l10n.tierInsufficient,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: tierColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )
+                  else if (vdiDisplay != null || score != null)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '$score',
+                          vdiDisplay ?? '$score',
                           style: theme.textTheme.displaySmall?.copyWith(
                             color: tierColor,
                             fontWeight: FontWeight.w800,
@@ -136,7 +145,7 @@ class HiveSummaryCard extends ConsumerWidget {
                         ),
                         const SizedBox(width: 2),
                         Text(
-                          l10n.scoreSuffix,
+                          vdiDisplay != null ? '%' : l10n.scoreSuffix,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: AppColors.textSecondary,
                           ),

@@ -28,11 +28,26 @@ const int _noDownscaleBox = 100000;
 int uploadBoxForBytes(int bytes) =>
     bytes > uploadMaxBytes ? downscaleLongSide : _noDownscaleBox;
 
-/// Pure policy: initial box from the source pixel count (≤ 50 MP passes
-/// through untouched; above it the long side is capped so the API accepts it).
+/// Pure policy: initial long-side cap from the source pixel count (≤ 50 MP
+/// passes through untouched; above it the long side is capped so the API
+/// accepts it).
 int uploadBoxForPixels(int? width, int? height) {
   if (width == null || height == null) return _noDownscaleBox;
   return width * height > maxInputPixels ? pixelCapLongSide : _noDownscaleBox;
+}
+
+/// `flutter_image_compress` scales so that BOTH sides stay ≥ (minWidth,
+/// minHeight) — a square box therefore bounds the SHORT side, not the long
+/// one. Given the source dims, derive the (minWidth, minHeight) pair whose
+/// scale = longSide / max(w, h), so the long side lands on [longSide].
+(int, int) compressBoxForLongSide(int longSide, int? width, int? height) {
+  if (width == null || height == null || width <= 0 || height <= 0) {
+    return (longSide, longSide); // 치수 미상(HEIC): 짧은 변 상한으로라도 제한
+  }
+  final long = width > height ? width : height;
+  if (long <= longSide) return (width, height); // 축소 불필요 → 원본 유지
+  final scale = longSide / long;
+  return ((width * scale).round(), (height * scale).round());
 }
 
 /// Minimal JPEG SOF parser → (width, height). Returns null for non-JPEG
@@ -43,6 +58,10 @@ int uploadBoxForPixels(int? width, int? height) {
   while (i + 9 < b.length) {
     if (b[i] != 0xFF) {
       i++;
+      continue;
+    }
+    if (b[i + 1] == 0xFF) {
+      i++; // 0xFF fill bytes
       continue;
     }
     final marker = b[i + 1];
@@ -78,17 +97,16 @@ int uploadBoxForPixels(int? width, int? height) {
 /// Returns JPEG bytes; upload with `Content-Type: image/jpeg`.
 Future<Uint8List> preprocessForUpload(String path) async {
   // M4: ≤ 50 MP guard from the source JPEG header (HEIC: unknown → no guard).
-  int box = _noDownscaleBox;
+  (int, int)? dims;
   try {
-    final head = await _readHead(path, 256 * 1024);
-    final dims = jpegDimensions(head);
-    box = uploadBoxForPixels(dims?.$1, dims?.$2);
+    dims = jpegDimensions(await _readHead(path, 1024 * 1024));
   } catch (_) {
-    // 헤더를 못 읽으면 가드 없이 진행(플랫폼 코덱이 처리).
+    dims = null; // 헤더를 못 읽으면 가드 없이 진행(플랫폼 코덱이 처리).
   }
-  Uint8List? out = await _encode(path, box);
+  final firstLong = uploadBoxForPixels(dims?.$1, dims?.$2);
+  Uint8List? out = await _encodeLong(path, firstLong, dims);
   if (out != null && uploadBoxForBytes(out.length) != _noDownscaleBox) {
-    out = await _encode(path, downscaleLongSide);
+    out = await _encodeLong(path, downscaleLongSide, dims);
   }
   if (out == null || out.isEmpty) {
     throw const ImagePreprocessException();
@@ -96,15 +114,19 @@ Future<Uint8List> preprocessForUpload(String path) async {
   return out;
 }
 
-Future<Uint8List?> _encode(String path, int box) =>
-    FlutterImageCompress.compressWithFile(
-      path,
-      minWidth: box,
-      minHeight: box,
-      quality: 95,
-      format: CompressFormat.jpeg,
-      keepExif: false,
-    );
+Future<Uint8List?> _encodeLong(String path, int longSide, (int, int)? dims) {
+  final (minW, minH) = longSide >= _noDownscaleBox
+      ? (_noDownscaleBox, _noDownscaleBox)
+      : compressBoxForLongSide(longSide, dims?.$1, dims?.$2);
+  return FlutterImageCompress.compressWithFile(
+    path,
+    minWidth: minW,
+    minHeight: minH,
+    quality: 95,
+    format: CompressFormat.jpeg,
+    keepExif: false,
+  );
+}
 
 Future<Uint8List> _readHead(String path, int max) async {
   final f = File(path);
@@ -123,6 +145,16 @@ Future<Uint8List> _readHead(String path, int max) async {
 /// downscaled). Returns the temp file path.
 Future<String> saveUploadedCopy(Uint8List bytes) async {
   final dir = Directory.systemTemp;
+  // 이전 업로드 사본 정리(최신 1장만 유지).
+  try {
+    await for (final e in dir.list()) {
+      if (e is File && e.path.contains('/helpbee_upload_')) {
+        await e.delete();
+      }
+    }
+  } catch (_) {
+    // 정리 실패는 무시
+  }
   final f = File(
     '${dir.path}/helpbee_upload_${DateTime.now().millisecondsSinceEpoch}.jpg',
   );
