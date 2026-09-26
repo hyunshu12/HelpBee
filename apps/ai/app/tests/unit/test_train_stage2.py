@@ -194,7 +194,7 @@ def test_stage2_yaml_loads():
                    "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 320,
                    "backbone": "resnet18", "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.01,
                    "seed": 42, "crops": "training/crops-320", "project": "training/runs/stage2",
-                   "name": "v0.2.0-stage2", "workers": 4, "amp": False}
+                   "name": "v0.2.0-stage2", "workers": 4, "amp": False, "swa_epochs": 0}
 
 
 def test_parse_degrade():
@@ -658,3 +658,154 @@ def test_train_smoke_amp_recorded_and_onnx_fp32(tmp_path, monkeypatch):
     assert s.get_inputs()[0].type == "tensor(float)" and s.get_outputs()[0].type == "tensor(float)"
     logit, feat = s.run(None, {"image": np.zeros((2, 3, 64, 64), np.float32)})
     assert logit.dtype == np.float32 and feat.shape == (2, 512, 2, 2)
+
+
+# ── v0.2.1: 선택 프로토콜 — select_metric=last · SWA ─────────────────────────────
+def test_select_metric_last_is_valid_but_not_an_epoch_metric():
+    assert parse_select_metric("last") == "last"
+    with pytest.raises(ValueError, match="last"):
+        pick_metric({"epoch": 0, "val_auroc": 0.9, "cal_a_auroc": 0.8}, "last")
+    with pytest.raises(ValueError):
+        parse_select_metric("final")
+
+
+def test_parse_swa_epochs_bounds():
+    from training.train_stage2 import parse_swa_epochs
+
+    assert parse_swa_epochs(None) == 0 and parse_swa_epochs(None, 5) == 0
+    assert parse_swa_epochs(0, 5) == 0 and parse_swa_epochs(3, 5) == 3 and parse_swa_epochs(5, 5) == 5
+    assert parse_swa_epochs("2", 5) == 2 and parse_swa_epochs(4.0, 5) == 4 and parse_swa_epochs(7) == 7
+    for bad in (-1, 6, True, 2.5, "abc", "x2"):
+        with pytest.raises(ValueError, match="swa_epochs"):
+            parse_swa_epochs(bad, 5)
+
+
+def test_swa_bn_rows_deterministic_every_nth():
+    from training.train_stage2 import SWA_BN_MAX_ROWS, swa_bn_rows
+
+    rows = list(range(45))
+    assert swa_bn_rows(rows, cap=20) == rows[::3] and len(swa_bn_rows(rows, cap=20)) <= 20
+    assert swa_bn_rows(rows, cap=45) == rows and swa_bn_rows(rows, cap=100) == rows
+    assert swa_bn_rows(rows, cap=44) == rows[::2]
+    big = list(range(50_001))
+    sub = swa_bn_rows(big)
+    assert len(sub) <= SWA_BN_MAX_ROWS == 20_000 and sub == big[::3] and swa_bn_rows(big) == sub
+
+
+def test_main_validates_swa_epochs_and_accepts_last(tmp_path, monkeypatch):
+    """swa_epochs > epochs 는 학습 전 ValueError, select_metric=last + swa_epochs 는 train 까지 그대로 전달."""
+    import training.train_stage2 as ts
+
+    root = Path(__file__).resolve().parents[3]
+    conf = str(root / "training/configs/stage2.yaml")
+    monkeypatch.setattr(ts, "train", lambda cfg: pytest.fail("train 호출되면 안 됨"))
+    with pytest.raises(ValueError, match="swa_epochs"):
+        ts.main(["--config", conf, "--set", "swa_epochs=51"])
+    with pytest.raises(ValueError, match="swa_epochs"):
+        ts.main(["--config", conf, "--set", "epochs=10", "swa_epochs=11"])
+    got = {}
+    monkeypatch.setattr(ts, "train", lambda cfg: got.update(cfg) or "ok")
+    assert ts.main(["--config", conf, "--set", "select_metric=last", "epochs=15", "swa_epochs=5"]) == "ok"
+    assert got["select_metric"] == "last" and got["epochs"] == 15 and got["swa_epochs"] == 5
+
+
+def _no_pretrained(monkeypatch, ts):
+    orig = ts.build_model
+    monkeypatch.setattr(ts, "build_model", lambda pretrained=True, backbone=ts.DEFAULT_BACKBONE: orig(False, backbone))
+
+
+def test_train_select_metric_last_runs_all_epochs_and_keeps_last(tmp_path, monkeypatch):
+    """select_metric=last: patience=0 이어도 조기 종료 없이 epochs 전부 → best.pt == last.pt, best_epoch = epochs-1."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    import training.train_stage2 as ts
+
+    _no_pretrained(monkeypatch, ts)
+    crops = _mini_crops(tmp_path)
+    cfg = {**_smoke_cfg(tmp_path, crops, "last", False), "epochs": 2, "patience": 0, "select_metric": "last"}
+    rep = ts.train(cfg)
+    run = tmp_path / "runs" / "last"
+    assert [r["epoch"] for r in rep["history"]] == [0, 1] and rep["best_epoch"] == 1
+    assert rep["select_metric"] == "last" and rep["swa_epochs"] == 0 and "swa" not in rep
+    assert not any(k.startswith("best_") and k != "best_epoch" for k in rep)
+    assert rep["val_auroc"] == rep["history"][1]["val_auroc"]
+    best = torch.load(run / "best.pt", weights_only=True)
+    last = torch.load(run / "last.pt", weights_only=True)
+    assert best.keys() == last.keys() and all(torch.equal(best[k], last[k]) for k in best)
+    meta = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["select_metric"] == "last" and meta["swa_epochs"] == 0
+    assert json.loads((tmp_path / "eval_last.json").read_text(encoding="utf-8"))["select_metric"] == "last"
+
+
+def test_train_swa_averages_last_k_epochs_and_recomputes_bn(tmp_path, monkeypatch):
+    """swa_epochs=2, epochs=3: epoch 1·2 끝 가중치의 등가 평균 + 비증강 train 으로 BN 재계산 → best.pt ≠ last.pt,
+    ONNX(logit, featmap) 내보내기, report/metadata 에 swa_epochs=2."""
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    from torch.optim import swa_utils
+
+    import training.train_stage2 as ts
+
+    _no_pretrained(monkeypatch, ts)
+    snaps, bn_loaders = [], []
+    orig_update = swa_utils.AveragedModel.update_parameters
+    orig_bn = swa_utils.update_bn
+
+    def spy_update(self, model):
+        snaps.append({k: v.detach().clone() for k, v in model.state_dict().items()})
+        return orig_update(self, model)
+
+    def spy_bn(loader, model, device=None):
+        bn_loaders.append(loader)
+        return orig_bn(loader, model, device)
+
+    monkeypatch.setattr(swa_utils.AveragedModel, "update_parameters", spy_update)
+    monkeypatch.setattr(swa_utils, "update_bn", spy_bn)
+    crops = _mini_crops(tmp_path)
+    cfg = {**_smoke_cfg(tmp_path, crops, "swa", False), "epochs": 3, "patience": 0, "swa_epochs": 2}
+    rep = ts.train(cfg)
+    run = tmp_path / "runs" / "swa"
+
+    assert len(rep["history"]) == 3 and rep["best_epoch"] == 2  # patience=0 이어도 조기 종료 없음
+    assert rep["swa_epochs"] == 2 and rep["select_metric"] == "cal_a_auroc"
+    assert rep["swa"]["epochs"] == 2 and rep["swa"]["start_epoch"] == 1 and rep["swa"]["bn_rows"] == 8
+    assert rep["best_cal_a_auroc"] == rep["swa"]["cal_a_auroc"] == rep["auroc"]["cal_a"]
+    assert rep["val_auroc"] == rep["swa"]["val_auroc"]
+
+    best = torch.load(run / "best.pt", weights_only=True)
+    last = torch.load(run / "last.pt", weights_only=True)
+    assert best.keys() == last.keys()
+    # 파라미터 = epoch 1·2 끝 스냅샷의 산술 평균 (last.pt = epoch 2 스냅샷)
+    assert len(snaps) == 2 and all(torch.equal(snaps[1][k], last[k]) for k in last)
+    params = [k for k, _ in ts.build_model(False, "resnet18").named_parameters()]
+    for k in params:
+        assert torch.allclose(best[k], (snaps[0][k] + snaps[1][k]) / 2, atol=1e-6), k
+    assert any(not torch.equal(best[k], last[k]) for k in params)
+    # BN 통계 재계산: 평균 모델 running stats ≠ 마지막 epoch, num_batches_tracked = BN 로더 배치 수(8/4=2)
+    assert not torch.equal(best["features.1.running_mean"], last["features.1.running_mean"])
+    assert int(best["features.1.num_batches_tracked"]) == 2 and int(last["features.1.num_batches_tracked"]) == 6
+    # BN 로더: 비증강·비샘플(순차)·train 행
+    (bl,) = bn_loaders
+    assert bl.dataset.train is False and isinstance(bl.sampler, torch.utils.data.SequentialSampler)
+    assert [r["split"] for r in bl.dataset.rows] == ["train"] * 8
+
+    meta = json.loads((run / "metadata.json").read_text(encoding="utf-8"))
+    assert meta["swa_epochs"] == 2 and meta["select_metric"] == "cal_a_auroc"
+    ev = json.loads((tmp_path / "eval_swa.json").read_text(encoding="utf-8"))
+    assert ev["swa_epochs"] == 2 and ev["swa"]["start_epoch"] == 1
+    s = ort.InferenceSession(str(run / "stage2.onnx"), providers=["CPUExecutionProvider"])
+    assert [o.name for o in s.get_outputs()] == ["logit", "featmap"]
+    logit, feat = s.run(None, {"image": np.zeros((2, 3, 64, 64), np.float32)})
+    assert logit.shape == (2,) and feat.shape == (2, 512, 2, 2)
+    # ONNX 는 평균 모델(best.pt) 그대로: torch 평균 모델 logit 과 일치
+    m = ts.build_model(False, "resnet18")
+    m.load_state_dict(best)
+    m.eval()
+    x = torch.from_numpy(np.random.default_rng(1).normal(size=(2, 3, 64, 64)).astype(np.float32))
+    with torch.no_grad():
+        zt, _ = m(x)
+    zo, _ = s.run(None, {"image": x.numpy()})
+    assert np.allclose(zt.numpy(), zo, atol=1e-4)

@@ -16,6 +16,10 @@ ONNX 출력은 `logit`(B,) + `featmap`(B,C,h,w) (h=w=img_size/32);
 
 모델 선택(v3): config `select_metric` — `val_auroc`(v2 동작: 71667+VarroaDataset val) 또는 `cal_a_auroc`(71667 cal-A 만).
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
+v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이 epochs 전부(cosine 이 0 으로 수렴) → 마지막 epoch.
+`swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → 비증강·비샘플 train 부분집합
+(≤ SWA_BN_MAX_ROWS)으로 BN 통계 재계산(update_bn, fp32) → 평균 모델이 best.pt·보정·ONNX 경로를 그대로 탄다.
+(cal-A 는 사실상 colony 하나라 epoch 별 AUROC 가 0.77↔0.88 로 튀어 "최고 epoch" 은 운 좋은 고-LR iterate 를 고른다.)
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
 `youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
@@ -44,7 +48,9 @@ logger = logging.getLogger(__name__)
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
-SELECT_METRICS = ("val_auroc", "cal_a_auroc")
+# `last` = 고정 스케줄: 조기 종료 없이 epochs 전부 → 마지막 epoch 가중치를 best.pt 로 (epoch 지표로 고르지 않음).
+SELECT_METRICS = ("val_auroc", "cal_a_auroc", "last")
+SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 쓰는 train 행 상한 (등간격 부분집합)
 TAU_POLICIES = ("youden", "fpr")
 DEFAULT_TAU_POLICY = "youden"
 DEFAULT_FPR_CAP = 0.10
@@ -110,9 +116,36 @@ def parse_amp(v) -> bool:
     raise ValueError(f"amp 는 true/false: {v!r}")
 
 
+def parse_swa_epochs(v, epochs=None) -> int:
+    """config `swa_epochs` (마지막 k epoch 가중치 등가 평균, SWAD 식). None → 0(끔). 0 ≤ k ≤ epochs 정수.
+    bool·비정수·음수·epochs 초과면 ValueError."""
+    if v is None:
+        return 0
+    if isinstance(v, bool) or (isinstance(v, float) and not v.is_integer()):
+        raise ValueError(f"swa_epochs 는 0 이상 정수: {v!r}")
+    try:
+        k = int(v.strip()) if isinstance(v, str) else int(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"swa_epochs 는 0 이상 정수: {v!r}") from None
+    if k < 0 or (epochs is not None and k > int(epochs)):
+        raise ValueError(f"swa_epochs 는 0 ≤ k ≤ epochs({epochs}): {k}")
+    return k
+
+
+def swa_bn_rows(rows: list, cap: int = SWA_BN_MAX_ROWS) -> list:
+    """SWA BN 재계산용 결정적 부분집합: cap 이하면 전부, 아니면 등간격(every n-th, n = ceil(len/cap))."""
+    rows = list(rows)
+    step = max(1, -(-len(rows) // int(cap)))
+    return rows[::step]
+
+
 def pick_metric(row: dict, select_metric: str) -> float:
-    """epoch history 행에서 모델 선택 지표 값. cal_b 계열 키는 선택에 쓰지 않는다(불편 추정 셋)."""
-    return float(row[parse_select_metric(select_metric)])
+    """epoch history 행에서 모델 선택 지표 값. cal_b 계열 키는 선택에 쓰지 않는다(불편 추정 셋).
+    `last` 는 epoch 지표로 고르지 않으므로 ValueError (train 은 고정 스케줄 경로로 간다)."""
+    m = parse_select_metric(select_metric)
+    if m == "last":
+        raise ValueError("select_metric=last 는 epoch 지표로 선택하지 않는다 (마지막 epoch 가 선택 모델)")
+    return float(row[m])
 
 
 def is_improvement(value: float, best: float) -> bool:
@@ -449,8 +482,10 @@ def export_onnx(model, path: Path, img_size: int = DEFAULT_IMG_SIZE) -> Path:
 
 
 def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
-                   img_size: int = DEFAULT_IMG_SIZE, tau_policy: str | None = None, amp: bool | None = None) -> Path:
-    """계획 2 CAM 계산용: fc 가중치(featmap 채널 수 길이) + Platt + τ + backbone/feat_channels/img_size."""
+                   img_size: int = DEFAULT_IMG_SIZE, tau_policy: str | None = None, amp: bool | None = None,
+                   select_metric: str | None = None, swa_epochs: int | None = None) -> Path:
+    """계획 2 CAM 계산용: fc 가중치(featmap 채널 수 길이) + Platt + τ + backbone/feat_channels/img_size.
+    select_metric/swa_epochs 는 추적용(서빙은 읽지 않음) — None 이면 키를 쓰지 않는다."""
     fc = model.fc.weight.detach().cpu().numpy().reshape(-1)
     data = {"fc_weight": [float(v) for v in fc], "platt": {"a": float(platt[0]), "b": float(platt[1])},
             "tau": float(tau), "backbone": getattr(model, "backbone", DEFAULT_BACKBONE),
@@ -459,6 +494,10 @@ def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
         data["tau_policy"] = parse_tau_policy(tau_policy)
     if amp is not None:
         data["amp"] = bool(amp)  # 학습 시 혼합 정밀도 사용 여부 (추적용 — ONNX 는 항상 fp32)
+    if select_metric is not None:
+        data["select_metric"] = parse_select_metric(select_metric)
+    if swa_epochs is not None:
+        data["swa_epochs"] = int(swa_epochs)
     path = Path(path)
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return path
@@ -614,6 +653,7 @@ def _predict_logits(model, loader, device, amp: bool = False) -> tuple[np.ndarra
 
 def train(cfg: dict) -> dict:
     import torch
+    from torch.optim import swa_utils
     from torch.utils.data import DataLoader, WeightedRandomSampler
 
     torch.manual_seed(cfg["seed"])
@@ -623,6 +663,9 @@ def train(cfg: dict) -> dict:
     degrade_lo = parse_degrade(cfg.get("degrade"))
     jitter = parse_size_jitter(cfg.get("size_jitter"))
     select_metric = parse_select_metric(cfg.get("select_metric"))
+    swa_epochs = parse_swa_epochs(cfg.get("swa_epochs"), cfg["epochs"])
+    fixed_schedule = select_metric == "last" or swa_epochs > 0  # 조기 종료 해제 — epochs 전부 (cosine → 0)
+    swa_start = cfg["epochs"] - swa_epochs
     backbone = parse_backbone(cfg.get("backbone"))
     img_size = int(cfg.get("img_size", DEFAULT_IMG_SIZE))
     cfg["amp"] = parse_amp(cfg.get("amp"))  # 요청값 → resolved_config.json
@@ -660,6 +703,7 @@ def train(cfg: dict) -> dict:
     val_loader = eval_dl(sp["val"])
     cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc 일 때 선택 기준. cal_b 는 선택에 안 씀.
     best_score, best_ep, history = -1.0, -1, []
+    swa = None  # swa_epochs>0: 마지막 k epoch 끝 가중치의 등가 평균 (파라미터만 — BN 통계는 학습 후 update_bn)
     for ep in range(cfg["epochs"]):
         model.train()
         tot, n = 0.0, 0
@@ -687,6 +731,13 @@ def train(cfg: dict) -> dict:
         history.append(row)
         logger.info(f"epoch {ep}: loss={row['train_loss']:.4f} val_auroc={row['val_auroc']:.4f} "
                     f"cal_a_auroc={row['cal_a_auroc']:.4f} (select={select_metric})")
+        if swa_epochs and ep >= swa_start:
+            if swa is None:
+                swa = swa_utils.AveragedModel(model)  # 기본 avg_fn = 등가 누적 평균
+            swa.update_parameters(model)
+            logger.info(f"SWA 갱신 @ epoch {ep} ({swa.n_averaged.item()}/{swa_epochs})")
+        if fixed_schedule:
+            continue  # 선택·조기 종료 없음
         score = pick_metric(row, select_metric)
         if is_improvement(score, best_score):
             best_score, best_ep = score, ep
@@ -696,26 +747,53 @@ def train(cfg: dict) -> dict:
             break
     torch.save(model.state_dict(), save_dir / "last.pt")
 
+    bn_rows = None
+    if swa is not None:
+        # BN 재계산: 비증강·비샘플 train 부분집합, 셔플 없음, fp32(autocast 없음). update_bn 은 no_grad·train 모드.
+        bn_rows = swa_bn_rows(sp["train"])
+        logger.info(f"SWA: epoch {swa_start}~{cfg['epochs'] - 1} 평균 → BN 재계산 ({len(bn_rows)} train 크롭, 비증강)")
+        swa_utils.update_bn(eval_dl(bn_rows), swa.module, device=device)
+        torch.save(swa.module.state_dict(), save_dir / "best.pt")
+        best_ep = len(history) - 1
+    elif select_metric == "last":
+        torch.save(model.state_dict(), save_dir / "best.pt")  # 마지막 epoch = 선택 모델
+        best_ep = len(history) - 1
+
     model.load_state_dict(torch.load(save_dir / "best.pt", map_location=device, weights_only=True))
     # Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
     za, ya = _predict_logits(model, cal_a_loader, device)
     zb, yb = _predict_logits(model, eval_dl(sp["cal_b"]), device)
     zv, yv = _predict_logits(model, val_loader, device)
+    swa_report = None
+    if swa is not None:  # 평균 모델의 fp32 val/cal-A AUROC (1회)
+        swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_rows": len(bn_rows),
+                      "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya)}
+        logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
+                    f"cal_a_auroc={swa_report['cal_a_auroc']:.4f}")
     cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
 
     model_cpu = model.to("cpu")
     export_onnx(model_cpu, save_dir / "stage2.onnx", img_size)
     write_metadata(save_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
-                   amp=use_amp)
+                   amp=use_amp, select_metric=select_metric, swa_epochs=swa_epochs)
     vdi = _write_vdi(cal, Path(cfg.get("vdi_out", "training/configs/vdi.yaml")), save_dir / "vdi.yaml")
+    # best_{metric} = 선택 모델의 지표 값 (SWA 면 평균 모델 fp32 값). select_metric=last 는 epoch 지표로 안 고르므로 키 없음.
+    selection = {"select_metric": select_metric, "swa_epochs": swa_epochs}
+    if select_metric != "last":
+        selection[f"best_{select_metric}"] = swa_report[select_metric] if swa_report else best_score
+    if swa_report:
+        val_selected = swa_report["val_auroc"]
+    else:
+        val_selected = history[best_ep]["val_auroc"] if best_ep >= 0 else None
     report = {
         "version": "v0.2.0-stage2", "model": backbone, "img_size": img_size, "degrade": cfg.get("degrade"),
         "amp": use_amp,
-        "select_metric": select_metric, f"best_{select_metric}": best_score,
-        "best_epoch": best_ep, "val_auroc": history[best_ep]["val_auroc"] if best_ep >= 0 else None,
+        **selection,
+        "best_epoch": best_ep, "val_auroc": val_selected,
         **cal["report"], "size_jitter": list(jitter) if jitter else None,
         "counts": {k: {"n": len(v), "pos": sum(int(r["label"]) for r in v)} for k, v in sp.items()},
-        "history": history, "weights": str(save_dir / "best.pt"), "onnx": str(save_dir / "stage2.onnx"),
+        "history": history, **({"swa": swa_report} if swa_report else {}),
+        "weights": str(save_dir / "best.pt"), "onnx": str(save_dir / "stage2.onnx"),
         "vdi": str(vdi),
     }
     out = Path(cfg.get("eval_out", "training/eval_history/v0.2.0-stage2.json"))
@@ -838,6 +916,7 @@ def main(argv: list[str] | None = None):
         return recalibrate(a.recalibrate, cfg)
     parse_degrade(cfg.get("degrade"))
     parse_select_metric(cfg.get("select_metric"))
+    parse_swa_epochs(cfg.get("swa_epochs"), cfg.get("epochs"))
     parse_backbone(cfg.get("backbone"))
     return train(cfg)
 
