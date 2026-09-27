@@ -55,6 +55,12 @@ def split(args: list[str]) -> int:
     return _run([sys.executable, "-m", "training.data.make_split_manifest",
                  "--roots", str(root / "aihub-71667-val"), "--tags", "71667-val", *args])
 
+def refreeze(args: list[str]) -> int:
+    """홀드아웃 재동결 — training/data/frozen_colonies.json(새 맵)으로 split_manifest.json(+ --crops-csv 들) 71667 split
+    재배정. 실제로 쓰려면 --refreeze, 미리보기는 --dry-run. crops.csv 옆에 <csv>.bak-refreeze1 백업. 추가 인자는 그대로 전달."""
+    return _run([sys.executable, "-m", "training.data.refreeze_splits", "--frozen", "training/data/frozen_colonies.json",
+                 "--manifest", "training/split_manifest.json", *args])
+
 def golden(args: list[str]) -> int:
     """split_manifest.json 의 golden split 에서 응애/정상 golden 선택 → training/golden.json. 추가 인자는 그대로 전달."""
     return _run([sys.executable, "-m", "training.data.golden_holdout",
@@ -136,7 +142,7 @@ def subset(args: list[str]) -> int:
         if rc: return rc
     return 0
 
-TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "golden": golden,
+TARGETS: dict[str, Callable[[list[str]], int]] = {"doctor": doctor, "trash": trash, "split": split, "refreeze": refreeze, "golden": golden,
                                                   "train-stage1": train_stage1, "crops": crops,
                                                   "train-stage2": train_stage2, "recalibrate": recalibrate,
                                                   "finalize-stage2": finalize_stage2, "gate0": gate0,

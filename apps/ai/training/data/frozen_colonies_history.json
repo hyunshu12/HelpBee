@@ -1,0 +1,76 @@
+{
+ "note": "training/data/frozen_colonies.json 변경 이력 (golden/cal_a/cal_b colony 홀드아웃). 마지막 항목 = 현재 동결 맵. 재동결은 training/data/refreeze_splits.py (golden 불변, 이전 홀드아웃 colony 는 계속 홀드아웃).",
+ "history": [
+  {
+   "refreeze": 0,
+   "date": "2026-09-24",
+   "commit": "da47f2d",
+   "frozen_colonies": {
+    "golden": [
+     "001",
+     "020",
+     "030"
+    ],
+    "cal_a": [
+     "002",
+     "022"
+    ],
+    "cal_b": [
+     "010",
+     "028"
+    ]
+   },
+   "reason": "최초 동결 — 71667 Validation 만으로 varroa-aware 선택 (make_split_manifest)"
+  },
+  {
+   "refreeze": 1,
+   "date": "2026-09-24",
+   "commit": "adfd962",
+   "frozen_colonies": {
+    "golden": [
+     "001",
+     "028",
+     "022"
+    ],
+    "cal_a": [
+     "002",
+     "020"
+    ],
+    "cal_b": [
+     "010",
+     "016"
+    ]
+   },
+   "reason": "Training 서브셋 25,000장 추가 후 make_split_manifest --refreeze 로 재선택 (v0.2.0 학습·보정 기준)"
+  },
+  {
+   "refreeze": 2,
+   "date": "2026-09-27",
+   "commit": null,
+   "frozen_colonies": {
+    "golden": [
+     "001",
+     "028",
+     "022"
+    ],
+    "cal_a": [
+     "002",
+     "020",
+     "008",
+     "006",
+     "012",
+     "018"
+    ],
+    "cal_b": [
+     "010",
+     "016",
+     "003",
+     "009",
+     "025",
+     "027"
+    ]
+   },
+   "reason": "cal-A/cal-B 양성이 사실상 colony 002/010 하나뿐이라 τ 의 colony 간 FPR 편차(~10배)를 못 봄 → 각 6 colony 로 확장 (docs/05-implementation/2026-09-27-v021-stage2-experiments.md §4.3–§5, 스펙 v2.3)"
+  }
+ ]
+}
