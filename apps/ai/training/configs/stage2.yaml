@@ -20,9 +20,17 @@ backbone: resnet18 # resnet18 (v0.2.0 최종 E3, featmap 512ch) | shufflenet_v2_
                    # v0.2.1 실험: resnet34 (512ch) | resnet50 (2048ch) | efficientnet_b0 (1280ch) — --set backbone=... 로만
 select_metric: cal_a_auroc     # cal_a_auroc (71667 cal-A 만) | val_auroc (v2: 71667+VarroaDataset val) | last (조기 종료 없이 마지막 epoch). cal-B 는 선택에 절대 안 씀
                                # | cal_a_tpr1 (cal-A 음성 FPR 1% 지점 TPR — 운용 영역, v0.2.1 opt-in: --set select_metric=cal_a_tpr1)
+                               # | cal_a_wtpr1 (스펙 v2.3 opt-in: 모든 적격 cal-A colony 의 FPR ≤ 1% 를 만족하는 가장 낮은 logit 임계에서
+                               #   양성 적격 colony macro TPR — 재동결 2 의 6-colony cal-A 용. history 에는 항상 기록)
 swa_epochs: 0     # >0 = 마지막 k epoch 가중치 등가 평균(SWA)+BN 재계산(학습 분포: 증강+가중 샘플러) → best.pt, 조기 종료 해제 (0 = 끔, v0.2.0 재현 경로)
 tau_policy: youden # youden = cal-A FPR ≤ fpr_cap 안에서 TPR−FPR 최대 | fpr = cal-A 음성 FPR 1% (target_fpr) 분위수 (구 동작)
+                   # | youden_worst (스펙 v2.3 opt-in: Platt 은 pooled cal-A, τ 는 음성 ≥ colony_min_neg 인 **모든** cal-A colony 의
+                   #   FPR ≤ fpr_cap 안에서 pooled TPR−FPR 최대. cal-B TPR/FPR = colony macro 평균 → vdi.yaml tpr/fpr·corrected,
+                   #   vdi.yaml colony_calibration 에 pooled·worst_colony_fpr·colony 표(진단용, 서빙 미사용)) — --set tau_policy=youden_worst
 fpr_cap: 0.01      # Youden τ 의 cal-A FPR 상한 (스펙 v2.2 정정: 0.10→0.01 — colony 간 FPR 편차로 cap≥2%는 건강 벌통 오경보, 2026-09-25 스윕)
+                   # youden_worst 에서는 colony 별 상한 (가장 나쁜 적격 colony 기준)
+colony_min_neg: 200  # 스펙 v2.3: 음성 ≥ 이 수인 colony 만 youden_worst FPR 제약·cal-B macro FPR·wtpr 임계에 (작은 colony 는 로그로 남기고 무시)
+colony_min_pos: 50   # 스펙 v2.3: 양성 ≥ 이 수인 colony 만 cal-B macro TPR·cal_a_wtpr1 macro TPR 에 (없으면 pooled 폴백)
 seed: 42
 crops: training/crops-320
 project: training/runs/stage2

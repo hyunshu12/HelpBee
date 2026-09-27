@@ -194,7 +194,8 @@ def test_stage2_yaml_loads():
                    "label_smoothing": 0.05, "degrade": "none", "size_jitter": [0.7, 1.3], "img_size": 320,
                    "backbone": "resnet18", "select_metric": "cal_a_auroc", "tau_policy": "youden", "fpr_cap": 0.01,
                    "seed": 42, "crops": "training/crops-320", "project": "training/runs/stage2",
-                   "name": "v0.2.0-stage2", "workers": 4, "amp": False, "swa_epochs": 0}
+                   "name": "v0.2.0-stage2", "workers": 4, "amp": False, "swa_epochs": 0,
+                   "colony_min_neg": 200, "colony_min_pos": 50}  # 스펙 v2.3 colony 적격 기준 (youden_worst·wtpr 전용)
 
 
 def test_parse_degrade():
@@ -632,8 +633,9 @@ def test_tasks_recalibrate_target_registered():
     assert "recalibrate" in tasks.TARGETS
 
 
-def _mini_crops(tmp_path):
-    """cal_a/cal_b/val/train 각 8장(64px 노이즈, 라벨 교대) + crops.csv — train/recalibrate 스모크 공용."""
+def _mini_crops(tmp_path, colonies=("c",)):
+    """cal_a/cal_b/val/train 각 8장(64px 노이즈, 라벨 교대) + crops.csv — train/recalibrate 스모크 공용.
+    colonies: 각 split 의 8장을 앞에서부터 균등 블록으로 나눠 colony 배정 (2개면 i<4 → 첫째, 각 colony 양성 2·음성 2)."""
     cv2 = pytest.importorskip("cv2")
     crops = tmp_path / "crops"
     (crops / "img").mkdir(parents=True)
@@ -645,7 +647,8 @@ def _mini_crops(tmp_path):
             lab = i % 2
             rel = f"img/{split}_{i}.png"
             cv2.imwrite(str(crops / rel), rng.integers(0, 255, (64, 64, 3), dtype=np.uint8))
-            rows.append({"path": rel, "label": lab, "source": src, "colony": "c", "device": "d", "split": split,
+            col = colonies[i * len(colonies) // 8]
+            rows.append({"path": rel, "label": lab, "source": src, "colony": col, "device": "d", "split": split,
                          "native_w": 100 + i, "native_h": 90 + i})
     import csv as _csv
 
@@ -1298,3 +1301,251 @@ def test_finalize_without_source_report_omits_history_and_ignores_default_ship_p
     assert "amp" not in json.loads((out / "metadata.json").read_text(encoding="utf-8"))
     assert (out / "stage2.onnx").exists() and not (tmp_path / "training").exists()
     assert sorted(p.name for p in run.iterdir()) == ["ep3.pt", "metadata.json"]
+
+
+# ── 스펙 v2.3: 재동결 2 보정 프로토콜 (youden_worst · cal-B macro · cal_a_wtpr1) ─────────────────
+def _three_colony_case():
+    """A·B = 쉬운 음성(0~0.5), C = 음성 2.5% 가 0.60~0.672 (어려운 음성), D = 음성 50개 중 5개 0.95 (표본 작음 → 무시).
+    양성 300 = 0.55~0.99 균등 (A·C). pooled 음성 3,050 중 어려운 음성 30개(0.98%) → pooled Youden(cap 1%)은 τ 를
+    쉬운 음성 바로 위에 두고 C 를 2.5% FPR 로 둔다."""
+    rng = np.random.default_rng(0)
+    p, y, c = [], [], []
+    for col in ("A", "B"):
+        p += list(rng.uniform(0, 0.5, 1000)); y += [0] * 1000; c += [col] * 1000
+    p += list(rng.uniform(0, 0.5, 975)) + [0.60 + 0.003 * k for k in range(25)]; y += [0] * 1000; c += ["C"] * 1000
+    p += list(rng.uniform(0, 0.5, 45)) + [0.95] * 5; y += [0] * 50; c += ["D"] * 50
+    pos = list(np.linspace(0.55, 0.99, 300))
+    p += pos; y += [1] * 300; c += ["A" if k % 2 else "C" for k in range(300)]
+    return np.array(p), np.array(y), np.array(c, dtype=object)
+
+
+def _brute_worst_tau(p, y, c, cap, min_neg):
+    """참조 구현: 모든 후보 τ 를 직접 훑는다."""
+    best, best_j = None, -np.inf
+    elig = [k for k in set(c) if ((c == k) & (y == 0)).sum() >= min_neg]
+    for t in np.unique(p):
+        pred = p > t
+        if any(pred[(c == k) & (y == 0)].mean() > cap + 1e-12 for k in elig):
+            continue
+        j = pred[y == 1].mean() - pred[y == 0].mean()
+        if j >= best_j:  # 동점 → 큰 τ (오름차순 순회라 뒤가 큼)
+            best, best_j = t, j
+    return float(best)
+
+
+def test_youden_worst_respects_every_eligible_colony_where_pooled_youden_does_not():
+    from training.train_stage2 import choose_tau_youden_worst, rates_by_colony
+
+    p, y, c = _three_colony_case()
+    t_pool = choose_tau_youden(p, y, 0.01)
+    t_worst = choose_tau_youden_worst(p, y, c, 0.01, colony_min_neg=200)
+    pool_by, worst_by = rates_by_colony(p, y, c, t_pool), rates_by_colony(p, y, c, t_worst)
+    assert measure_rates(p, y, t_pool)[1] <= 0.01  # pooled 제약은 만족하지만
+    assert pool_by["C"]["fpr"] > 0.01  # C colony 는 위반
+    assert all(worst_by[k]["fpr"] <= 0.01 for k in ("A", "B", "C"))  # youden_worst 는 적격 colony 전부 만족
+    assert worst_by["D"]["fpr"] > 0.01 and t_worst < p.max()  # D(음성 50 < 200)는 제약에서 무시
+    assert t_worst > t_pool
+    assert t_worst == _brute_worst_tau(p, y, c, 0.01, 200)
+    # D 를 적격으로 만들면(min_neg ≤ 50) D 음성(0.95) 위로 τ 가 올라간다
+    assert choose_tau_youden_worst(p, y, c, 0.01, colony_min_neg=50) >= 0.95
+    assert choose_tau_youden_worst(p, y, c, 0.01, colony_min_neg=50) == _brute_worst_tau(p, y, c, 0.01, 50)
+
+
+def test_youden_worst_fallbacks_and_validation():
+    from training.train_stage2 import choose_tau_youden_worst
+
+    p, y, c = _three_colony_case()
+    # 적격 colony 없음 → pooled 제약 = choose_tau_youden
+    assert choose_tau_youden_worst(p, y, c, 0.01, colony_min_neg=10_000) == choose_tau_youden(p, y, 0.01)
+    # cap 0 → 모든 적격 colony FPR 0 (τ ≥ 적격 음성 최고점)
+    t0 = choose_tau_youden_worst(p, y, c, 0.0, colony_min_neg=200)
+    assert t0 >= p[(y == 0) & (c != "D")].max()
+    with pytest.raises(ValueError):
+        choose_tau_youden_worst(p, y, c[:-1], 0.01)
+    with pytest.raises(ValueError):
+        choose_tau_youden_worst([0.1, 0.2], [0, 0], ["A", "A"], 0.01)
+    with pytest.raises(ValueError, match="colony"):
+        select_tau(p, y, "youden_worst", 0.01)  # colony 배열 없이 호출 불가
+    assert select_tau(p, y, "youden_worst", 0.01, colonies=c, colony_min_neg=200) == \
+        choose_tau_youden_worst(p, y, c, 0.01, 200)
+
+
+def test_macro_rates_eligibility_and_pooled_fallback():
+    from training.train_stage2 import macro_rates
+
+    # colony X: 음성 4(1 FP) 양성 4(3 TP) · Y: 음성 2(0 FP) 양성 1(1 TP) · Z: 음성 4(2 FP) 양성 0
+    p = np.array([0.9, 0.1, 0.1, 0.1, 0.9, 0.9, 0.9, 0.1,  0.1, 0.1, 0.9,  0.9, 0.9, 0.1, 0.1])
+    y = np.array([0, 0, 0, 0, 1, 1, 1, 1,  0, 0, 1,  0, 0, 0, 0])
+    c = np.array(["X"] * 8 + ["Y"] * 3 + ["Z"] * 4, dtype=object)
+    m = macro_rates(p, y, c, 0.5, colony_min_pos=2, colony_min_neg=3)
+    assert m["tpr_colonies"] == ["X"] and m["fpr_colonies"] == ["X", "Z"]  # Y: 양성 1 < 2, 음성 2 < 3
+    assert m["tpr"] == pytest.approx(0.75) and m["fpr"] == pytest.approx((0.25 + 0.5) / 2)
+    assert m["worst_colony_fpr"] == pytest.approx(0.5)
+    assert m["pooled"] == {"tpr": pytest.approx(4 / 5), "fpr": pytest.approx(3 / 10)}
+    assert m["tpr_estimator"] == m["fpr_estimator"] == "macro"
+    assert m["by_colony"]["Y"] == {"n_pos": 1, "n_neg": 2, "tpr": 1.0, "fpr": 0.0}
+    assert m["by_colony"]["Z"]["tpr"] is None
+    m1 = macro_rates(p, y, c, 0.5, colony_min_pos=1, colony_min_neg=1)  # 전부 적격 → Y 포함
+    assert m1["tpr"] == pytest.approx((0.75 + 1.0) / 2) and m1["fpr"] == pytest.approx((0.25 + 0 + 0.5) / 3)
+    mf = macro_rates(p, y, c, 0.5, colony_min_pos=99, colony_min_neg=99)  # 적격 없음 → pooled
+    assert (mf["tpr"], mf["fpr"]) == (m["pooled"]["tpr"], m["pooled"]["fpr"])
+    assert mf["tpr_estimator"] == mf["fpr_estimator"] == "pooled_fallback"
+    assert mf["worst_colony_fpr"] == m["pooled"]["fpr"]
+
+
+def test_cal_a_wtpr1_worst_colony_threshold_and_macro_tpr():
+    from training.train_stage2 import worst_colony_threshold, wtpr_at_fpr
+
+    neg_a, neg_b = list(np.arange(100.0)), list(np.arange(200) * 0.5)  # 1% 임계: A 98, B 98.5
+    pos_a, pos_b = [98.7, 50.0, 99.9, 97.0], [99.0, 98.6, 10.0]
+    s = np.array(neg_a + neg_b + pos_a + pos_b)
+    y = np.array([0] * 300 + [1] * 7)
+    c = np.array(["A"] * 100 + ["B"] * 200 + ["A"] * 4 + ["B"] * 3, dtype=object)
+    t = worst_colony_threshold(s, y, c, 0.01, colony_min_neg=100)
+    assert t == 98.5
+    for k in ("A", "B"):  # 이 임계에서 모든 적격 colony FPR ≤ 1%, 한 단계 낮추면 B 가 위반
+        assert (s[(c == k) & (y == 0)] > t).mean() <= 0.01
+    assert (s[(c == "B") & (y == 0)] > 98.0).mean() > 0.01
+    assert wtpr_at_fpr(s, y, c, 0.01, colony_min_neg=100, colony_min_pos=3) == pytest.approx((2 / 4 + 2 / 3) / 2)
+    assert wtpr_at_fpr(s, y, c, 0.01, colony_min_neg=100, colony_min_pos=4) == pytest.approx(0.5)  # B 양성 3 < 4
+    assert worst_colony_threshold(s, y, c, 0.01, colony_min_neg=101) == 98.5  # A(음성 100) 무시 → B 만
+    # 적격 colony 없음 → pooled = tpr_at_fpr
+    assert wtpr_at_fpr(s, y, c, 0.01, colony_min_neg=10_000, colony_min_pos=10_000) == tpr_at_fpr(s, y, 0.01)
+    # 엄격 단조 변환 불변 (Platt a>0)
+    z = (s - 60) / 20
+    assert wtpr_at_fpr(sigmoid(1.3 * z - 0.2), y, c, 0.01, 100, 3) == wtpr_at_fpr(z, y, c, 0.01, 100, 3)
+    with pytest.raises(ValueError):
+        wtpr_at_fpr(s[:300], y[:300], c[:300])  # 양성 없음
+
+
+def test_select_metric_and_policy_parse_new_values():
+    from training.train_stage2 import colony_mins, parse_colony_min
+
+    assert parse_select_metric("cal_a_wtpr1") == "cal_a_wtpr1"
+    assert pick_metric({"cal_a_wtpr1": 0.42, "cal_a_auroc": 0.9}, "cal_a_wtpr1") == 0.42
+    assert parse_tau_policy("youden_worst") == "youden_worst" and parse_tau_policy(None) == "youden"
+    assert colony_mins({}) == (200, 50) and colony_mins({"colony_min_neg": "30", "colony_min_pos": 5}) == (30, 5)
+    for bad in (0, -1, 1.5, True, "x"):
+        with pytest.raises(ValueError):
+            parse_colony_min(bad, 200, "colony_min_neg")
+
+
+def test_stage2_yaml_documents_v23_and_keeps_defaults():
+    root = Path(__file__).resolve().parents[3]
+    text = (root / "training/configs/stage2.yaml").read_text(encoding="utf-8")
+    cfg = yaml.safe_load(text)
+    assert "youden_worst" in text and "cal_a_wtpr1" in text
+    assert cfg["tau_policy"] == "youden" and cfg["select_metric"] == "cal_a_auroc"  # v0.2.0 재현 기본값
+    assert cfg["colony_min_neg"] == 200 and cfg["colony_min_pos"] == 50
+
+
+def _colony_split(rng, spec, src="71667-val"):
+    """spec = [(colony, n_neg, n_pos, neg_mean)] → logit, y, 행 (colony 열 포함)."""
+    z, y, rows = [], [], []
+    for col, n_neg, n_pos, mu in spec:
+        zz = np.r_[rng.normal(mu, 1, n_neg), rng.normal(2.0, 1, n_pos)]
+        yy = np.r_[np.zeros(n_neg), np.ones(n_pos)].astype(int)
+        z.append(zz)
+        y.append(yy)
+        rows += [{"source": src, "label": str(v), "colony": col} for v in yy]
+    return np.concatenate(z), np.concatenate(y), rows
+
+
+def test_calibrate_youden_worst_uses_macro_cal_b_and_reports_colony_tables(tmp_path):
+    from app.services.vdi import load_vdi_config
+    from training.train_stage2 import _write_vdi, colony_array, macro_rates, wtpr_at_fpr
+
+    rng = np.random.default_rng(3)
+    za, ya, ra = _colony_split(rng, [("002", 2000, 400, -1.0), ("008", 1500, 100, 0.2), ("020", 120, 5, -1.0)])
+    zb, yb, rb = _colony_split(rng, [("010", 2500, 300, -1.0), ("003", 800, 120, 0.3), ("016", 900, 10, -1.2)])
+    zv, yv, rv = _colony_split(rng, [("x", 200, 50, -1.0)], src="varroadataset")
+    sp = {"cal_a": ra, "cal_b": rb, "val": rv}
+    cfg = {"tau_policy": "youden_worst", "fpr_cap": 0.01}
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, cfg)
+    rep = cal["report"]
+    a, b = cal["platt"]
+    pa, pb = sigmoid(a * za + b), sigmoid(a * zb + b)
+    ca, cb = colony_array(ra), colony_array(rb)
+    # τ: 적격 cal-A colony(002, 008 — 020 은 음성 120 < 200) 전부 FPR ≤ 1%
+    assert rep["tau_constraint_colonies"] == ["002", "008"] and rep["tau_ignored_colonies"] == ["020"]
+    assert all(rep["by_colony_at_tau"]["cal_a"][k]["fpr"] <= 0.01 for k in ("002", "008"))
+    assert rep["cal_a_worst_colony_fpr_at_tau"] == max(rep["by_colony_at_tau"]["cal_a"][k]["fpr"] for k in ("002", "008"))
+    # cal-B: TPR macro = 양성 ≥ 50 인 010·003, FPR macro = 음성 ≥ 200 인 010·003·016
+    m = macro_rates(pb, yb, cb, cal["tau"])
+    assert rep["cal_b"]["tpr_colonies"] == ["003", "010"] and rep["cal_b"]["fpr_colonies"] == ["003", "010", "016"]
+    assert cal["tpr"] == rep["cal_b"]["tpr"] == m["tpr"] and cal["fpr"] == rep["cal_b"]["fpr"] == m["fpr"]
+    assert rep["cal_b"]["corrected"] == (m["tpr"] - m["fpr"] >= 0.5)
+    assert rep["cal_b"]["estimator"] == {"tpr": "macro", "fpr": "macro"}
+    assert rep["cal_b"]["pooled"] == {"tpr": measure_rates(pb, yb, cal["tau"])[0],
+                                      "fpr": measure_rates(pb, yb, cal["tau"])[1]}
+    assert rep["cal_b"]["worst_colony_fpr"] == max(rep["by_colony_at_tau"]["cal_b"][k]["fpr"]
+                                                   for k in ("003", "010", "016"))
+    assert set(rep["by_colony_at_tau"]["cal_b"]["016"]) == {"n_pos", "n_neg", "tpr", "fpr"}
+    assert rep["wtpr1"]["cal_a"] == wtpr_at_fpr(za, ya, ca) and rep["wtpr1"]["cal_b"] == wtpr_at_fpr(zb, yb, cb)
+    assert rep["colony_min_neg"] == 200 and rep["colony_min_pos"] == 50
+    json.dumps(rep)
+    # vdi.yaml: macro tpr/fpr + colony_calibration(진단) — 서빙 로더는 그대로 읽는다
+    v = _write_vdi(cal, tmp_path / "vdi.yaml")
+    d = yaml.safe_load(v.read_text(encoding="utf-8"))
+    assert d["tpr"] == cal["tpr"] and d["fpr"] == cal["fpr"] and d["tau_policy"] == "youden_worst"
+    cc = d["colony_calibration"]
+    assert cc["worst_colony_fpr"] == rep["cal_b"]["worst_colony_fpr"] and cc["pooled"] == rep["cal_b"]["pooled"]
+    assert set(cc["by_colony_at_tau"]["cal_a"]) == {"002", "008", "020"} and cc["tau_ignored_colonies"] == ["020"]
+    vc = load_vdi_config(v)
+    assert (vc.tau, vc.tpr, vc.fpr, vc.corrected) == (cal["tau"], cal["tpr"], cal["fpr"], rep["cal_b"]["corrected"])
+
+
+def test_calibrate_default_youden_keeps_pooled_values_and_vdi_schema(tmp_path):
+    from training.train_stage2 import _write_vdi
+
+    rng = np.random.default_rng(4)
+    za, ya, ra = _colony_split(rng, [("002", 1500, 300, -1.0), ("008", 1500, 100, 0.2)])
+    zb, yb, rb = _colony_split(rng, [("010", 2000, 300, -1.0), ("003", 800, 120, 0.3)])
+    zv, yv, rv = _colony_split(rng, [("x", 200, 50, -1.0)], src="varroadataset")
+    sp = {"cal_a": ra, "cal_b": rb, "val": rv}
+    cal = calibrate(za, ya, zb, yb, zv, yv, sp, {"fpr_cap": 0.01})
+    a, b = cal["platt"]
+    pa, pb = sigmoid(a * za + b), sigmoid(a * zb + b)
+    assert cal["tau"] == choose_tau_youden(pa, ya, 0.01)  # v0.2.0 τ 그대로
+    assert (cal["tpr"], cal["fpr"]) == measure_rates(pb, yb, cal["tau"])  # pooled 그대로
+    assert cal["report"]["cal_b"]["estimator"] == {"tpr": "pooled", "fpr": "pooled"}
+    assert cal["colony_calibration"] is None and "tau_ignored_colonies" not in cal["report"]
+    assert set(cal["report"]["by_colony_at_tau"]["cal_b"]) == {"010", "003"}  # 진단 표는 기본 정책에도
+    d = yaml.safe_load(_write_vdi(cal, tmp_path / "vdi.yaml").read_text(encoding="utf-8"))
+    assert "colony_calibration" not in d  # 기본 경로 vdi.yaml 스키마 불변
+    with pytest.raises(ValueError, match="길이"):  # colony 행과 logit 순서/길이 불일치 방지
+        calibrate(za[:-1], ya[:-1], zb, yb, zv, yv, sp, {})
+
+
+def test_train_youden_worst_cal_a_wtpr1_smoke_then_finalize(tmp_path, monkeypatch):
+    """tau_policy=youden_worst · select_metric=cal_a_wtpr1 로 2 colony 합성 크롭 학습 → finalize(last.pt).
+    history 에 cal_a_wtpr1, 리포트에 macro cal-B·colony 표, vdi.yaml colony_calibration, metadata tau_policy."""
+    pytest.importorskip("torch")
+    pytest.importorskip("torchvision")
+    pytest.importorskip("onnx")
+    from app.services.vdi import load_vdi_config
+    import training.train_stage2 as ts
+
+    monkeypatch.chdir(tmp_path)
+    _no_pretrained(monkeypatch, ts)
+    crops = _mini_crops(tmp_path, colonies=("c1", "c2"))
+    run = tmp_path / "runs" / "worst"
+    cfg = {**_smoke_cfg(tmp_path, crops, "worst", False), "epochs": 2, "patience": 5,
+           "tau_policy": "youden_worst", "select_metric": "cal_a_wtpr1", "colony_min_neg": 2, "colony_min_pos": 2,
+           "eval_out": str(run / "stage2-eval.json")}
+    rep = ts.train(cfg)
+    assert rep["select_metric"] == "cal_a_wtpr1" and "best_cal_a_wtpr1" in rep
+    assert all(0.0 <= r["cal_a_wtpr1"] <= 1.0 for r in rep["history"])
+    assert rep["tau_policy"] == "youden_worst" and rep["cal_b"]["estimator"] == {"tpr": "macro", "fpr": "macro"}
+    assert set(rep["by_colony_at_tau"]["cal_a"]) == set(rep["by_colony_at_tau"]["cal_b"]) == {"c1", "c2"}
+    assert rep["tau_constraint_colonies"] == ["c1", "c2"] and set(rep["wtpr1"]) == {"cal_a", "cal_b"}
+    d = yaml.safe_load((run / "vdi.yaml").read_text(encoding="utf-8"))
+    assert d["tau_policy"] == "youden_worst" and set(d["colony_calibration"]["by_colony_at_tau"]["cal_b"]) == {"c1", "c2"}
+    assert load_vdi_config(run / "vdi.yaml").tpr == pytest.approx(rep["cal_b"]["tpr"])
+    assert json.loads((run / "metadata.json").read_text(encoding="utf-8"))["tau_policy"] == "youden_worst"
+
+    out = tmp_path / "final"
+    frep = ts.finalize(run, "last.pt", out, cfg)
+    assert frep["tau_policy"] == "youden_worst" and frep["select_metric"] == "cal_a_wtpr1"
+    assert set(frep["by_colony_at_tau"]["cal_a"]) == {"c1", "c2"}
+    assert "colony_calibration" in yaml.safe_load((out / "vdi.yaml").read_text(encoding="utf-8"))

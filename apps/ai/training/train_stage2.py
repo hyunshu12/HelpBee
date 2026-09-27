@@ -19,6 +19,9 @@ v0.2.1: `cal_a_tpr1` = cal-A 음성 FPR 1% 지점의 TPR (tpr_at_fpr) — 제품
 전체 AUROC 가 높은 모델이 FPR ≤ 1% 영역에선 더 나빴다(교차 보정 진단: cal-A 주 colony TPR@1%FPR 신규 0.07–0.49 vs
 출하 모델 0.506). epoch history 에는 선택 지표와 무관하게 항상 `cal_a_tpr1` 이 남고, 학습 후 리포트에는
 `tpr_at_fpr1: {cal_a, cal_b}`(fp32 logit, 각 셋 자기 1% 임계)가 남는다.
+스펙 v2.3(재동결 2, cal-A/B 각 6 colony): `cal_a_wtpr1` = 최악 colony 1%-FPR 임계(음성 ≥ colony_min_neg 인 모든
+cal-A colony 의 FPR ≤ 1% 를 만족하는 가장 낮은 logit 임계)에서 양성 ≥ colony_min_pos colony 들의 macro TPR — history 에
+항상 남는다(opt-in 선택: --set select_metric=cal_a_wtpr1).
 cal-B 는 절대 선택에 쓰지 않는다(편향 없는 TPR/FPR 측정 셋으로 유지).
 v0.2.1 선택 프로토콜(opt-in): `select_metric: last` = 조기 종료 없이 epochs 전부(cosine 이 0 으로 수렴) → 마지막 epoch.
 `swa_epochs: k>0` = 조기 종료 해제 + 마지막 k epoch 끝 가중치 등가 평균(AveragedModel) → **학습 분포**(증강 train +
@@ -38,7 +41,9 @@ config `eval_batch`(기본 = `batch`) = 비학습 로더 배치 — 에폭별 va
 
 보정: cal-A 크롭 logit 으로 Platt(a,b) 적합 → p = σ(a·z+b) → cal-A 에서 τ 선택 (config `tau_policy`:
 `youden`(기본, 스펙 v2.2) = cal-A FPR ≤ `fpr_cap`(기본 0.10) 안에서 TPR−FPR 최대 | `fpr` = 음성 FPR `target_fpr`(1%)
-분위수) → cal-B 에서 TPR/FPR 측정(독립 추정). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
+분위수 | `youden_worst`(스펙 v2.3, opt-in) = 음성 ≥ colony_min_neg(200) 인 **모든** cal-A colony 의 FPR ≤ fpr_cap 안에서
+pooled TPR−FPR 최대) → cal-B 에서 TPR/FPR 측정(독립 추정; youden_worst 는 colony macro — 양성 ≥ colony_min_pos(50)
+colony TPR 평균 / 음성 ≥ colony_min_neg colony FPR 평균, 이 값이 vdi.yaml tpr/fpr·corrected 로 간다). vdi.yaml(`corrected = tpr - fpr >= 0.5`) + metadata.json +
 eval_history/v0.2.0-stage2.json(AUROC·ECE 15-bin) 기록.
 
 torch/torchvision/cv2 는 함수 안에서 lazy import — 이 모듈은 numpy/yaml 만으로 import 가능해야 한다
@@ -65,12 +70,17 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
 
 # `last` = 고정 스케줄: 조기 종료 없이 epochs 전부 → 마지막 epoch 가중치를 best.pt 로 (epoch 지표로 고르지 않음).
 # `cal_a_tpr1` = cal-A 에서 FPR 1% 지점 TPR (tpr_at_fpr, 높을수록 좋음 — 다른 지표와 같은 pick_metric/is_improvement 경로).
-SELECT_METRICS = ("val_auroc", "cal_a_auroc", "cal_a_tpr1", "last")
+# `cal_a_wtpr1` (스펙 v2.3) = 최악 colony 1%-FPR 임계(모든 적격 cal-A colony FPR ≤ 1%)에서 양성 적격 colony 의 macro TPR.
+SELECT_METRICS = ("val_auroc", "cal_a_auroc", "cal_a_tpr1", "cal_a_wtpr1", "last")
 OPERATING_FPR = 0.01  # 제품 운용점 (Youden τ fpr_cap 0.01) — history `cal_a_tpr1` · 리포트 `tpr_at_fpr1`
 SWA_BN_MAX_ROWS = 20_000  # SWA BN 재계산에 뽑는 train 샘플 상한 (가중 샘플러 복원추출, batch 배수로 내림)
 FINALIZE_REPORT = "stage2-eval.json"  # --finalize 리포트 파일명 (<out_dir> 안)
-TAU_POLICIES = ("youden", "fpr")
+TAU_POLICIES = ("youden", "fpr", "youden_worst")
 DEFAULT_TAU_POLICY = "youden"
+# 스펙 v2.3 colony 적격 기준: 음성 ≥ colony_min_neg 인 colony 만 FPR 제약·macro FPR 에, 양성 ≥ colony_min_pos 인
+# colony 만 macro TPR 에 들어간다 (표본이 작은 colony 의 FPR/TPR 은 분산이 커서 최악값을 좌우하면 안 된다).
+DEFAULT_COLONY_MIN_NEG = 200
+DEFAULT_COLONY_MIN_POS = 50
 DEFAULT_FPR_CAP = 0.10
 DEFAULT_TARGET_FPR = 0.01
 # 이름 → featmap 채널 수 (= fc_weight 길이). resnet34/resnet50/efficientnet_b0 은 v0.2.1 실험용 (기본값 불변).
@@ -113,6 +123,27 @@ def parse_fpr_cap(v) -> float:
     if not 0.0 <= v <= 1.0:
         raise ValueError(f"fpr_cap 은 [0, 1]: {v!r}")
     return v
+
+
+def parse_colony_min(v, default: int, name: str = "colony_min") -> int:
+    """config `colony_min_neg`/`colony_min_pos` (colony 적격 최소 음성/양성 수). None → default. 1 이상 정수."""
+    if v is None:
+        return int(default)
+    if isinstance(v, bool) or (isinstance(v, float) and not v.is_integer()):
+        raise ValueError(f"{name} 는 1 이상 정수: {v!r}")
+    try:
+        n = int(v.strip()) if isinstance(v, str) else int(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} 는 1 이상 정수: {v!r}") from None
+    if n < 1:
+        raise ValueError(f"{name} 는 1 이상 정수: {v!r}")
+    return n
+
+
+def colony_mins(cfg: dict) -> tuple[int, int]:
+    """cfg → (colony_min_neg, colony_min_pos)."""
+    return (parse_colony_min(cfg.get("colony_min_neg"), DEFAULT_COLONY_MIN_NEG, "colony_min_neg"),
+            parse_colony_min(cfg.get("colony_min_pos"), DEFAULT_COLONY_MIN_POS, "colony_min_pos"))
 
 
 def parse_backbone(v) -> str:
@@ -394,10 +425,16 @@ def choose_tau_youden(p, y, fpr_cap: float = DEFAULT_FPR_CAP) -> float:
 
 
 def select_tau(p, y, policy: str = DEFAULT_TAU_POLICY, fpr_cap: float = DEFAULT_FPR_CAP,
-               target_fpr: float = DEFAULT_TARGET_FPR) -> float:
-    """config `tau_policy` 에 따라 cal-A 점수로 τ 선택 (`youden` | `fpr`)."""
-    if parse_tau_policy(policy) == "youden":
+               target_fpr: float = DEFAULT_TARGET_FPR, colonies=None,
+               colony_min_neg: int = DEFAULT_COLONY_MIN_NEG) -> float:
+    """config `tau_policy` 에 따라 cal-A 점수로 τ 선택 (`youden` | `fpr` | `youden_worst` — 마지막은 colonies 필요)."""
+    policy = parse_tau_policy(policy)
+    if policy == "youden":
         return choose_tau_youden(p, y, fpr_cap)
+    if policy == "youden_worst":
+        if colonies is None:
+            raise ValueError("tau_policy=youden_worst 는 colony 배열이 필요하다")
+        return choose_tau_youden_worst(p, y, colonies, fpr_cap, colony_min_neg)
     return choose_tau(p, y, target_fpr)
 
 
@@ -444,6 +481,134 @@ def rates_by_source(p, y, sources, tau) -> dict:
                        "fpr": float(pred[neg].mean()) if neg.any() else None,
                        "n_pos": int(pos.sum()), "n_neg": int(neg.sum())}
     return out
+
+
+# ── 스펙 v2.3: colony 단위 보정 (youden_worst · macro TPR/FPR · cal_a_wtpr1) ────────────────────
+def colony_array(rows: list[dict], n: int | None = None) -> np.ndarray:
+    """crops.csv 행 → colony 문자열 배열 (없으면 ""). 로더가 순차(shuffle=False)라 logit 순서 = 행 순서 —
+    n(logit 길이)이 주어지면 길이 불일치를 ValueError 로 막는다."""
+    cols = np.array([str(r.get("colony", "") or "") for r in rows], dtype=object)
+    if n is not None and len(cols) != int(n):
+        raise ValueError(f"colony 배열({len(cols)})과 logit({n}) 길이 불일치 — 행 순서가 logit 순서와 달라졌다")
+    return cols
+
+
+def _colony_strs(colonies) -> np.ndarray:
+    """colony 배열 → str object 배열 (정수 colony 가 섞여도 비교·키가 일관되게)."""
+    return np.array([str(c) for c in np.asarray(colonies, dtype=object).ravel()], dtype=object)
+
+
+def eligible_colonies(y, colonies, min_n: int, label: int) -> list[str]:
+    """라벨 `label` 표본이 min_n 이상인 colony (이름순)."""
+    y = np.asarray(y).astype(int).ravel()
+    cols = _colony_strs(colonies)
+    return sorted(c for c in set(cols.tolist()) if int(((cols == c) & (y == label)).sum()) >= int(min_n))
+
+
+def rates_by_colony(p, y, colonies, tau) -> dict:
+    """colony 별 {n_pos, n_neg, tpr, fpr} @τ (판정 p > τ). 한 클래스가 없으면 그 지표 None."""
+    p = np.asarray(p, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    cols = _colony_strs(colonies)
+    out = {}
+    for c in sorted(set(cols.tolist()), key=str):
+        m = cols == c
+        pred, yy = p[m] > tau, y[m]
+        pos, neg = yy == 1, yy == 0
+        out[str(c)] = {"n_pos": int(pos.sum()), "n_neg": int(neg.sum()),
+                       "tpr": float(pred[pos].mean()) if pos.any() else None,
+                       "fpr": float(pred[neg].mean()) if neg.any() else None}
+    return out
+
+
+def choose_tau_youden_worst(p, y, colonies, fpr_cap: float = DEFAULT_FPR_CAP,
+                            colony_min_neg: int = DEFAULT_COLONY_MIN_NEG) -> float:
+    """스펙 v2.3 `youden_worst` τ: 후보 τ(점수 고유값, 판정 p > τ) 중 음성 ≥ colony_min_neg 인 **모든** colony 의
+    FPR ≤ fpr_cap 인 것(feasible)에서 pooled TPR−FPR 최대, 동점이면 큰 τ. 적격 colony 가 없으면 pooled FPR ≤ fpr_cap
+    (= choose_tau_youden) 으로 폴백. τ = max(p) 는 모든 colony FPR 0 이라 항상 feasible."""
+    p = np.asarray(p, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    cols = _colony_strs(colonies)
+    if not (len(p) == len(y) == len(cols)):
+        raise ValueError(f"choose_tau_youden_worst: 길이 불일치 p={len(p)} y={len(y)} colonies={len(cols)}")
+    pos, neg = np.sort(p[y == 1]), np.sort(p[y == 0])
+    if not len(pos) or not len(neg):
+        raise ValueError(f"choose_tau_youden_worst: 양성·음성 모두 필요 (n_pos={len(pos)}, n_neg={len(neg)})")
+    cand = np.unique(p)
+    tpr = 1 - np.searchsorted(pos, cand, side="right") / len(pos)
+    fpr = 1 - np.searchsorted(neg, cand, side="right") / len(neg)
+    elig = eligible_colonies(y, cols, colony_min_neg, 0)
+    if elig:
+        worst = np.zeros_like(cand)
+        for c in elig:
+            nc = np.sort(p[(cols == c) & (y == 0)])
+            worst = np.maximum(worst, 1 - np.searchsorted(nc, cand, side="right") / len(nc))
+    else:
+        logger.warning(f"youden_worst: 음성 ≥ {colony_min_neg} 인 colony 없음 → pooled FPR 제약으로 폴백")
+        worst = fpr
+    j = np.where(worst <= float(fpr_cap) + 1e-12, tpr - fpr, -np.inf)
+    best = np.flatnonzero(j == j.max())[-1]  # 동점 → 가장 큰 τ
+    return float(cand[best])
+
+
+def macro_rates(p, y, colonies, tau, colony_min_pos: int = DEFAULT_COLONY_MIN_POS,
+                colony_min_neg: int = DEFAULT_COLONY_MIN_NEG) -> dict:
+    """τ 에서 colony macro TPR/FPR (스펙 v2.3 cal-B 추정): TPR = 양성 ≥ colony_min_pos colony 들의 TPR 평균,
+    FPR = 음성 ≥ colony_min_neg colony 들의 FPR 평균. 적격 colony 가 없으면 pooled 로 폴백(`*_estimator`).
+    + pooled {tpr, fpr} · worst_colony_fpr(음성 적격 colony 최대, 없으면 pooled) · 적격 목록 · colony 표."""
+    by = rates_by_colony(p, y, colonies, tau)
+    ptpr, pfpr = measure_rates(p, y, tau)
+    tcols = [c for c, r in by.items() if r["n_pos"] >= int(colony_min_pos)]
+    fcols = [c for c, r in by.items() if r["n_neg"] >= int(colony_min_neg)]
+    return {
+        "tpr": float(np.mean([by[c]["tpr"] for c in tcols])) if tcols else ptpr,
+        "fpr": float(np.mean([by[c]["fpr"] for c in fcols])) if fcols else pfpr,
+        "tpr_estimator": "macro" if tcols else "pooled_fallback",
+        "fpr_estimator": "macro" if fcols else "pooled_fallback",
+        "pooled": {"tpr": ptpr, "fpr": pfpr},
+        "worst_colony_fpr": float(max(by[c]["fpr"] for c in fcols)) if fcols else pfpr,
+        "tpr_colonies": tcols, "fpr_colonies": fcols, "by_colony": by,
+    }
+
+
+def worst_colony_threshold(scores, y, colonies, fpr: float = OPERATING_FPR,
+                           colony_min_neg: int = DEFAULT_COLONY_MIN_NEG) -> float:
+    """모든 적격 colony(음성 ≥ colony_min_neg)의 FPR(score > t) ≤ fpr 을 만족하는 **가장 낮은** 임계 t
+    = colony 별 tpr_at_fpr 임계(음성[n − ⌊fpr·n⌋ − 1])의 최댓값. 적격 colony 가 없으면 pooled 음성 임계."""
+    s = np.asarray(scores, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    cols = _colony_strs(colonies)
+    if not (len(s) == len(y) == len(cols)):
+        raise ValueError(f"worst_colony_threshold: 길이 불일치 scores={len(s)} y={len(y)} colonies={len(cols)}")
+    if not 0.0 <= float(fpr) < 1.0:
+        raise ValueError(f"worst_colony_threshold: fpr 은 [0, 1): {fpr!r}")
+    if not (y == 0).any():
+        raise ValueError("worst_colony_threshold: 음성 필요")
+
+    def thr(neg):
+        neg = np.sort(neg)
+        return float(neg[len(neg) - int(np.floor(float(fpr) * len(neg) + 1e-9)) - 1])
+
+    elig = eligible_colonies(y, cols, colony_min_neg, 0)
+    if not elig:
+        return thr(s[y == 0])
+    return max(thr(s[(cols == c) & (y == 0)]) for c in elig)
+
+
+def wtpr_at_fpr(scores, y, colonies, fpr: float = OPERATING_FPR, colony_min_neg: int = DEFAULT_COLONY_MIN_NEG,
+                colony_min_pos: int = DEFAULT_COLONY_MIN_POS) -> float:
+    """`cal_a_wtpr1` 지표: worst_colony_threshold(fpr) 에서 양성 적격 colony(양성 ≥ colony_min_pos)의 macro TPR
+    (판정 score > t; 적격 colony 가 없으면 pooled TPR). 엄격 단조 변환(Platt)에 불변 — logit 에 바로 쓴다."""
+    s = np.asarray(scores, np.float64).ravel()
+    y = np.asarray(y).astype(int).ravel()
+    cols = _colony_strs(colonies)
+    if not (y == 1).any() or not (y == 0).any():
+        raise ValueError(f"wtpr_at_fpr: 양성·음성 모두 필요 (n_pos={int((y == 1).sum())}, n_neg={int((y == 0).sum())})")
+    t = worst_colony_threshold(s, y, cols, fpr, colony_min_neg)
+    pcols = eligible_colonies(y, cols, colony_min_pos, 1)
+    if not pcols:
+        return float((s[y == 1] > t).mean())
+    return float(np.mean([(s[(cols == c) & (y == 1)] > t).mean() for c in pcols]))
 
 
 def auroc(p, y) -> float:
@@ -555,7 +720,9 @@ def write_metadata(path: Path, model, platt: tuple[float, float], tau: float,
 def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: float, platt: tuple[float, float],
                    capture_floor_px_per_mm: float | None = None, by_source: dict | None = None,
                    tau_policy: str | None = None, fpr_cap: float | None = None,
-                   cal_a_fpr_at_tau: float | None = None) -> Path:
+                   cal_a_fpr_at_tau: float | None = None, colony_calibration: dict | None = None) -> Path:
+    """서빙(app/services/vdi.load_vdi_config)은 tau·tpr·fpr·corrected·platt·thresholds 만 읽는다.
+    colony_calibration(스펙 v2.3 youden_worst 전용, 진단용)은 None 이면 키를 쓰지 않는다 — 기본 경로 출력 불변."""
     data = {
         "version": version,
         "tau": float(tau),
@@ -572,6 +739,8 @@ def write_vdi_yaml(path: Path, *, version: str, tau: float, tpr: float, fpr: flo
         "recommendations": RECOMMENDATIONS,
         "by_source": by_source,  # cal-B 소스별 {tpr, fpr, n_pos, n_neg} @τ (진단용, 서빙은 읽지 않음)
     }
+    if colony_calibration is not None:
+        data["colony_calibration"] = colony_calibration  # tpr/fpr 추정 근거 (macro·pooled·colony 표) — 서빙 미사용
     path = Path(path)
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return path
@@ -845,7 +1014,9 @@ def train(cfg: dict) -> dict:
     scaler = _grad_scaler() if use_amp else None
     eps = float(cfg["label_smoothing"])
     val_loader = eval_dl(sp["val"])
-    cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_auroc|cal_a_tpr1 선택 기준. cal_b 는 선택에 안 씀.
+    cal_a_loader = eval_dl(sp["cal_a"])  # 71667 만 — select_metric=cal_a_* 선택 기준. cal_b 는 선택에 안 씀.
+    cal_a_colonies = colony_array(sp["cal_a"])  # 순차 로더 → logit 순서 = 행 순서 (cal_a_wtpr1)
+    min_neg, min_pos = colony_mins(cfg)
     best_score, best_ep, history = -1.0, -1, []
     swa = None  # swa_epochs>0: 마지막 k epoch 끝 가중치의 등가 평균 (파라미터만 — BN 통계는 학습 후 recompute_bn)
     for ep in range(cfg["epochs"]):
@@ -871,12 +1042,15 @@ def train(cfg: dict) -> dict:
         sched.step()
         zv, yv = _predict_logits(model, val_loader, device, use_amp)  # 선택 지표용 — autocast 허용
         zca, yca = _predict_logits(model, cal_a_loader, device, use_amp)
+        if len(zca) != len(cal_a_colonies):
+            raise ValueError(f"cal-A logit({len(zca)}) ≠ colony 행({len(cal_a_colonies)}) — 로더 순서 불일치")
         row = {"epoch": ep, "train_loss": tot / max(n, 1), "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(zca, yca),
-               "cal_a_tpr1": tpr_at_fpr(zca, yca, OPERATING_FPR)}
+               "cal_a_tpr1": tpr_at_fpr(zca, yca, OPERATING_FPR),
+               "cal_a_wtpr1": wtpr_at_fpr(zca, yca, cal_a_colonies, OPERATING_FPR, min_neg, min_pos)}
         history.append(row)
         logger.info(f"epoch {ep}: loss={row['train_loss']:.4f} val_auroc={row['val_auroc']:.4f} "
                     f"cal_a_auroc={row['cal_a_auroc']:.4f} cal_a_tpr1={row['cal_a_tpr1']:.4f} "
-                    f"(select={select_metric})")
+                    f"cal_a_wtpr1={row['cal_a_wtpr1']:.4f} (select={select_metric})")
         if swa_epochs and ep >= swa_start:
             if swa is None:
                 swa = swa_utils.AveragedModel(model)  # 기본 avg_fn = 등가 누적 평균
@@ -930,7 +1104,7 @@ def train(cfg: dict) -> dict:
     if bn_samples is not None:  # SWA — 평균 모델의 fp32 val/cal-A AUROC (1회)
         swa_report = {"epochs": swa_epochs, "start_epoch": swa_start, "bn_samples": bn_samples,
                       "val_auroc": post["val_auroc"], "cal_a_auroc": post["cal_a_auroc"],
-                      "cal_a_tpr1": post["cal_a_tpr1"]}
+                      "cal_a_tpr1": post["cal_a_tpr1"], "cal_a_wtpr1": post["cal_a_wtpr1"]}
         logger.info(f"SWA 평균 모델: val_auroc={swa_report['val_auroc']:.4f} "
                     f"cal_a_auroc={swa_report['cal_a_auroc']:.4f} cal_a_tpr1={swa_report['cal_a_tpr1']:.4f}")
     # best_{metric} = 선택 모델의 지표 값 (SWA 면 평균 모델 fp32 값). select_metric=last 는 epoch 지표로 안 고르므로 키 없음.
@@ -959,31 +1133,73 @@ def train(cfg: dict) -> dict:
 
 
 def calibrate(za, ya, zb, yb, zv, yv, sp: dict[str, list[dict]], cfg: dict) -> dict:
-    """(numpy) cal-A logit → Platt → τ(`tau_policy`) → cal-B TPR/FPR + 소스별 rates. 학습·--recalibrate 공용.
-    반환: platt/tau/tpr/fpr/tau_policy/fpr_cap/target_fpr/cal_a_fpr_at_tau/by_source_at_tau + eval JSON 조각 `report`."""
+    """(numpy) cal-A logit → Platt → τ(`tau_policy`) → cal-B TPR/FPR + 소스별 rates. 학습·--recalibrate·--finalize 공용.
+    za/zb 순서 = sp["cal_a"]/sp["cal_b"] 행 순서 (순차 로더) — colony 는 그 행의 `colony` 열(colony_array 가 길이 검사).
+
+    `youden`/`fpr`(기본·구 동작): cal-B TPR/FPR = pooled (v0.2.0 과 같은 값).
+    `youden_worst`(스펙 v2.3): τ = choose_tau_youden_worst(pooled Platt, 적격 cal-A colony 최악 FPR ≤ fpr_cap),
+    cal-B TPR/FPR = macro_rates (양성 ≥ colony_min_pos colony TPR 평균 / 음성 ≥ colony_min_neg colony FPR 평균) —
+    이 macro 값이 vdi.yaml tpr/fpr 과 corrected(TPR−FPR ≥ 0.5)로 간다 + vdi.yaml `colony_calibration`(진단용).
+    모든 정책에서 리포트에 cal_b.pooled·worst_colony_fpr·by_colony_at_tau{cal_a, cal_b}·wtpr1{cal_a, cal_b} 기록.
+    반환: platt/tau/tpr/fpr/tau_policy/fpr_cap/target_fpr/cal_a_fpr_at_tau/by_source_at_tau/colony_calibration
+    + eval JSON 조각 `report`."""
     policy = parse_tau_policy(cfg.get("tau_policy"))
     fpr_cap = parse_fpr_cap(cfg.get("fpr_cap"))
     target_fpr = float(cfg.get("target_fpr", DEFAULT_TARGET_FPR))
+    min_neg, min_pos = colony_mins(cfg)
+    ca, cb = colony_array(sp["cal_a"], len(za)), colony_array(sp["cal_b"], len(zb))
     platt = fit_platt(za, ya)
     pa, pb, pv = (sigmoid(platt[0] * np.asarray(z) + platt[1]) for z in (za, zb, zv))
-    tau = select_tau(pa, ya, policy, fpr_cap, target_fpr)
+    tau = select_tau(pa, ya, policy, fpr_cap, target_fpr, colonies=ca, colony_min_neg=min_neg)
     cal_a_fpr = measure_rates(pa, ya, tau)[1]
-    tpr, fpr = measure_rates(pb, yb, tau)
+    ma = macro_rates(pa, ya, ca, tau, min_pos, min_neg)
+    mb = macro_rates(pb, yb, cb, tau, min_pos, min_neg)
+    worst = policy == "youden_worst"
+    if worst:
+        tpr, fpr = mb["tpr"], mb["fpr"]
+        ignored = sorted(c for c, r in ma["by_colony"].items() if r["n_neg"] < min_neg)
+        logger.info(f"youden_worst τ={tau:.4f}: FPR 제약 cal-A colony {ma['fpr_colonies']} "
+                    f"(음성 < {min_neg} 무시: {ignored}) · cal-B macro TPR colony {mb['tpr_colonies']} "
+                    f"FPR colony {mb['fpr_colonies']}")
+    else:
+        tpr, fpr = mb["pooled"]["tpr"], mb["pooled"]["fpr"]  # = measure_rates(pb, yb, tau) (v0.2.0 값 그대로)
+        ignored = None
+    estimator = ({"tpr": mb["tpr_estimator"], "fpr": mb["fpr_estimator"]} if worst
+                 else {"tpr": "pooled", "fpr": "pooled"})
+    by_colony = {"cal_a": ma["by_colony"], "cal_b": mb["by_colony"]}
+    colony_calibration = None
+    if worst:
+        colony_calibration = {
+            "estimator": estimator, "colony_min_pos": min_pos, "colony_min_neg": min_neg,
+            "pooled": mb["pooled"], "worst_colony_fpr": mb["worst_colony_fpr"],
+            "tpr_colonies": mb["tpr_colonies"], "fpr_colonies": mb["fpr_colonies"],
+            "cal_a_worst_colony_fpr_at_tau": ma["worst_colony_fpr"], "tau_constraint_colonies": ma["fpr_colonies"],
+            "tau_ignored_colonies": ignored, "by_colony_at_tau": by_colony,
+        }
     by_source_at_tau = {"cal_b": rates_by_source(pb, yb, [r["source"] for r in sp["cal_b"]], tau),
                         "val": rates_by_source(pv, yv, [r["source"] for r in sp["val"]], tau)}
     report = {
         "platt": {"a": platt[0], "b": platt[1]}, "tau": tau, "tau_policy": policy, "fpr_cap": fpr_cap,
         "target_fpr": target_fpr, "cal_a_fpr_at_tau": cal_a_fpr,
-        "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5},
+        "cal_a_worst_colony_fpr_at_tau": ma["worst_colony_fpr"],
+        "cal_b": {"tpr": tpr, "fpr": fpr, "corrected": tpr - fpr >= 0.5, "estimator": estimator,
+                  "pooled": mb["pooled"], "worst_colony_fpr": mb["worst_colony_fpr"],
+                  "tpr_colonies": mb["tpr_colonies"], "fpr_colonies": mb["fpr_colonies"]},
+        "colony_min_neg": min_neg, "colony_min_pos": min_pos,
+        **({"tau_constraint_colonies": ma["fpr_colonies"], "tau_ignored_colonies": ignored} if worst else {}),
+        "by_colony_at_tau": by_colony,
         "by_source_at_tau": by_source_at_tau,
         "auroc": {"cal_a": auroc(za, ya), "cal_b": auroc(zb, yb)},
         # 운용 영역 품질: 각 셋 자기 음성 1% 분위 임계에서의 TPR (logit 기준 — Platt 은 단조라 불변)
         "tpr_at_fpr1": {"cal_a": tpr_at_fpr(za, ya, OPERATING_FPR), "cal_b": tpr_at_fpr(zb, yb, OPERATING_FPR)},
+        # 스펙 v2.3: 최악 colony 1%-FPR 임계에서의 macro TPR (각 셋 자기 colony 기준, logit)
+        "wtpr1": {"cal_a": wtpr_at_fpr(za, ya, ca, OPERATING_FPR, min_neg, min_pos),
+                  "cal_b": wtpr_at_fpr(zb, yb, cb, OPERATING_FPR, min_neg, min_pos)},
         "ece15": {"cal_a": ece(pa, ya), "cal_b": ece(pb, yb), "cal_b_uncalibrated": ece(sigmoid(zb), yb)},
     }
     return {"platt": platt, "tau": tau, "tpr": tpr, "fpr": fpr, "tau_policy": policy, "fpr_cap": fpr_cap,
             "target_fpr": target_fpr, "cal_a_fpr_at_tau": cal_a_fpr, "by_source_at_tau": by_source_at_tau,
-            "report": report}
+            "colony_calibration": colony_calibration, "report": report}
 
 
 def _write_vdi(cal: dict, *paths: Path) -> Path:
@@ -991,7 +1207,8 @@ def _write_vdi(cal: dict, *paths: Path) -> Path:
     for path in paths:
         write_vdi_yaml(path, version="v0.2.0", tau=cal["tau"], tpr=cal["tpr"], fpr=cal["fpr"], platt=cal["platt"],
                        by_source=cal["by_source_at_tau"]["cal_b"], tau_policy=cal["tau_policy"],
-                       fpr_cap=cal["fpr_cap"], cal_a_fpr_at_tau=cal["cal_a_fpr_at_tau"])
+                       fpr_cap=cal["fpr_cap"], cal_a_fpr_at_tau=cal["cal_a_fpr_at_tau"],
+                       colony_calibration=cal.get("colony_calibration"))
     return Path(paths[0])
 
 
@@ -1004,7 +1221,8 @@ def _calibrate_export(model, weights: Path, out_dir: Path, sp: dict[str, list[di
     Platt·τ·cal-B 는 amp 와 무관하게 fp32 forward — 서빙 ONNX(fp32) logit 과 같은 분포에서 보정해야 한다.
     eval_dl(rows, pin_memory) 는 batch = eval_batch 비학습 로더, 1회성이라 pin_memory=False
     (AMP 후 OOM 이 난 곳이 pin-memory 스레드였다). eval JSON 은 호출자가 쓴다.
-    반환: {"cal": calibrate 결과, "val_auroc", "cal_a_auroc", "cal_a_tpr1"(fp32, 이 가중치), "vdi": 첫 vdi 경로}.
+    반환: {"cal": calibrate 결과, "val_auroc", "cal_a_auroc", "cal_a_tpr1", "cal_a_wtpr1"(fp32, 이 가중치),
+    "vdi": 첫 vdi 경로}. za/zb 는 sp 행 순서(순차 로더) — calibrate 가 colony 열 길이를 검사한다.
     리포트 `tpr_at_fpr1: {cal_a, cal_b}` 는 calibrate() 의 report 조각에 들어 있다 (train·finalize·recalibrate 공통)."""
     import torch
 
@@ -1020,8 +1238,11 @@ def _calibrate_export(model, weights: Path, out_dir: Path, sp: dict[str, list[di
     write_metadata(out_dir / "metadata.json", model_cpu, cal["platt"], cal["tau"], img_size, cal["tau_policy"],
                    amp=amp, select_metric=select_metric, swa_epochs=swa_epochs)
     vdi = _write_vdi(cal, *vdi_paths)
+    min_neg, min_pos = colony_mins(cfg)
     return {"cal": cal, "val_auroc": auroc(zv, yv), "cal_a_auroc": auroc(za, ya),
-            "cal_a_tpr1": tpr_at_fpr(za, ya, OPERATING_FPR), "vdi": vdi}
+            "cal_a_tpr1": tpr_at_fpr(za, ya, OPERATING_FPR),
+            "cal_a_wtpr1": wtpr_at_fpr(za, ya, colony_array(sp["cal_a"], len(za)), OPERATING_FPR, min_neg, min_pos),
+            "vdi": vdi}
 
 
 def recalibrate(run_dir: Path, cfg: dict) -> dict:
@@ -1152,6 +1373,7 @@ def finalize(run_dir: Path, ckpt: str, out_dir: Path, cfg: dict) -> dict:
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info(f"finalized τ={cal['tau']:.4f} ({cal['tau_policy']}) cal-A AUROC={post['cal_a_auroc']:.4f} "
                 f"TPR@1%FPR cal-A={post['cal_a_tpr1']:.3f} cal-B={cal['report']['tpr_at_fpr1']['cal_b']:.3f} "
+                f"wTPR@1%FPR cal-A={post['cal_a_wtpr1']:.3f} "
                 f"cal-B TPR={cal['tpr']:.3f} FPR={cal['fpr']:.4f} → {out}")
     return report
 
@@ -1190,6 +1412,7 @@ def main(argv: list[str] | None = None):
         cfg["degrade"] = a.degrade
     parse_tau_policy(cfg.get("tau_policy"))  # 조기 검증
     parse_fpr_cap(cfg.get("fpr_cap"))
+    colony_mins(cfg)  # colony_min_neg/pos 조기 검증
     resolve_workers(cfg)
     parse_amp(cfg.get("amp"))  # --set amp=true 는 apply_overrides 가 bool 로, 문자열 "1"/"0" 등도 허용
     parse_eval_batch(cfg.get("eval_batch"), cfg.get("batch", 64))  # train·recalibrate 공용
