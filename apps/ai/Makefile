@@ -26,7 +26,7 @@ help:
 	@echo "  train           v0.1.0-baseline 학습 (5,000장, 200 epochs, patience 30)"
 	@echo "  train-resume    중단된 run 이어 학습 (last.pt + optimizer state)"
 	@echo "  train-extend    데이터 추가 후 weight 가져와 새 run (5k → 50k)"
-	@echo "  eval            Golden 셋으로 mAP / Recall@varroa / VMIR MAE 평가"
+	@echo "  eval            Stage-1 golden mAP@0.5 / bee recall 게이트 (LABEL_ROOT=...)"
 	@echo "  export-onnx     best.pt → best.onnx (CPU 추론용)"
 
 # ===== Server =====
@@ -36,16 +36,15 @@ dev:
 test:
 	pytest -q
 
-# 서빙 경로(preprocess→YOLO→risk) 스냅샷. 로컬에 ONNX 모델 + 71667 Sample 있을 때만
-# 실제 실행, 없으면 전 케이스 skip (이미지는 라이선스상 미커밋).
+# two-stage 서빙 경로(Stage-1→Stage-2→VDI) 스냅샷 v2. 로컬에 two-stage 번들 캐시 + 71667 Sample
+# 있을 때만 실제 실행, 없으면 모듈 전체 skip (이미지는 라이선스상 미커밋).
 test-regression:
 	pytest -q -m regression
 
-# 매니페스트 재생성 — 프롬프트/모델핀/risk.yaml 을 "의도적으로" 바꾼 뒤에만.
-# created_at 은 date CLI 로 스탬프(선택/기대값은 결정적이라 재실행 byte-identical).
+# 매니페스트 v2 재생성 — 번들/vdi.yaml/전처리를 "의도적으로" 바꾼 뒤에만.
+# Sample 330장 전수 스캔(수 분) + Sample_derived/(합성 0마리·블러) 생성. 재실행 byte-identical.
 regression-fixtures:
-	$(PY) -m training.data.make_regression_fixtures \
-		--created-at "$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	$(PY) -m training.data.make_regression_fixtures
 
 lint:
 	ruff check . && mypy app training
@@ -70,6 +69,9 @@ convert-data:
 
 # 자동 전략 분할 (farm/device/sequence 자동 감지)
 # ⚠️ golden 을 먼저 실행할 것 — manifest 기반으로 golden 이미지를 풀에서 제외(leakage 방지).
+# ⚠️ (2026-09-23) 레거시 v0.1.0 경로: 새 golden 은 golden/manifest.json 을 만들지 않음 — 2-stage 는 split_manifest.json 사용.
+# ⚠️ 레거시(v0.1.0): 구 golden 경로(training/datasets/golden/manifest.json) 기준.
+#    v0.2.0 은 `python tasks.py split` (make_split_manifest — golden/cal colony 동결) 을 쓴다.
 split-data:
 	$(PY) -m training.data.split_strategy \
 		--input training/datasets/varroa-v1-allraw \
@@ -78,13 +80,12 @@ split-data:
 		--val-ratio 0.2 \
 		--seed 42
 
-# Golden 셋 추출 (split-data 전에 실행 — 격리)
+# Golden 셋 선택 — split_manifest.json(golden split)에서 경로 목록만 기록 (= python tasks.py golden)
 golden:
 	$(PY) -m training.data.golden_holdout \
-		--input training/datasets/varroa-v1-allraw \
-		--output training/datasets/golden \
-		--n-varroa 100 --n-normal 200 \
-		--min-farms 3 --min-devices 2
+		--manifest training/split_manifest.json \
+		--output training/golden.json \
+		--n-varroa 100 --n-normal 200
 
 # ===== YOLO training =====
 train:
@@ -103,12 +104,17 @@ train-extend:
 		--pretrained training/runs/yolo/v0.1.0-baseline/weights/best.pt \
 		--name $(NAME)
 
-# Golden 셋 평가 — imgsz 는 학습(yolo.yaml=640)과 일치해야 함
+# Stage-1(1-class bee) golden 평가 — mAP(conf=0.001) + 게이트 mAP@0.5≥0.85 & recall≥0.90
+# LABEL_ROOT = aihub_to_yolo --mapping adult1 --manifest 산출 labels/all. imgsz 는 stage1.yaml(1024)과 일치.
+# 예: make eval LABEL_ROOT=D:/helpbee-data/yolo-adult1/labels/all
+STAGE1_WEIGHTS ?= training/runs/yolo/v0.2.0-stage1/weights/best.pt
+LABEL_ROOT ?= training/datasets/yolo-adult1/labels/all
 eval:
 	$(PY) -m training.eval \
-		--weights training/runs/yolo/v0.1.0-baseline/weights/best.pt \
-		--golden training/datasets/golden/data.yaml \
-		--imgsz 640
+		--weights $(STAGE1_WEIGHTS) \
+		--golden training/golden.json \
+		--label-root $(LABEL_ROOT) \
+		--imgsz 1024
 
 # ONNX export — CPU 추론 서버에서 ultralytics 없이 onnxruntime으로 빠른 추론
 # imgsz 는 학습(640)과 일치 — 1280 export 는 CPU latency ~4배라 운영 SLA 위반

@@ -156,6 +156,28 @@
   - 각 항목: `{ order:number, content:string, severity:'info'|'warn'|'danger' }`. `order` 오름차순 표시. `severity`는 tier 매핑(safe→info / watch→warn / danger→danger).
   - `status:'failed'`이면 빈 배열 `[]`. YOLO 결과에는 "AI 추정치는 참고용…실측 병행" 정직성 안내가 마지막에 붙을 수 있음(≤5개).
 
+### 4.1 two-stage 계약 (스펙 v2.2 §3·§8, ADR-0002 — 2026-09-26, 이중 출력 기간)
+
+- **새 필드** (`POST` · `GET /v1/analyses` · `GET /:id`, two-stage 행만 채움 — 구 row·OpenAI 폴백은 `null`):
+  ```ts
+  { vdi: number|null,              // 보정 지수(%) — 계산용
+    vdiDisplay: string|null,       // AI가 한 번 반올림한 표시 문자열. 클라 재반올림 금지
+    tier: 'low'|'elevated'|'high'|'insufficient'|null,  // vdiDisplay 기준 반열림 [0,3)/[3,10)/[10,∞)
+    corrected: boolean|null,       // Rogan–Gladen 보정 적용 여부
+    beeTotal: number|null, beeInfested: number|null,    // 탐지 성충 n / 감염 판정 k (beeTotal<30 → "표본 적음")
+    samplingCi95: [number, number]|null,  // "표본 신뢰구간(분류기 오차 미포함)"
+    quality: { ok, blur_score, exposure_mean, px_per_mm_est }|null,
+    modelVersions: { stage1, stage2, vdi_config }|null,
+    evidence?: { index, box, crop_region, p_infested, cam }[]  // POST 응답에만(미저장). box/crop_region = 원본 픽셀 xyxy
+  }
+  ```
+- `tier === 'insufficient'`(벌 0마리 또는 `quality.ok === false`)는 실패가 아니라 **판독 불가** 상태(`status:'success'`, `overallHealth:null`, 권장조치 severity `info`). `overallHealth` 매핑: low→healthy, elevated→warning, high→critical.
+- **이중 출력**: `varroaInfectionRisk`(= AI `score_mapping(vdi)` 0~100 점수, `round(vdi)` 아님)·`overallHealth`는 계속 온다. 구 필드 제거는 develop 머지 + 1회 배포 후(계획 2 Task 8).
+- **트렌드**: 단위가 달라 two-stage는 `vdi`, 구 row는 `varroaInfectionRisk` 시리즈로 분리 — 섞어 평균하지 말 것.
+- **N장 합산** `GET /v1/analyses/aggregate?ids=a,b,…` (1~10개, 내 소유·success): 200 `{ vdi, vdi_display, vdi_raw, sampling_ci95, bee_total, bee_infested, tier, corrected, n_images, excluded:{legacy, insufficient}, analysisIds }`. Σk/Σn 원시 카운트로 재계산(퍼센트 평균 금지). 구 row·insufficient row는 제외되어 `excluded`에 집계, 쓸 수 있는 row 0개면 400 `VALIDATION_FAILED`, 비소유 id가 섞이면 404, AI 불가 시 503 `AI_UNAVAILABLE`.
+- **타임아웃**: 서버의 two-stage 추론은 최대 90s(`AI_TIMEOUT_MS_TWO_STAGE`) → 모바일 분석 요청 `receiveTimeout` ≥ 95s.
+- **`PORTFOLIO_MODE`** (API env, `true`/`1`만 활성): `POST /v1/analyses`의 quota(402)·이메일 인증(403) 게이트를 건너뛰고 engine은 항상 `yolo`. `GET /v1/subscriptions/plans` 응답에 `portfolio: true`가 붙으면 클라이언트는 결제·쿼터 UI를 숨긴다.
+
 ---
 
 ## 5. 구독 Subscriptions (`/v1/subscriptions`)

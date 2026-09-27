@@ -38,9 +38,9 @@ class ProfileEditScreen extends ConsumerWidget {
             AppSpacing.gapLg,
             Text(
               l10n.profileSaveComingSoon,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),

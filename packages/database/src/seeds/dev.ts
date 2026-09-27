@@ -48,6 +48,13 @@ const SEED_AI_MODELS = [
     name: 'helpbee-yolov11s', // ADR-0001: YOLOv11s (구 yolov8s 표기 폐기)
     version: '0.1.0',
   },
+  {
+    // 2-stage 재설계 v0.2.0 (스펙 §8-1). 구 v0.1.0 row와 공존 — API가 model_versions 유무로 선택.
+    provider: 'yolo' as const,
+    name: 'helpbee-two-stage',
+    version: '0.2.0',
+    isActive: true,
+  },
 ];
 
 async function main(): Promise<void> {
@@ -107,7 +114,10 @@ async function main(): Promise<void> {
       });
     const allModels = await db.select().from(schema.aiModels);
     const openaiModel = allModels.find((m) => m.provider === 'openai');
-    const yoloModel = allModels.find((m) => m.provider === 'yolo');
+    // 같은 provider(yolo)에 v0.1.0 + two-stage 2행 → name으로 고정 (시드 분석 행은 구 계약)
+    const yoloModel = allModels.find(
+      (m) => m.provider === 'yolo' && m.name === 'helpbee-yolov11s',
+    );
     if (!openaiModel || !yoloModel) {
       throw new Error('[seed:dev] seed ai_models not found');
     }

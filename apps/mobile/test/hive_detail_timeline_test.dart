@@ -21,22 +21,22 @@ import 'package:helpbee/l10n/app_localizations.dart';
 const _hiveId = 'hive-1';
 
 Hive _hive() => Hive(
-      id: _hiveId,
-      userId: 'u1',
-      name: '양봉장 1호',
-      createdAt: DateTime.utc(2026, 8, 12),
-      updatedAt: DateTime.utc(2026, 8, 12),
-    );
+  id: _hiveId,
+  userId: 'u1',
+  name: '양봉장 1호',
+  createdAt: DateTime.utc(2026, 8, 12),
+  updatedAt: DateTime.utc(2026, 8, 12),
+);
 
 Analysis _analysis({required String status, int? risk}) => Analysis(
-      id: 'a-$status',
-      hiveId: _hiveId,
-      imageId: 'img-1',
-      status: status,
-      varroaInfectionRisk: risk,
-      createdAt: DateTime.utc(2026, 8, 12),
-      updatedAt: DateTime.utc(2026, 8, 12),
-    );
+  id: 'a-$status',
+  hiveId: _hiveId,
+  imageId: 'img-1',
+  status: status,
+  varroaInfectionRisk: risk,
+  createdAt: DateTime.utc(2026, 8, 12),
+  updatedAt: DateTime.utc(2026, 8, 12),
+);
 
 Future<void> _pump(WidgetTester tester, List<Analysis> analyses) async {
   // iPhone 세로 폭 — 실제 기기에서 넘쳤던 조건을 재현한다.

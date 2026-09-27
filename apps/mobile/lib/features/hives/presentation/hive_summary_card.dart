@@ -33,14 +33,15 @@ class HiveSummaryCard extends ConsumerWidget {
     final RiskTier tier = analysis?.tier ?? RiskTier.unknown;
     final tierColor = riskTierColor(tier);
     final int? score = analysis?.varroaInfectionRisk;
+    final String? vdiDisplay = analysis?.vdiDisplay; // two-stage 우선
 
     // Distinguish "no analysis yet" from "still loading" / "failed to load" so
     // a transient/errored fetch doesn't masquerade as a never-diagnosed hive.
     final String statusText = analysis != null
         ? _fmtDate(analysis.analyzedAt ?? analysis.createdAt)
         : latest.isLoading
-            ? '…'
-            : (latest.hasError ? l10n.cardLoadFailed : l10n.noAnalysisYet);
+        ? '…'
+        : (latest.hasError ? l10n.cardLoadFailed : l10n.noAnalysisYet);
 
     return Material(
       color: AppColors.surface,
@@ -79,8 +80,11 @@ class HiveSummaryCard extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.xxs),
                 Row(
                   children: [
-                    const Icon(Icons.location_on,
-                        size: 16, color: AppColors.hintBorder),
+                    const Icon(
+                      Icons.location_on,
+                      size: 16,
+                      color: AppColors.hintBorder,
+                    ),
                     const SizedBox(width: 4),
                     Flexible(
                       child: Text(
@@ -119,13 +123,21 @@ class HiveSummaryCard extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  if (score != null)
+                  if (tier == RiskTier.insufficient)
+                    Text(
+                      l10n.tierInsufficient,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: tierColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )
+                  else if (vdiDisplay != null || score != null)
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '$score',
+                          vdiDisplay ?? '$score',
                           style: theme.textTheme.displaySmall?.copyWith(
                             color: tierColor,
                             fontWeight: FontWeight.w800,
@@ -133,7 +145,7 @@ class HiveSummaryCard extends ConsumerWidget {
                         ),
                         const SizedBox(width: 2),
                         Text(
-                          l10n.scoreSuffix,
+                          vdiDisplay != null ? '%' : l10n.scoreSuffix,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: AppColors.textSecondary,
                           ),

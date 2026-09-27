@@ -26,12 +26,12 @@ const _hiveA = 'hive-a';
 const _hiveB = 'hive-b';
 
 Hive _hive(String id, String name) => Hive(
-      id: id,
-      userId: 'u1',
-      name: name,
-      createdAt: DateTime.utc(2026, 8, 12),
-      updatedAt: DateTime.utc(2026, 8, 12),
-    );
+  id: id,
+  userId: 'u1',
+  name: name,
+  createdAt: DateTime.utc(2026, 8, 12),
+  updatedAt: DateTime.utc(2026, 8, 12),
+);
 
 Analysis _analysis(
   String id, {
@@ -39,17 +39,16 @@ Analysis _analysis(
   String status = 'success',
   int? risk,
   DateTime? analyzedAt,
-}) =>
-    Analysis(
-      id: id,
-      hiveId: hiveId,
-      imageId: 'img-$id',
-      status: status,
-      varroaInfectionRisk: risk,
-      analyzedAt: analyzedAt ?? DateTime.utc(2026, 8, 20, 11, 12),
-      createdAt: DateTime.utc(2026, 8, 20),
-      updatedAt: DateTime.utc(2026, 8, 20),
-    );
+}) => Analysis(
+  id: id,
+  hiveId: hiveId,
+  imageId: 'img-$id',
+  status: status,
+  varroaInfectionRisk: risk,
+  analyzedAt: analyzedAt ?? DateTime.utc(2026, 8, 20, 11, 12),
+  createdAt: DateTime.utc(2026, 8, 20),
+  updatedAt: DateTime.utc(2026, 8, 20),
+);
 
 /// hivesListControllerProvider는 repo+auth에 의존하므로, 화면 테스트에서는
 /// 컨트롤러 자체를 대체해 이름 조인만 고정한다.
@@ -76,8 +75,9 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         allAnalysesProvider.overrideWith((ref) => history()),
-        hivesListControllerProvider
-            .overrideWith(() => _FakeHivesController(hives)),
+        hivesListControllerProvider.overrideWith(
+          () => _FakeHivesController(hives),
+        ),
       ],
       child: const MaterialApp(
         locale: Locale('ko'),
@@ -102,10 +102,12 @@ void main() {
       hives: [_hive(_hiveA, '가별벌통'), _hive(_hiveB, '안산루트창업캠프')],
       history: () async => [
         _analysis('a1', hiveId: _hiveA, risk: 35),
-        _analysis('b1',
-            hiveId: _hiveB,
-            risk: 90,
-            analyzedAt: DateTime.utc(2026, 8, 19, 9)),
+        _analysis(
+          'b1',
+          hiveId: _hiveB,
+          risk: 90,
+          analyzedAt: DateTime.utc(2026, 8, 19, 9),
+        ),
       ],
     );
 
@@ -114,7 +116,8 @@ void main() {
     expect(find.text('35'), findsOneWidget);
     expect(find.text('90'), findsOneWidget);
     // 서버가 준 순서(최신순)를 화면이 재정렬하지 않는다.
-    final cards = tester.widgetList<Text>(find.text('가별벌통')).length +
+    final cards =
+        tester.widgetList<Text>(find.text('가별벌통')).length +
         tester.widgetList<Text>(find.text('안산루트창업캠프')).length;
     expect(cards, 2);
   });

@@ -42,8 +42,10 @@ class LoggingInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (kDebugMode) {
       final req = err.requestOptions;
-      debugPrint('✗ ${err.response?.statusCode ?? '-'} ${req.method} ${req.uri}'
-          ' (${err.type.name})');
+      debugPrint(
+        '✗ ${err.response?.statusCode ?? '-'} ${req.method} ${req.uri}'
+        ' (${err.type.name})',
+      );
       final body = _redactedBody(err.response?.data);
       if (body != null) debugPrint('  error body: ${_cap(body)}');
     }
@@ -53,8 +55,7 @@ class LoggingInterceptor extends Interceptor {
   Map<String, Object?> _redactedHeaders(Map<String, dynamic> headers) {
     final out = <String, Object?>{};
     headers.forEach((key, value) {
-      out[key] =
-          _redactHeaders.contains(key.toLowerCase()) ? '***' : value;
+      out[key] = _redactHeaders.contains(key.toLowerCase()) ? '***' : value;
     });
     return out;
   }

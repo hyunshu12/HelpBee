@@ -43,7 +43,8 @@ class SubscriptionMe {
   }
 }
 
-DateTime? _date(Object? v) => v == null ? null : DateTime.tryParse(v.toString());
+DateTime? _date(Object? v) =>
+    v == null ? null : DateTime.tryParse(v.toString());
 
 int? _int(Object? v) {
   if (v is int) return v;

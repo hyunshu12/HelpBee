@@ -10,17 +10,18 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// Never store tokens in shared_preferences, hive, or plain files.
 class TokenStore {
   TokenStore({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              // Android: force the EncryptedSharedPreferences backend (no plaintext
-              // fallback on older API levels).
-              aOptions: AndroidOptions(encryptedSharedPreferences: true),
-              // iOS/macOS: keep the refresh token on THIS device only — excluded
-              // from iCloud Keychain sync and device backups/restore.
-              iOptions: IOSOptions(
-                accessibility: KeychainAccessibility.first_unlock_this_device,
-              ),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            // Android: force the EncryptedSharedPreferences backend (no plaintext
+            // fallback on older API levels).
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            // iOS/macOS: keep the refresh token on THIS device only — excluded
+            // from iCloud Keychain sync and device backups/restore.
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   static const String _refreshKey = 'hb_refresh';
 

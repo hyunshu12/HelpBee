@@ -34,13 +34,13 @@ class PublicUser {
   bool get isAdmin => role == 'admin';
 
   factory PublicUser.fromJson(Map<String, dynamic> json) => PublicUser(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        name: json['name'] as String,
-        role: (json['role'] as String?) ?? 'user',
-        emailVerified: (json['emailVerified'] as bool?) ?? false,
-        createdAt: _parseDate(json['createdAt']),
-      );
+    id: json['id'] as String,
+    email: json['email'] as String,
+    name: json['name'] as String,
+    role: (json['role'] as String?) ?? 'user',
+    emailVerified: (json['emailVerified'] as bool?) ?? false,
+    createdAt: _parseDate(json['createdAt']),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -75,10 +75,10 @@ class AuthTokens {
   final int expiresIn;
 
   factory AuthTokens.fromJson(Map<String, dynamic> json) => AuthTokens(
-        accessToken: json['accessToken'] as String,
-        refreshToken: json['refreshToken'] as String,
-        expiresIn: _asInt(json['expiresIn']) ?? 900,
-      );
+    accessToken: json['accessToken'] as String,
+    refreshToken: json['refreshToken'] as String,
+    expiresIn: _asInt(json['expiresIn']) ?? 900,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -105,20 +105,20 @@ class AuthSession {
   final AuthTokens tokens;
 
   factory AuthSession.fromJson(Map<String, dynamic> json) => AuthSession(
-        user: PublicUser.fromJson(_asStringMap(json['user'])),
-        tokens: AuthTokens.fromJson(_asStringMap(json['tokens'])),
-      );
+    user: PublicUser.fromJson(_asStringMap(json['user'])),
+    tokens: AuthTokens.fromJson(_asStringMap(json['tokens'])),
+  );
 
   /// Parses the FLAT auth envelope `data` payload:
   /// `{ user, accessToken, refreshToken, expiresIn }`.
   factory AuthSession.fromAuthData(Map<String, dynamic> data) => AuthSession(
-        user: PublicUser.fromJson(_asStringMap(data['user'])),
-        tokens: AuthTokens(
-          accessToken: data['accessToken'] as String,
-          refreshToken: data['refreshToken'] as String,
-          expiresIn: _asInt(data['expiresIn']) ?? 900,
-        ),
-      );
+    user: PublicUser.fromJson(_asStringMap(data['user'])),
+    tokens: AuthTokens(
+      accessToken: data['accessToken'] as String,
+      refreshToken: data['refreshToken'] as String,
+      expiresIn: _asInt(data['expiresIn']) ?? 900,
+    ),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -161,10 +161,11 @@ class MeResult {
   final SubscriptionBrief subscription;
 
   factory MeResult.fromJson(Map<String, dynamic> json) => MeResult(
-        user: PublicUser.fromJson(_asStringMap(json['user'])),
-        subscription:
-            SubscriptionBrief.fromJson(_asStringMap(json['subscription'])),
-      );
+    user: PublicUser.fromJson(_asStringMap(json['user'])),
+    subscription: SubscriptionBrief.fromJson(
+      _asStringMap(json['subscription']),
+    ),
+  );
 
   @override
   bool operator ==(Object other) =>

@@ -66,7 +66,9 @@ T unwrapData<T>(Response<dynamic> res, T Function(Object? data) parse) {
   if (body is Map && body.containsKey('data')) {
     final rawMeta = body['meta'];
     final meta = rawMeta is Map
-        ? ResponseMeta.fromJson(rawMeta.map((k, v) => MapEntry(k.toString(), v)))
+        ? ResponseMeta.fromJson(
+            rawMeta.map((k, v) => MapEntry(k.toString(), v)),
+          )
         : const ResponseMeta();
     return (data: parse(body['data']), meta: meta);
   }

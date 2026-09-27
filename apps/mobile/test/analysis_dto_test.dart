@@ -7,15 +7,15 @@ import 'package:helpbee/core/risk/risk_tier.dart';
 import 'package:helpbee/features/analyses/data/analysis_dto.dart';
 
 Analysis _a({String status = 'success', int? risk, String? health}) => Analysis(
-      id: 'a',
-      hiveId: 'h',
-      imageId: 'i',
-      status: status,
-      varroaInfectionRisk: risk,
-      overallHealth: health,
-      createdAt: DateTime.utc(2026),
-      updatedAt: DateTime.utc(2026),
-    );
+  id: 'a',
+  hiveId: 'h',
+  imageId: 'i',
+  status: status,
+  varroaInfectionRisk: risk,
+  overallHealth: health,
+  createdAt: DateTime.utc(2026),
+  updatedAt: DateTime.utc(2026),
+);
 
 void main() {
   group('Analysis.tier', () {

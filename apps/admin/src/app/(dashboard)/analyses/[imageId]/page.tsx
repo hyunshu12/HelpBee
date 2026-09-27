@@ -7,7 +7,13 @@ import { useParams } from 'next/navigation';
 import { Banner } from '@/src/components/Banner';
 import { apiFetch } from '@/src/lib/api';
 import { ApiError } from '@/src/lib/errors';
-import { ANALYSIS_STATUS_LABEL, HEALTH_LABEL, label, PROVIDER_LABEL } from '@/src/lib/format';
+import {
+  ANALYSIS_STATUS_LABEL,
+  formatVdi,
+  HEALTH_LABEL,
+  label,
+  PROVIDER_LABEL,
+} from '@/src/lib/format';
 import { queryKeys } from '@/src/lib/query-keys';
 import type { DualComparison, DualEngineRow } from '@/src/lib/types';
 
@@ -81,7 +87,28 @@ function EngineCard({ title, row }: { title: string; row: DualEngineRow }) {
           label="응애 위험도"
           value={row.varroaInfectionRisk != null ? String(row.varroaInfectionRisk) : '-'}
         />
-        <Field label="건강도" value={label(HEALTH_LABEL, row.overallHealth)} />
+        <Field
+          label="건강도"
+          value={
+            row.overallHealth
+              ? label(HEALTH_LABEL, row.overallHealth)
+              : row.beeTotal != null
+                ? '판독 불가'
+                : '-'
+          }
+        />
+        <Field
+          label="VDI"
+          value={formatVdi(row)}
+        />
+        <Field
+          label="벌 수"
+          value={
+            row.beeTotal != null
+              ? `감염 의심 ${row.beeInfested ?? 0} / 검출 ${row.beeTotal}`
+              : '-'
+          }
+        />
       </dl>
       {row.rawResponse && Object.keys(row.rawResponse).length > 0 && (
         <div>

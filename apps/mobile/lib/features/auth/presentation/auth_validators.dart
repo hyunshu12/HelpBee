@@ -42,7 +42,11 @@ class AuthValidators {
   }
 
   /// Password confirmation must match [original].
-  static String? confirm(AppLocalizations l10n, String? value, String original) {
+  static String? confirm(
+    AppLocalizations l10n,
+    String? value,
+    String original,
+  ) {
     if ((value ?? '').isEmpty) return l10n.valRequired;
     if (value != original) return l10n.passwordMismatch;
     return null;

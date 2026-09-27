@@ -19,6 +19,7 @@ List<String> recommendationsFor(AppLocalizations l10n, RiskTier tier) =>
       ],
       RiskTier.watch => [l10n.recWatch1, l10n.recWatch2, l10n.recWatch3],
       RiskTier.safe => [l10n.recSafe1, l10n.recSafe2],
+      RiskTier.insufficient => [l10n.recInsufficient1],
       RiskTier.unknown => const <String>[],
     };
 
@@ -27,5 +28,6 @@ String gaugeCaption(AppLocalizations l10n, RiskTier tier) => switch (tier) {
   RiskTier.safe => l10n.gaugeCaptionSafe,
   RiskTier.watch => l10n.gaugeCaptionWatch,
   RiskTier.danger => l10n.gaugeCaptionDanger,
+  RiskTier.insufficient => l10n.gaugeCaptionInsufficient,
   RiskTier.unknown => l10n.gaugeCaptionUnknown,
 };

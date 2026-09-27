@@ -1,0 +1,43 @@
+# v0.2.0 단일 스테이지 베이스라인 — YOLO11s 2-class(bee_normal / bee_varroa) @ imgsz 1024 (스펙 §7 e2e 게이트 비교군).
+# 하이퍼파라미터·train/val 리스트(all)는 stage1.yaml 과 동일, 라벨만 2-class. 준비 (apps/ai 에서):
+#   1) python -m training.data.aihub_to_yolo --source <71667 root> --output <out2> --mapping single2 --manifest
+#   2) python -m training.make_fold_lists --manifest training/split_manifest.json \
+#        --labels-root <out2>/labels/all --out training/lists/single2
+#   3) python -c "from training.eval_e2e import make_single2_data_yaml as m; \
+#        m('training/lists/single2/stage1_all.yaml', 'training/lists/single2/baseline_single_all.yaml')"
+#   4) python -m training.train --config training/configs/baseline_single.yaml
+#   ( --fold 는 쓰지 말 것 — data 를 1-class stage1_<fold>.yaml 로 바꿔버린다 )
+# 평가: python -m training.eval_e2e ... --baseline-weights training/runs/yolo/v0.2.0-baseline-single/weights/best.pt
+#        --baseline-labels <out2>/labels/all
+data: training/lists/single2/baseline_single_all.yaml  # nc: 2, names: [bee_normal, bee_varroa]
+model: yolo11s.yaml
+pretrained: yolo11s.pt
+epochs: 100
+patience: 20
+batch: -1
+imgsz: 1024
+device: 0
+workers: 4
+optimizer: AdamW
+lr0: 0.001
+lrf: 0.01
+cos_lr: true
+box: 7.5
+cls: 0.5
+dfl: 1.5
+hsv_h: 0.01
+hsv_s: 0.4
+hsv_v: 0.3
+degrees: 15.0
+translate: 0.1
+scale: 0.85        # ultralytics scale=gain → 배율 [0.15, 1.85]
+mosaic: 1.0
+mixup: 0.0
+copy_paste: 0.0    # bbox 라벨에서 no-op (2026-06-08 확인)
+close_mosaic: 10
+max_det: 1500
+project: training/runs/yolo
+name: v0.2.0-baseline-single
+seed: 42
+deterministic: true
+amp: true

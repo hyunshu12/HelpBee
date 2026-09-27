@@ -10,9 +10,9 @@ Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 void main() {
   testWidgets('HiveCard shows name + subtitle and fires onTap', (tester) async {
     var taps = 0;
-    await tester.pumpWidget(_wrap(
-      HiveCard(name: '양봉장 1호', subtitle: '경기도 양평군', onTap: () => taps++),
-    ));
+    await tester.pumpWidget(
+      _wrap(HiveCard(name: '양봉장 1호', subtitle: '경기도 양평군', onTap: () => taps++)),
+    );
 
     expect(find.text('양봉장 1호'), findsOneWidget);
     expect(find.text('경기도 양평군'), findsOneWidget);

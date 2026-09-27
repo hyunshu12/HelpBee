@@ -53,9 +53,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final l10n = AppLocalizations.of(context);
 
     final pages = <_OnbPage>[
-      _OnbPage(title: l10n.onbTitle1, body: l10n.onbBody1, icon: Icons.photo_camera_rounded),
-      _OnbPage(title: l10n.onbTitle2, body: l10n.onbBody2, icon: Icons.center_focus_strong_rounded),
-      _OnbPage(title: l10n.onbTitle3, body: l10n.onbBody3, icon: Icons.notifications_active_rounded),
+      _OnbPage(
+        title: l10n.onbTitle1,
+        body: l10n.onbBody1,
+        icon: Icons.photo_camera_rounded,
+      ),
+      _OnbPage(
+        title: l10n.onbTitle2,
+        body: l10n.onbBody2,
+        icon: Icons.center_focus_strong_rounded,
+      ),
+      _OnbPage(
+        title: l10n.onbTitle3,
+        body: l10n.onbBody3,
+        icon: Icons.notifications_active_rounded,
+      ),
     ];
     final int lastIndex = pages.length - 1;
     final bool isLast = _index == lastIndex;
@@ -75,8 +87,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   child: Text(
                     l10n.onbSkip,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
               ),
@@ -86,7 +98,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 controller: _controller,
                 itemCount: pages.length,
                 onPageChanged: (i) => setState(() => _index = i),
-                itemBuilder: (context, i) => _OnboardingPageView(page: pages[i]),
+                itemBuilder: (context, i) =>
+                    _OnboardingPageView(page: pages[i]),
               ),
             ),
             // Page indicator dots.

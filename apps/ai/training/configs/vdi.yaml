@@ -1,0 +1,40 @@
+version: v0.2.0
+tau: 0.6390129125617522
+tpr: 0.5160142348754448
+fpr: 0.002462649811196848
+corrected: true
+platt:
+  a: 0.7148284816990116
+  b: -0.7103914061976415
+tau_policy: youden
+fpr_cap: 0.01
+cal_a_fpr_at_tau: 0.00959409594095941
+thresholds:
+  elevated: 3.0
+  high: 10.0
+quality:
+  blur_laplacian_min: 100
+  exposure_mean:
+  - 40
+  - 215
+capture_floor_px_per_mm: null
+recommendations:
+  low:
+  - 응애 감염 징후가 낮게 관찰됐습니다. 다음 점검 시기에 재촬영하세요.
+  elevated:
+  - 감염 벌 비율이 높게 관찰됐습니다. 가루설탕법(설탕 15g+일벌 100마리)으로 확인하세요.
+  high:
+  - 감염 벌 비율이 매우 높게 관찰됐습니다. 가루설탕법으로 확인 후 방제 계획을 세우세요.
+  insufficient:
+  - 벌이 보이도록 소비판을 가까이서 다시 촬영해 주세요.
+  next_check_windows:
+  - 3월 중순~4월 초
+  - 6월 중순~7월 초
+  - 7월 하순~8월 중순
+  - 10월 하순~11월 초
+by_source:
+  '71667':
+    tpr: 0.5160142348754448
+    fpr: 0.002462649811196848
+    n_pos: 562
+    n_neg: 18273

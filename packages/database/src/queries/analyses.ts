@@ -4,6 +4,7 @@ import type { Database } from '../client';
 import { type Analysis, analyses, type NewAnalysis } from '../schema/analyses';
 import { hives } from '../schema/hives';
 import { recommendations } from '../schema/recommendations';
+import { rawResponseField } from './_raw';
 
 /** 응답용 권장 조치(표시 순서 order 오름차순). id/analysisId/createdAt은 제외. */
 export type AnalysisRecommendation = { order: number; content: string; severity: string };
@@ -296,7 +297,7 @@ export async function findFailedAnalysisByImage(
 export type RetryAnalysisInput = {
   analysisId: string;
   modelId: string;
-  analysis: Omit<NewAnalysis, 'hiveId' | 'imageId' | 'modelId'>;
+  analysis: Omit<NewAnalysis, 'id' | 'hiveId' | 'imageId' | 'modelId' | 'createdAt' | 'updatedAt'>;
   recommendations: { order: number; content: string; severity: string }[];
 };
 
@@ -318,15 +319,9 @@ export async function retryFailedAnalysis(
     const updated = await tx
       .update(analyses)
       .set({
+        // create 경로와 동일 필드 전량(two-stage vdi/CI/bee 카운트 포함) — 누락 시 재시도 성공 행이 영구 손상.
+        ...input.analysis,
         modelId: input.modelId,
-        status: input.analysis.status,
-        varroaInfectionRisk: input.analysis.varroaInfectionRisk,
-        estimatedVarroaCount: input.analysis.estimatedVarroaCount,
-        overallHealth: input.analysis.overallHealth,
-        rawResponse: input.analysis.rawResponse,
-        latencyMs: input.analysis.latencyMs,
-        error: input.analysis.error,
-        analyzedAt: input.analysis.analyzedAt,
         updatedAt: new Date(),
       })
       .where(and(eq(analyses.id, input.analysisId), eq(analyses.status, 'failed')))
@@ -353,4 +348,43 @@ export async function retryFailedAnalysis(
     }
     return fresh;
   });
+}
+
+/** N장 합산용 원시 카운트. 구 row(YOLO v1/OpenAI)는 beeTotal/beeInfested가 null. */
+export type AnalysisBeeCounts = {
+  id: string;
+  beeInfested: number | null;
+  beeTotal: number | null;
+  /** raw_response.tier (AI 정규화 결과). 'insufficient'(품질 실패·벌 0)면 합산에서 제외 대상. */
+  tier: string | null;
+};
+
+/**
+ * N장 합산(GET /v1/analyses/aggregate)의 원천: 내 소유(hives JOIN, soft delete 제외)이면서
+ * status='success'인 분석들의 (bee_infested, bee_total). 비소유/미존재/실패 id는 결과에서 빠진다
+ * (호출부가 길이 비교로 NOT_FOUND 판단). 집계 수식은 AI `vdi.aggregate`가 단일 소스 — 여기선 수집만.
+ */
+export async function getCountsByIdsForUser(
+  db: Database,
+  analysisIds: string[],
+  userId: string,
+): Promise<AnalysisBeeCounts[]> {
+  if (analysisIds.length === 0) return [];
+  return db
+    .select({
+      id: analyses.id,
+      beeInfested: analyses.beeInfested,
+      beeTotal: analyses.beeTotal,
+      tier: rawResponseField('tier'),
+    })
+    .from(analyses)
+    .innerJoin(hives, eq(hives.id, analyses.hiveId))
+    .where(
+      and(
+        inArray(analyses.id, analysisIds),
+        eq(analyses.status, 'success'),
+        eq(hives.userId, userId),
+        isNull(hives.deletedAt),
+      ),
+    );
 }

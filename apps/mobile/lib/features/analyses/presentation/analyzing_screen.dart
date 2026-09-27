@@ -10,7 +10,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../shared/widgets/secondary_button.dart';
-import '../data/analysis_dto.dart';
 import 'analysis_flow_args.dart';
 import 'analysis_run_controller.dart';
 
@@ -33,15 +32,16 @@ class _AnalyzingScreenState extends ConsumerState<AnalyzingScreen> {
   AnalysisRequest get _req =>
       (hiveId: widget.args.hiveId, imagePath: widget.args.imagePath);
 
-  void _toReport(Analysis analysis) {
+  void _toReport(AnalysisRun run) {
     if (_navigated || !mounted) return;
     _navigated = true;
     context.pushReplacement(
       RoutePaths.report,
       extra: ReportArgs(
-        analysis: analysis,
+        analysis: run.analysis,
         hiveName: widget.args.hiveName,
-        imagePath: widget.args.imagePath,
+        // 업로드된 바이트의 사본 — evidence 크롭 좌표가 이 이미지를 기준으로 한다(I1).
+        imagePath: run.uploadedImagePath,
       ),
     );
   }
@@ -50,7 +50,7 @@ class _AnalyzingScreenState extends ConsumerState<AnalyzingScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
 
-    ref.listen<AsyncValue<Analysis>>(runAnalysisProvider(_req), (_, next) {
+    ref.listen<AsyncValue<AnalysisRun>>(runAnalysisProvider(_req), (_, next) {
       next.whenOrNull(data: _toReport);
     });
 

@@ -46,6 +46,35 @@ class RecommendationDto {
   int get hashCode => Object.hash(order, content, severity);
 }
 
+/// Top-k infested-bee evidence (v0.2.0 two-stage). Coordinates are pixels of
+/// the ORIGINAL uploaded image (the app still holds it locally) — render crops
+/// from `cropRegion`; no crop URL exists. `cam` is intentionally not parsed.
+class Evidence {
+  const Evidence({
+    required this.index,
+    required this.box,
+    required this.cropRegion,
+    required this.pInfested,
+  });
+
+  final int index;
+  final List<double> box; // x1,y1,x2,y2
+  final List<double> cropRegion; // x1,y1,x2,y2
+  final double pInfested;
+
+  static Evidence? fromJson(Map<String, dynamic> json) {
+    final box = _doubles(json['box']);
+    final region = _doubles(json['crop_region'] ?? json['cropRegion']) ?? box;
+    if (box == null || region == null) return null;
+    return Evidence(
+      index: _int(json['index']) ?? 0,
+      box: box,
+      cropRegion: region,
+      pInfested: _double(json['p_infested'] ?? json['pInfested']) ?? 0,
+    );
+  }
+}
+
 class Analysis {
   const Analysis({
     required this.id,
@@ -62,6 +91,16 @@ class Analysis {
     required this.createdAt,
     required this.updatedAt,
     this.recommendations = const [],
+    this.vdi,
+    this.vdiDisplay,
+    this.vdiCiLow,
+    this.vdiCiHigh,
+    this.beeTotal,
+    this.beeInfested,
+    this.tierRaw,
+    this.corrected,
+    this.quality,
+    this.evidence = const [],
   });
 
   final String id;
@@ -79,6 +118,21 @@ class Analysis {
   final DateTime updatedAt;
   final List<RecommendationDto> recommendations;
 
+  // ── v0.2.0 two-stage fields (null on legacy rows) ─────────────────────────
+  final double? vdi; // 보정 VDI(%)
+  final String? vdiDisplay; // 서버가 한 번 반올림한 표시 문자열 — tier 단일 소스
+  final double? vdiCiLow;
+  final double? vdiCiHigh;
+  final int? beeTotal;
+  final int? beeInfested;
+  final String?
+  tierRaw; // 서버 tier: low|elevated|high|insufficient|safe|watch|danger
+  final bool? corrected;
+  final Map<String, dynamic>? quality;
+  final List<Evidence> evidence;
+
+  bool get isTwoStage => beeTotal != null || vdiDisplay != null;
+
   bool get isSuccess => status == 'success';
   bool get isFailed => status == 'failed';
 
@@ -86,6 +140,11 @@ class Analysis {
   /// (<30 safe / <70 watch / else danger), unknown when not a usable success.
   RiskTier get tier {
     if (status != 'success') return RiskTier.unknown;
+    // v0.2.0: the server's tier string is authoritative (computed from
+    // vdi_display); never recompute from vdi on the client.
+    if (tierRaw != null) {
+      return riskTierFromServer(tierRaw, overallHealth: overallHealth);
+    }
     // overallHealth is the primary signal — map it regardless of risk.
     switch (overallHealth) {
       case 'healthy':
@@ -102,21 +161,33 @@ class Analysis {
   }
 
   factory Analysis.fromJson(Map<String, dynamic> json) => Analysis(
-        id: json['id'] as String,
-        hiveId: json['hiveId'] as String,
-        imageId: json['imageId'] as String,
-        modelId: json['modelId'] as String?,
-        status: (json['status'] as String?) ?? 'pending',
-        varroaInfectionRisk: _int(json['varroaInfectionRisk']),
-        estimatedVarroaCount: _int(json['estimatedVarroaCount']),
-        overallHealth: json['overallHealth'] as String?,
-        latencyMs: _int(json['latencyMs']),
-        error: json['error'] as String?,
-        analyzedAt: _dateOrNull(json['analyzedAt']),
-        createdAt: _date(json['createdAt']),
-        updatedAt: _date(json['updatedAt']),
-        recommendations: _recs(json['recommendations']),
-      );
+    id: json['id'] as String,
+    hiveId: json['hiveId'] as String,
+    imageId: json['imageId'] as String,
+    modelId: json['modelId'] as String?,
+    status: (json['status'] as String?) ?? 'pending',
+    varroaInfectionRisk: _int(json['varroaInfectionRisk']),
+    estimatedVarroaCount: _int(json['estimatedVarroaCount']),
+    overallHealth: json['overallHealth'] as String?,
+    latencyMs: _int(json['latencyMs']),
+    error: json['error'] as String?,
+    analyzedAt: _dateOrNull(json['analyzedAt']),
+    createdAt: _date(json['createdAt']),
+    updatedAt: _date(json['updatedAt']),
+    recommendations: _recs(json['recommendations']),
+    vdi: _double(json['vdi']),
+    vdiDisplay: json['vdiDisplay'] as String?,
+    vdiCiLow: _ci(json['samplingCi95'], 0) ?? _double(json['vdiCiLow']),
+    vdiCiHigh: _ci(json['samplingCi95'], 1) ?? _double(json['vdiCiHigh']),
+    beeTotal: _int(json['beeTotal']),
+    beeInfested: _int(json['beeInfested']),
+    tierRaw: json['tier'] as String?,
+    corrected: json['corrected'] as bool?,
+    quality: json['quality'] is Map
+        ? (json['quality'] as Map).map((k, v) => MapEntry(k.toString(), v))
+        : null,
+    evidence: _evidence(json['evidence']),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -137,9 +208,11 @@ List<RecommendationDto> _recs(Object? v) {
   if (v is List) {
     return v
         .whereType<Map>()
-        .map((e) => RecommendationDto.fromJson(
-              e.map((k, val) => MapEntry(k.toString(), val)),
-            ))
+        .map(
+          (e) => RecommendationDto.fromJson(
+            e.map((k, val) => MapEntry(k.toString(), val)),
+          ),
+        )
         .where((r) => r.content.isNotEmpty)
         .toList(growable: false);
   }
@@ -159,3 +232,35 @@ DateTime _date(Object? v) =>
 
 DateTime? _dateOrNull(Object? v) =>
     v == null ? null : DateTime.tryParse(v.toString());
+
+double? _double(Object? v) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v);
+  return null;
+}
+
+double? _ci(Object? v, int i) =>
+    (v is List && v.length > i) ? _double(v[i]) : null;
+
+List<double>? _doubles(Object? v) {
+  if (v is! List || v.length < 4) return null;
+  final out = <double>[];
+  for (final e in v) {
+    final d = _double(e);
+    if (d == null) return null;
+    out.add(d);
+  }
+  return out;
+}
+
+List<Evidence> _evidence(Object? v) {
+  if (v is! List) return const [];
+  return v
+      .whereType<Map>()
+      .map(
+        (e) =>
+            Evidence.fromJson(e.map((k, val) => MapEntry(k.toString(), val))),
+      )
+      .whereType<Evidence>()
+      .toList(growable: false);
+}

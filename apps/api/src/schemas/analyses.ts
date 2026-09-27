@@ -29,4 +29,12 @@ export const trendQuerySchema = z.object({
   to: z.string().optional(),
 });
 
+// N장 합산: ?ids=<uuid>,<uuid>... (1~10개, 중복은 라우트가 제거). 스펙 §8-1 읽기 시 집계.
+export const aggregateQuerySchema = z.object({
+  ids: z
+    .string()
+    .transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean))
+    .pipe(z.array(uuid).min(1).max(10)),
+});
+
 export type CreateAnalysisInput = z.infer<typeof createAnalysisSchema>;

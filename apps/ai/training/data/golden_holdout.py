@@ -1,20 +1,21 @@
 """
-Golden holdout 셋 추출 — 모든 모델 버전 비교의 절대 기준.
+Golden holdout 셋 선택 — 모든 모델 버전 비교의 절대 기준.
+
+`split_manifest.json`(make_split_manifest.py 산출물)에서 `split=="golden"` 이미지만 골라
+원본 71667 JSON category 기반 필드(`has_varroa_adult`, `n_adult`)로 응애/정상을 나눈다.
+YOLO 라벨 txt(클래스 id)는 더 이상 읽지 않는다 — 1-class(bee) 변환 후엔 응애를 구분할 수 없음.
 
 원칙:
-    - 학습/aug에서 영구 제외. 매 모델 버전 동일 셋으로 mAP 비교.
-    - 분포 다양성 강제: 양봉장 ≥3, 촬영 기기 ≥2, 응애·정상 균형
-    - 71667 외부 데이터(베타 양봉가) 확보되면 그것으로 교체 권장
-      (같은 데이터셋 내부 분리는 분포 동질 → 일반화 평가 약함)
+    - 학습/aug에서 영구 제외 (golden colony 는 split manifest 에서 이미 홀드아웃·동결됨).
+    - varroa = 성충_응애(category_id==5) 포함 이미지, normal = 성충 ≥1 & 응애 없음.
+    - 분포 다양성 강제: colony ≥3, 촬영 기기 ≥2 (부족하면 ValueError).
+    - 이미지 복사 없음 — 선택 결과(경로 목록)만 JSON 으로 기록.
 
 Usage:
     python -m training.data.golden_holdout \\
-        --input training/datasets/varroa-v1-allraw \\
-        --output training/datasets/golden \\
-        --n-varroa 100 --n-normal 200 \\
-        --min-farms 3 --min-devices 2
-
-검증 후 input/ 에서 해당 이미지 제거 (split_strategy.py 실행 전에).
+        --manifest training/split_manifest.json \\
+        --output training/golden.json \\
+        --n-varroa 100 --n-normal 200
 """
 
 from __future__ import annotations
@@ -23,190 +24,71 @@ import argparse
 import json
 import logging
 import random
-import shutil
-from collections import Counter, defaultdict
 from pathlib import Path
-
-from .split_strategy import Item, _load_items
 
 logger = logging.getLogger(__name__)
 
 
-def has_varroa_label(label_path: Path, varroa_class_id: int = 1) -> int:
-    """라벨 파일에서 varroa(클래스 id=1) 인스턴스 수 반환."""
-    n = 0
-    for line in label_path.read_text().splitlines():
-        if line.strip() and int(line.split()[0]) == varroa_class_id:
-            n += 1
-    return n
-
-
-def extract_golden(
-    items: list[Item],
+def select_golden(
+    manifest: dict,
     n_varroa: int = 100,
     n_normal: int = 200,
-    min_farms: int = 3,
-    min_devices: int = 2,
     seed: int = 42,
-) -> list[Item]:
-    """
-    조건을 만족하는 golden 셋 추출.
-    - 응애 인스턴스가 1개 이상인 이미지 n_varroa장
-    - 응애 0인 이미지(정상만 있는) n_normal장
-    - 양봉장 ≥ min_farms, 촬영 기기 ≥ min_devices 강제
-    """
+    min_colonies: int = 3,
+    min_devices: int = 2,
+) -> dict[str, list[str]]:
+    """manifest 의 golden split 에서 응애 n_varroa / 정상 n_normal 장 선택."""
     rng = random.Random(seed)
-    varroa_pool = [i for i in items if has_varroa_label(i.label) > 0]
-    normal_pool = [i for i in items if has_varroa_label(i.label) == 0]
-    rng.shuffle(varroa_pool)
-    rng.shuffle(normal_pool)
-
-    if len(varroa_pool) < n_varroa:
-        logger.warning(
-            f"응애 라벨 이미지 부족: {len(varroa_pool)} < 요구 {n_varroa}. "
-            f"전체 사용."
+    pool = [(p, v) for p, v in manifest["images"].items() if v["split"] == "golden"]
+    var = [p for p, v in pool if v["has_varroa_adult"]]
+    nor = [p for p, v in pool if not v["has_varroa_adult"] and v["n_adult"] > 0]
+    rng.shuffle(var)
+    rng.shuffle(nor)
+    if len(var) < n_varroa or len(nor) < n_normal:
+        logger.warning(f"golden 후보 부족: 응애 {len(var)}/{n_varroa}, 정상 {len(nor)}/{n_normal} — 가능한 만큼 사용")
+    sel = {"varroa": var[:n_varroa], "normal": nor[:n_normal]}
+    chosen = [manifest["images"][p] for p in sel["varroa"] + sel["normal"]]
+    n_col = len({v["colony"] for v in chosen})
+    n_dev = len({v["device"] for v in chosen})
+    if n_col < min_colonies or n_dev < min_devices:
+        raise ValueError(
+            f"golden 다양성 부족: colony {n_col} (≥{min_colonies}), device {n_dev} (≥{min_devices}) 확인"
         )
-        n_varroa = len(varroa_pool)
-    if len(normal_pool) < n_normal:
-        logger.warning(
-            f"정상 라벨 이미지 부족: {len(normal_pool)} < 요구 {n_normal}. "
-            f"전체 사용."
-        )
-        n_normal = len(normal_pool)
-
-    selected: list[Item] = []
-    farms_used: set[str] = set()
-    devices_used: set[str] = set()
-
-    # 다양성 우선 — round-robin으로 농가/기기 골고루 픽
-    def _pick(pool: list[Item], target_n: int):
-        nonlocal farms_used, devices_used
-        by_farm = defaultdict(list)
-        for it in pool:
-            by_farm[it.meta.get("farm_id") or "unknown"].append(it)
-        farms = list(by_farm.keys())
-        rng.shuffle(farms)
-        out: list[Item] = []
-        i = 0
-        while len(out) < target_n and any(by_farm.values()):
-            fid = farms[i % len(farms)]
-            if by_farm[fid]:
-                it = by_farm[fid].pop()
-                out.append(it)
-                farms_used.add(fid)
-                if dev := it.meta.get("capture_device"):
-                    devices_used.add(dev)
-            i += 1
-            if i > 100000:
-                break  # safety
-        return out
-
-    selected.extend(_pick(varroa_pool, n_varroa))
-    selected.extend(_pick(normal_pool, n_normal))
-
-    # 다양성 게이트 검증
-    if len(farms_used) < min_farms:
-        logger.warning(
-            f"⚠️ 농가 다양성 부족: {len(farms_used)} < 요구 {min_farms}. "
-            f"71667 외부 데이터 확보 권장."
-        )
-    if len(devices_used) < min_devices:
-        logger.warning(
-            f"⚠️ 촬영 기기 다양성 부족: {len(devices_used)} < 요구 {min_devices}."
-        )
-
-    logger.info(
-        f"golden 추출: 응애 {n_varroa} + 정상 {n_normal} = {len(selected)} 장 "
-        f"(농가 {len(farms_used)}, 기기 {len(devices_used)})"
-    )
-    return selected
+    return sel
 
 
-def _load_class_names() -> dict[int, str]:
-    """configs/dataset.yaml 의 names 를 단일 소스로 사용 (3-class drift 방지)."""
-    fallback = {0: "bee_normal", 1: "bee_with_varroa", 2: "bee_other_disease"}
-    cfg_path = Path(__file__).resolve().parents[1] / "configs" / "dataset.yaml"
-    try:
-        import yaml
-
-        data = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
-        names = data.get("names")
-        if isinstance(names, dict):
-            return {int(k): str(v) for k, v in names.items()}
-        if isinstance(names, list):
-            return {i: str(n) for i, n in enumerate(names)}
-    except Exception as e:  # noqa: BLE001
-        logger.warning(f"dataset.yaml names 로드 실패 ({e}) — fallback 3-class 사용")
-    return fallback
-
-
-def write_golden(items: list[Item], output: Path):
-    img_dst = output / "images" / "val"
-    lbl_dst = output / "labels" / "val"
-    img_dst.mkdir(parents=True, exist_ok=True)
-    lbl_dst.mkdir(parents=True, exist_ok=True)
-    manifest = []
-    for it in items:
-        shutil.copy2(it.image, img_dst / it.image.name)
-        shutil.copy2(it.label, lbl_dst / it.label.name)
-        manifest.append({"image": it.image.name, "meta": it.meta})
-    (output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-
-    # data.yaml — Ultralytics가 eval에서 사용.
-    # ⚠️ 학습/변환과 동일한 3-class 스키마여야 한다 (dataset.yaml 단일 소스).
-    #   과거 nc:2 / varroa_mite 하드코딩 → 3-class 모델과 정합이 깨져 golden eval 무효화됨 (수정).
-    # path 는 absolute 로 써서 Ultralytics datasets_dir 상대해석 함정을 피한다.
-    names = _load_class_names()
-    names_block = "".join(f"  {i}: {n}\n" for i, n in sorted(names.items()))
-    (output / "data.yaml").write_text(
-        f"path: {output.resolve()}\n"
-        # ultralytics val() 가 train 키 존재를 요구한다. golden 은 평가 전용이라 val 과 동일 경로 지정
-        # (학습엔 쓰이지 않음 — eval 은 model.val() 만 호출).
-        "train: images/val\n"
-        "val: images/val\n"
-        f"names:\n{names_block}"
-        f"nc: {len(names)}\n",
-        encoding="utf-8",
-    )
-    logger.info(f"golden 쓰기 완료: {output} (nc={len(names)}, names={list(names.values())})")
-
-
-def main():
+def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     p = argparse.ArgumentParser()
-    p.add_argument("--input", type=Path, required=True)
+    p.add_argument("--manifest", type=Path, required=True)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--n-varroa", type=int, default=100)
     p.add_argument("--n-normal", type=int, default=200)
-    p.add_argument("--min-farms", type=int, default=3)
+    p.add_argument("--min-colonies", type=int, default=3)
     p.add_argument("--min-devices", type=int, default=2)
     p.add_argument("--seed", type=int, default=42)
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
-    items = _load_items(args.input)
-    if not items:
-        raise SystemExit("입력에서 아이템 0개.")
-
-    selected = extract_golden(
-        items,
+    if not args.manifest.is_file():
+        print(
+            f"split manifest 없음: {args.manifest} — 먼저 `python tasks.py split` 로 생성하세요.",
+            flush=True,
+        )
+        return 2
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    sel = select_golden(
+        manifest,
         n_varroa=args.n_varroa,
         n_normal=args.n_normal,
-        min_farms=args.min_farms,
-        min_devices=args.min_devices,
         seed=args.seed,
+        min_colonies=args.min_colonies,
+        min_devices=args.min_devices,
     )
-    write_golden(selected, args.output)
-
-    # 분포 리포트
-    cls_counter = Counter()
-    for it in selected:
-        for line in it.label.read_text().splitlines():
-            if line.strip():
-                cls_counter[int(line.split()[0])] += 1
-    print("\n===== Golden 통계 =====")
-    print(f"이미지: {len(selected)}")
-    print(f"인스턴스: {dict(cls_counter)}")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(sel, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info(f"golden 선택 완료: 응애 {len(sel['varroa'])} + 정상 {len(sel['normal'])} → {args.output}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

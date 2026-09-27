@@ -39,9 +39,9 @@ class SplashScreen extends ConsumerWidget {
               child: Text(
                 l10n.splashTagline,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.amberDeep,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: AppColors.amberDeep),
               ),
             ),
             const Spacer(flex: 2),

@@ -56,7 +56,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(authControllerProvider.notifier).login(
+      await ref
+          .read(authControllerProvider.notifier)
+          .login(
             email: _emailController.text.trim(),
             password: _passwordController.text,
             keepLoggedIn: _keepLoggedIn,
@@ -99,7 +101,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   hint: l10n.emailHint,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.username, AutofillHints.email],
+                  autofillHints: const [
+                    AutofillHints.username,
+                    AutofillHints.email,
+                  ],
                   validator: (v) => AuthValidators.email(l10n, v),
                 ),
                 AppSpacing.gapMd,
@@ -181,10 +186,7 @@ class _KeepLoggedInRow extends StatelessWidget {
               ),
             ),
             AppSpacing.wGapSm,
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text(label, style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
       ),
@@ -243,9 +245,9 @@ class _LinkText extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
       ),
     );
   }
@@ -256,11 +258,7 @@ class _LinkDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 12,
-      color: AppColors.divider,
-    );
+    return Container(width: 1, height: 12, color: AppColors.divider);
   }
 }
 
@@ -279,9 +277,9 @@ class _DividerLabel extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           child: Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
         ),
         const Expanded(child: Divider(color: AppColors.divider, thickness: 1)),

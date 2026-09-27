@@ -66,3 +66,43 @@ def test_graceful_failure():
     assert r.engine_used is None
     assert r.recommendations  # 비어있지 않음
     assert r.raw_payload["error_reason"] == "timeout"
+
+
+# ── two-stage 계약 (스펙 v2.2 §3) — 새 필드 전부 optional, 이중 출력 ──
+def test_two_stage_tiers_accepted_and_new_fields_default():
+    for t in ("low", "elevated", "high", "insufficient"):
+        r = AnalysisResponse(**_full(tier=t))
+        assert r.tier == t
+    r = AnalysisResponse(**_full())
+    assert r.vdi is None and r.vdi_display is None and r.bee_total is None
+    assert r.bees == [] and r.evidence == [] and r.quality is None and r.model_versions is None
+    assert r.tier_legacy is None and r.corrected is None and r.sampling_ci95 is None
+
+
+def test_two_stage_fields_roundtrip():
+    r = AnalysisResponse(
+        **_full(
+            tier="high",
+            tier_legacy="danger",
+            vdi=12.36,
+            vdi_display="12.4",
+            vdi_raw=12.0,
+            corrected=True,
+            sampling_ci95=(6.1, 20.3),
+            bee_total=100,
+            bee_infested=12,
+            bees=[{"box": (0, 0, 10, 10), "p_infested": 0.9, "infested": True}],
+            evidence=[{"index": 0, "p_infested": 0.9, "box": (0, 0, 10, 10), "cam": [[0.0]]}],
+            quality={"ok": True, "blur_score": 300.0, "exposure_mean": 120.0, "px_per_mm_est": None},
+            model_versions={"stage1": "a", "stage2": "b", "vdi_config": "c"},
+        )
+    )
+    d = r.model_dump()
+    assert d["bees"][0]["infested"] is True and d["sampling_ci95"] == (6.1, 20.3)
+    assert d["model_versions"]["vdi_config"] == "c"
+
+
+def test_tier_legacy_literal():
+    assert AnalysisResponse(**_full(tier_legacy="unknown")).tier_legacy == "unknown"
+    with pytest.raises(ValidationError):
+        AnalysisResponse(**_full(tier_legacy="low"))

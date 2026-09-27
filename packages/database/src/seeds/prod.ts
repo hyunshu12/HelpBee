@@ -31,6 +31,8 @@ const ARGON2_OPTS = {
 const AI_MODELS = [
   { provider: 'openai' as const, name: 'gpt-4o-mini', version: '2024-07-18' },
   { provider: 'yolo' as const, name: 'helpbee-yolov11s', version: '0.1.0' },
+  // 2-stage v0.2.0 (스펙 §8-1) — API 관용화가 AI 이중 출력보다 먼저 배포돼야 하므로 카탈로그에 선등록
+  { provider: 'yolo' as const, name: 'helpbee-two-stage', version: '0.2.0' },
 ];
 
 async function main(): Promise<void> {

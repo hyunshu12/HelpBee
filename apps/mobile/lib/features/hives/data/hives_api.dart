@@ -36,10 +36,7 @@ class HivesApi {
     return _guard(() async {
       final res = await _dio.get<dynamic>(
         _path(),
-        queryParameters: <String, dynamic>{
-          'limit': ?limit,
-          'offset': ?offset,
-        },
+        queryParameters: <String, dynamic>{'limit': ?limit, 'offset': ?offset},
       );
       final unwrapped = unwrapEnvelope(res, _parseList);
       return HiveListResult(
@@ -132,9 +129,7 @@ class HivesApi {
     // refine `(lat == null) === (lng == null)`): fail fast on a half-pair
     // instead of round-tripping to a 400 VALIDATION_FAILED.
     if ((latitude == null) != (longitude == null)) {
-      throw ArgumentError(
-        'latitude and longitude must be provided together',
-      );
+      throw ArgumentError('latitude and longitude must be provided together');
     }
     return <String, dynamic>{
       'name': ?name,
@@ -180,5 +175,6 @@ class HivesApi {
 }
 
 /// Uses the authenticated [dioProvider].
-final hivesApiProvider =
-    Provider<HivesApi>((ref) => HivesApi(ref.read(dioProvider)));
+final hivesApiProvider = Provider<HivesApi>(
+  (ref) => HivesApi(ref.read(dioProvider)),
+);

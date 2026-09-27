@@ -15,12 +15,13 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.image_fetch import UnsafeUrlError, fetch_image
 from app.core.internal_auth import InternalAuthError, verify_internal_bearer
-from app.deps import get_openai_client, get_yolo_engine
+from app.deps import get_openai_client, get_two_stage_engine, get_yolo_engine
 from app.services.orchestrator import run_analysis
 from app.services.preprocess import ImageDecodeError, ImageTooLargeError
 
@@ -62,11 +63,16 @@ async def analyze(  # pragma: no cover - 통합 검증 대상
         raise HTTPException(status_code=400, detail="unsafe or invalid image url")
 
     try:
-        result = run_analysis(
+        two_stage = get_two_stage_engine()
+        # two-stage 는 CPU 수십 초 — 이벤트 루프(/health 등)를 막지 않도록 스레드풀에서 실행.
+        result = await run_in_threadpool(
+            run_analysis,
             image,
             engine=body.engine,
-            yolo=get_yolo_engine(),
+            yolo=None if two_stage is not None else get_yolo_engine(),
+            two_stage=two_stage,
             openai=get_openai_client() if body.engine == "auto" else None,
+            budget_s=settings.ai_internal_budget_s,
         )
     except ImageDecodeError:
         raise HTTPException(status_code=422, detail="invalid image")

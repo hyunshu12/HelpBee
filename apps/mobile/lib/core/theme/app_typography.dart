@@ -14,7 +14,10 @@ abstract final class AppTypography {
   AppTypography._();
 
   /// Brand wordmark / logo style ("HelpBee").
-  static TextStyle wordmark({double size = 28, Color color = AppColors.honeyBrand}) {
+  static TextStyle wordmark({
+    double size = 28,
+    Color color = AppColors.honeyBrand,
+  }) {
     return GoogleFonts.jua(
       fontSize: size,
       color: color,
@@ -29,11 +32,7 @@ abstract final class AppTypography {
     Color color = AppColors.textPrimary,
     double height = 1.3,
   }) {
-    return GoogleFonts.jua(
-      fontSize: size,
-      color: color,
-      height: height,
-    );
+    return GoogleFonts.jua(fontSize: size, color: color, height: height);
   }
 
   /// Builds the full body [TextTheme] from Noto Sans KR, layered over a base
@@ -109,12 +108,8 @@ abstract final class AppTypography {
         fontWeight: FontWeight.w700,
         fontSize: 16,
       ),
-      labelMedium: body.labelMedium?.copyWith(
-        color: AppColors.textSecondary,
-      ),
-      labelSmall: body.labelSmall?.copyWith(
-        color: AppColors.textSecondary,
-      ),
+      labelMedium: body.labelMedium?.copyWith(color: AppColors.textSecondary),
+      labelSmall: body.labelSmall?.copyWith(color: AppColors.textSecondary),
     );
   }
 }

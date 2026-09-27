@@ -23,7 +23,8 @@ class AnalysisTrendPoint {
   factory AnalysisTrendPoint.fromJson(Map<String, dynamic> json) {
     final raw = json['avgRisk'];
     return AnalysisTrendPoint(
-      bucket: DateTime.tryParse(json['bucket']?.toString() ?? '') ??
+      bucket:
+          DateTime.tryParse(json['bucket']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
       avgRisk: raw == null
           ? null
@@ -34,6 +35,9 @@ class AnalysisTrendPoint {
     );
   }
 }
+
+/// Per-request receive timeout for `POST /v1/analyses` (spec v2.2 §8 timeout chain).
+const Duration analysisReceiveTimeout = Duration(seconds: 95);
 
 class AnalysisListResult {
   const AnalysisListResult({required this.items, this.pagination});
@@ -79,10 +83,7 @@ class AnalysesApi {
     return _guard(() async {
       final res = await _dio.get<dynamic>(
         _path(),
-        queryParameters: <String, dynamic>{
-          'limit': ?limit,
-          'offset': ?offset,
-        },
+        queryParameters: <String, dynamic>{'limit': ?limit, 'offset': ?offset},
       );
       final unwrapped = unwrapEnvelope(res, _parseList);
       return AnalysisListResult(
@@ -133,9 +134,12 @@ class AnalysesApi {
     required String imageId,
   }) async {
     return _guard(() async {
+      // two-stage 분석은 최대 90s(AI 예산) — 이 요청만 95s로 늘린다
+      // (전역 receiveTimeout 30s 유지; 타임아웃 체인: mobile 95 ≥ api 90 ≥ ai).
       final res = await _dio.post<dynamic>(
         _path(),
         data: {'hiveId': hiveId, 'imageId': imageId},
+        options: Options(receiveTimeout: analysisReceiveTimeout),
       );
       return unwrapData(res, _parseOne);
     });
@@ -172,17 +176,19 @@ class AnalysesApi {
   }
 }
 
-final analysesApiProvider =
-    Provider<AnalysesApi>((ref) => AnalysesApi(ref.read(dioProvider)));
+final analysesApiProvider = Provider<AnalysesApi>(
+  (ref) => AnalysesApi(ref.read(dioProvider)),
+);
 
 /// Latest analysis for a hive (home card tier/score). null = no analysis yet.
 /// autoDispose family so it resets across users / when the home is gone.
-final latestAnalysisProvider =
-    FutureProvider.autoDispose.family<Analysis?, String>((ref, hiveId) async {
-  final result =
-      await ref.read(analysesApiProvider).listByHive(hiveId, limit: 1);
-  return result.items.isEmpty ? null : result.items.first;
-});
+final latestAnalysisProvider = FutureProvider.autoDispose
+    .family<Analysis?, String>((ref, hiveId) async {
+      final result = await ref
+          .read(analysesApiProvider)
+          .listByHive(hiveId, limit: 1);
+      return result.items.isEmpty ? null : result.items.first;
+    });
 
 /// Every analysis across the user's hives (진단 이력 탭), most-recent first.
 ///
@@ -190,16 +196,18 @@ final latestAnalysisProvider =
 /// per-user volume is far below that, and an offset-paged infinite list would
 /// need cursor semantics to stay stable. If a user ever exceeds 100 analyses
 /// the tab shows the newest 100 — revisit with a cursor endpoint then.
-final allAnalysesProvider =
-    FutureProvider.autoDispose<List<Analysis>>((ref) async {
+final allAnalysesProvider = FutureProvider.autoDispose<List<Analysis>>((
+  ref,
+) async {
   final result = await ref.read(analysesApiProvider).listAll(limit: 100);
   return result.items;
 });
 
 /// Recent analyses for a hive (detail timeline, most-recent first).
-final hiveAnalysesProvider =
-    FutureProvider.autoDispose.family<List<Analysis>, String>((ref, hiveId) async {
-  final result =
-      await ref.read(analysesApiProvider).listByHive(hiveId, limit: 20);
-  return result.items;
-});
+final hiveAnalysesProvider = FutureProvider.autoDispose
+    .family<List<Analysis>, String>((ref, hiveId) async {
+      final result = await ref
+          .read(analysesApiProvider)
+          .listByHive(hiveId, limit: 20);
+      return result.items;
+    });

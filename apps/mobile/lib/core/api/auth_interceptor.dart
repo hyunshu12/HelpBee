@@ -83,10 +83,7 @@ class AuthInterceptor extends Interceptor {
     }
   }
 
-  Future<Response<dynamic>> _retry(
-    RequestOptions options,
-    String newAccess,
-  ) {
+  Future<Response<dynamic>> _retry(RequestOptions options, String newAccess) {
     final bareDio = _ref.read(bareDioProvider);
     final headers = Map<String, dynamic>.from(options.headers)
       ..['Authorization'] = 'Bearer $newAccess';
@@ -126,8 +123,8 @@ class AuthInterceptor extends Interceptor {
 class _RequestId {
   _RequestId._();
 
-  static final String _prefix =
-      DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+  static final String _prefix = DateTime.now().microsecondsSinceEpoch
+      .toRadixString(36);
   static int _counter = 0;
 
   static String next() => 'hb-$_prefix-${(_counter++).toRadixString(36)}';

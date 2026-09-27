@@ -137,5 +137,6 @@ class AuthApi {
 }
 
 /// Uses the authenticated [dioProvider].
-final authApiProvider =
-    Provider<AuthApi>((ref) => AuthApi(ref.read(dioProvider)));
+final authApiProvider = Provider<AuthApi>(
+  (ref) => AuthApi(ref.read(dioProvider)),
+);

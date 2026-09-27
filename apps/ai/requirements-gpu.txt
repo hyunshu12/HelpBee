@@ -1,5 +1,12 @@
 # YOLO 학습용 의존성. 추론 서버는 requirements.txt 사용.
 # pip install -r requirements-gpu.txt
+# 학습 박스에서 heavy 테스트(9b/11b/12b: torch·cv2 importorskip)를 돌리려면 pytest 도 필요:
+#   pip install -r requirements-dev.txt
+#
+# torch 핀 (학습 박스 RTX 4060 / CUDA 12.1 휠 — 별도 index 라 이 파일에 핀하지 않는다):
+#   torch==2.4.1+cu121 / torchvision==0.19.1
+#   pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+#   → 그 다음 pip install -r requirements-gpu.txt  (아래 범위가 설치된 torch 를 만족하므로 재설치 안 함)
 -r requirements.txt
 
 # Deep learning (CUDA 12.1 휠. CPU only면 torch만 따로 깔 것)
@@ -29,5 +36,10 @@ pycocotools>=2.0
 
 # YAML
 pyyaml>=6.0
+
+# ONNX export/검증 + 통계(보정·CI)
+onnx>=1.16
+onnxruntime>=1.18
+scipy>=1.11
 
 # numpy 핀은 requirements.txt(단일 소스)에서 상속 — numpy>=1.24,<2.0

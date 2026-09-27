@@ -29,15 +29,14 @@ class HivesRepositoryImpl implements HivesRepository {
     double? longitude,
     String? address,
     DateTime? installedAt,
-  }) =>
-      _api.create(
-        name: name,
-        note: note,
-        latitude: latitude,
-        longitude: longitude,
-        address: address,
-        installedAt: installedAt,
-      );
+  }) => _api.create(
+    name: name,
+    note: note,
+    latitude: latitude,
+    longitude: longitude,
+    address: address,
+    installedAt: installedAt,
+  );
 
   @override
   Future<Hive> updateHive(
@@ -48,21 +47,21 @@ class HivesRepositoryImpl implements HivesRepository {
     double? longitude,
     String? address,
     DateTime? installedAt,
-  }) =>
-      _api.update(
-        id,
-        name: name,
-        note: note,
-        latitude: latitude,
-        longitude: longitude,
-        address: address,
-        installedAt: installedAt,
-      );
+  }) => _api.update(
+    id,
+    name: name,
+    note: note,
+    latitude: latitude,
+    longitude: longitude,
+    address: address,
+    installedAt: installedAt,
+  );
 
   @override
   Future<void> deleteHive(String id) => _api.delete(id);
 }
 
 /// App-wide [HivesRepository] singleton.
-final hivesRepositoryProvider =
-    Provider<HivesRepository>((ref) => HivesRepositoryImpl(ref));
+final hivesRepositoryProvider = Provider<HivesRepository>(
+  (ref) => HivesRepositoryImpl(ref),
+);

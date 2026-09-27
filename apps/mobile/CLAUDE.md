@@ -27,9 +27,10 @@ HelpBee의 메인 사용자 클라이언트(iOS / Android). 양봉가가 벌통�
 이 앱이 쓰는 핵심: `/v1/auth/*`(로그인·토큰 회전), `/v1/hives`(벌통 CRUD), `/v1/images/presign|confirm`(S3 직업로드), `/v1/analyses`(진단), `/v1/subscriptions/me`.
 
 ⚠️ **현재 주의 (상세 = 위 문서 §10 Readiness, 2026-07-04 현행화)**:
-- **AI 추론 로컬 동작 확인됨(2026-07-04)** → 로컬에서 AI 서버(:8000) 기동 시 `POST /v1/analyses`가 실제 YOLO 결과(`status:'success'`, risk/tier) 반환. 단 AI 서버가 죽어 있으면 `status:'failed'`(200) 저장되고 **그 이미지는 재분석 불가**(재시도 경로 없음 — 루트 CLAUDE.md P0-1) → **결과 화면의 실패 상태 UI는 여전히 필수**.
+- **two-stage 계약 (스펙 v2.2 §3, ADR-0002, 2026-09-26)** → `POST/GET /v1/analyses`가 `vdi`·`vdiDisplay`(표시 문자열, **재반올림 금지**)·`tier`(`low`/`elevated`/`high`/`insufficient`)·`corrected`·`beeTotal`·`beeInfested`·`samplingCi95`·`quality`·`modelVersions`를 준다. `evidence[]`(감염 의심 벌 top-6, `{index, box, crop_region, p_infested, cam}`)는 **POST 응답에만** — 앱이 가진 원본 이미지에서 크롭해 갤러리 표시. `insufficient`(벌 0마리·품질 실패)는 "판독 불가" 상태 화면. 이중 출력 기간이라 `varroaInfectionRisk`·구 tier도 함께 온다. N장 합산 = `GET /v1/analyses/aggregate?ids=`.
+- **실패 분석 재시도 가능(P0-1)** → AI 서버가 죽어 `status:'failed'`(200)로 저장돼도 같은 이미지로 `POST /v1/analyses`를 다시 부르면 재추론한다. **결과 화면의 실패 상태 UI + 다시 시도 버튼은 필수**.
 - **이메일 인증 발송 미구현** → 무료 사용자(현재 전원)는 `AUTH_EMAIL_NOT_VERIFIED`(403)로 분석 차단. 개발 중엔 시드 계정(verified) 사용 또는 위 문서 우회 참조.
-- **권장조치(recommendations)는 어떤 분석 응답에도 미포함** → 결과 화면 처방 문구는 백엔드 보강 후 (루트 CLAUDE.md P0-3).
+- **권장조치(recommendations)는 분석 응답에 포함됨** → tier별 문구(`low`에는 방제 문구 없음), 결과 화면에 표시.
 - 토큰: access 15분(메모리)·refresh 7일(secure storage, **헤더 아닌 body로 전달**), 회전+grace 처리(위 문서 §1.1).
 - 응답은 `{data, meta}` 봉투, 에러는 `problem+json`의 `code`로 분기. lat/lng는 문자열로 옴(parseFloat).
 
@@ -200,13 +201,13 @@ Splash
 ## 8. 카메라 / 이미지
 
 ### 8.1 캡처
-- **`camera`** 패키지: 인앱 카메라 + 가이드 오버레이(벌통 프레임 정렬용).
+- **`camera`** 패키지: 인앱 카메라 + 가이드 오버레이(벌통 프레임 정렬용). **`ResolutionPreset.max`** — two-stage 판독용 원본 해상도 캡처(스펙 v2.2 §4, 구 720p 폐기).
 - **`image_picker`**: 갤러리에서 선택 폴백.
 - 가이드 오버레이는 단순 `Stack` + `CustomPainter` (반투명 가이드 박스 + 텍스트).
 
 ### 8.2 후처리
-- **`image`** 패키지로 디코드 → max **1920×1920** 리사이즈 (긴 변 기준), **JPEG q85** 인코드.
-- iOS HEIC 입력은 **`flutter_image_compress`**로 JPEG 변환.
+- **원본 크기 업로드**(`features/analyses/data/capture_preprocess.dart`): JPEG **q95**, 축소 없음. **10MB 초과 시에만** 긴 변 **4000**으로 축소 (스펙 A2 — 구 1920×1920 / q85 폐기).
+- iOS HEIC 입력은 **`flutter_image_compress`**로 JPEG 변환(축소 없음).
 - EXIF orientation 반영, 위치정보(GPS)는 **제거**(개인정보 보호).
 
 ### 8.3 업로드
@@ -225,11 +226,13 @@ Splash
   1. `AuthInterceptor` — JWT 헤더 부착, 401 시 refresh-token 호출 → 원요청 1회 재시도.
   2. `RetryInterceptor` — 네트워크/5xx에서 **idempotent 메서드만** 지수 백오프(0.5s, 1s, 2s, max 3회).
   3. `LoggingInterceptor` — debug 빌드에서만 활성, body는 200KB cap.
+- 전역 `receiveTimeout` 30s, **분석 요청(`POST /v1/analyses`)만 95s**(`analysisReceiveTimeout`, `analyses_api.dart`). 타임아웃 체인: 모바일 95s ≥ API ai-client 90s ≥ AI 내부 예산 (스펙 §8).
 
 ### 9.2 DTO
 - **`freezed`** + **`json_serializable`**.
 - tier 같은 enum-ish 필드는 **freezed union** 또는 `@JsonEnum`으로 표현 (서버가 새 tier를 추가해도 앱이 죽지 않도록 `@JsonKey(unknownEnumValue: ...)`).
 - 서버 스키마 변경 시 `services/api`와 `packages/shared-types`를 먼저 정렬한 뒤 본 앱의 DTO 갱신.
+- two-stage 분석 DTO(`features/analyses/data/analysis_dto.dart`)는 수기 DTO: tier `low/elevated/high/insufficient` + 구 `safe/watch/danger` 둘 다 매핑, `samplingCi95` 우선·`vdiCiLow/High` 폴백, `vdiDisplay`는 문자열 그대로 표시.
 
 ### 9.3 에러
 - `core/errors/app_exception.dart`에 `NetworkException`, `AuthException`, `ServerException`, `ValidationException` 계층.

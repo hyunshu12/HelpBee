@@ -25,6 +25,12 @@ __pycache__/
 *.so
 .Python
 env/
+# 학습 박스 부트스트랩 스크립트 폴더 (venv 아님)
+!apps/ai/training/env/
+# Stage-1 학습 리스트 (make_fold_lists.py 산출물, 원본 절대경로 포함 — 커밋 금지)
+apps/ai/training/lists/
+# Stage-2 크롭 (make_crops.py 산출물, 71667 파생 이미지 — 커밋 금지)
+apps/ai/training/crops/
 venv/
 .venv/
 pip-log.txt

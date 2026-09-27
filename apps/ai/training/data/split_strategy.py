@@ -255,7 +255,7 @@ def write_split(items: list[Item], output: Path, split_name: str):
 def cls_distribution(items: list[Item]) -> dict[int, int]:
     c: Counter = Counter()
     for it in items:
-        for line in it.label.read_text().splitlines():
+        for line in it.label.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 c[int(line.split()[0])] += 1
     return dict(c)

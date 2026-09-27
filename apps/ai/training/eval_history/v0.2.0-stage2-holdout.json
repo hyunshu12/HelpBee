@@ -1,0 +1,71 @@
+{
+  "overall": {
+    "recall": 0.3893805309734513,
+    "specificity": 0.9928443649373881,
+    "auroc": 0.9548815045830893,
+    "ece": 0.1307921398707379
+  },
+  "by_source": {
+    "ev2": {
+      "recall": 0.3893805309734513,
+      "specificity": 0.9928443649373881,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "by_device": {
+    "": {
+      "recall": 0.3893805309734513,
+      "specificity": 0.9928443649373881,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "by_colony": {
+    "": {
+      "recall": 0.3893805309734513,
+      "specificity": 0.9928443649373881,
+      "n_pos": 226,
+      "n_neg": 559
+    }
+  },
+  "size_only_auroc": 0.8523833647315844,
+  "size_only_auroc_by_source": {
+    "ev2": 0.8523833647315844
+  },
+  "recall_by_size_tercile": {
+    "ev2": {
+      "edges": [
+        440.0,
+        440.0
+      ],
+      "terciles": [
+        {
+          "size_lo": 397.0,
+          "size_hi": 440.0,
+          "recall": 0.33658536585365856,
+          "n_pos": 205
+        },
+        {
+          "size_lo": null,
+          "size_hi": null,
+          "recall": null,
+          "n_pos": 0
+        },
+        {
+          "size_lo": 458.0,
+          "size_hi": 587.0,
+          "recall": 0.9047619047619048,
+          "n_pos": 21
+        }
+      ]
+    }
+  },
+  "source_probe_acc": 1.0,
+  "lodo": {
+    "": {
+      "auroc": null,
+      "n": 785
+    }
+  }
+}

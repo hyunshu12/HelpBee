@@ -1,0 +1,73 @@
+{
+  "version": "v0.2.0-stage2",
+  "model": "resnet18",
+  "img_size": 320,
+  "platt": {
+    "a": 0.7148284816990116,
+    "b": -0.7103914061976415
+  },
+  "tau": 0.6390129125617522,
+  "tau_policy": "youden",
+  "fpr_cap": 0.01,
+  "target_fpr": 0.01,
+  "cal_a_fpr_at_tau": 0.00959409594095941,
+  "cal_b": {
+    "tpr": 0.5160142348754448,
+    "fpr": 0.002462649811196848,
+    "corrected": true
+  },
+  "by_source_at_tau": {
+    "cal_b": {
+      "71667": {
+        "tpr": 0.5160142348754448,
+        "fpr": 0.002462649811196848,
+        "n_pos": 562,
+        "n_neg": 18273
+      }
+    },
+    "val": {
+      "71667": {
+        "tpr": 0.6666666666666666,
+        "fpr": 0.0,
+        "n_pos": 6,
+        "n_neg": 265
+      },
+      "varroadataset": {
+        "tpr": 0.8492239467849224,
+        "fpr": 0.023157894736842106,
+        "n_pos": 451,
+        "n_neg": 1425
+      }
+    }
+  },
+  "auroc": {
+    "cal_a": 0.8723745332597033,
+    "cal_b": 0.8328490803672961
+  },
+  "ece15": {
+    "cal_a": 0.01892436078516885,
+    "cal_b": 0.02456770527719383,
+    "cal_b_uncalibrated": 0.019371545578691446
+  },
+  "counts": {
+    "train": {
+      "n": 36289,
+      "pos": 7404
+    },
+    "val": {
+      "n": 2147,
+      "pos": 457
+    },
+    "cal_a": {
+      "n": 7784,
+      "pos": 1009
+    },
+    "cal_b": {
+      "n": 18835,
+      "pos": 562
+    }
+  },
+  "weights": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\best.pt",
+  "vdi": "training\\runs\\stage2\\v0.2.0-stage2v3-E3\\vdi.yaml",
+  "recalibrated_from": "training\\runs\\stage2\\v0.2.0-stage2v3-E3"
+}

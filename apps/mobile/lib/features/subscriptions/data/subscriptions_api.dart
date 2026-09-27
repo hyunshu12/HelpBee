@@ -37,8 +37,9 @@ class SubscriptionsApi {
   }
 }
 
-final subscriptionsApiProvider =
-    Provider<SubscriptionsApi>((ref) => SubscriptionsApi(ref.read(dioProvider)));
+final subscriptionsApiProvider = Provider<SubscriptionsApi>(
+  (ref) => SubscriptionsApi(ref.read(dioProvider)),
+);
 
 /// Current user's subscription (settings / quota banner). autoDispose so it
 /// refetches per session and resets across users.

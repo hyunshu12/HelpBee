@@ -19,10 +19,7 @@ abstract class AuthRepository {
 
   /// Authenticates with credentials and starts a session.
   /// On success the token pair is already persisted.
-  Future<AuthSession> login({
-    required String email,
-    required String password,
-  });
+  Future<AuthSession> login({required String email, required String password});
 
   /// Revokes the current refresh token server-side (best-effort) and clears
   /// all local tokens. Never throws for the local clear — a network failure on

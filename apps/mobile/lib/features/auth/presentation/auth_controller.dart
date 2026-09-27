@@ -135,5 +135,6 @@ class AuthController extends Notifier<AuthFlowState> {
 }
 
 /// App-wide auth controller. The router watches this for redirects.
-final authControllerProvider =
-    NotifierProvider<AuthController, AuthFlowState>(AuthController.new);
+final authControllerProvider = NotifierProvider<AuthController, AuthFlowState>(
+  AuthController.new,
+);

@@ -57,10 +57,26 @@ def _flatten_to_rgb(img: Image.Image) -> Image.Image:
     return img.convert("RGB")
 
 
+def decode_rgb(data: bytes):
+    """two-stage 경로: 디코드 + EXIF 회전 + RGB 평탄화만, **축소·재인코딩 없음** → uint8 [H,W,3] RGB.
+
+    스펙 §4: MAX_EDGE=1024 축소는 two-stage 경로에서만 우회(크롭은 원본 해상도에서 뜬다).
+    """
+    import numpy as np
+
+    try:
+        img = Image.open(BytesIO(data))
+        img.load()
+    except Exception as exc:  # noqa: BLE001
+        raise ImageDecodeError(str(exc)) from exc
+    img = _flatten_to_rgb(ImageOps.exif_transpose(img))
+    return np.asarray(img, dtype=np.uint8)
+
+
 def preprocess_image(
     data: bytes,
     *,
-    max_edge: int = MAX_EDGE,
+    max_edge: int | None = MAX_EDGE,
     max_bytes: int = MAX_BYTES,
     quality_cascade: tuple[int, ...] = QUALITY_CASCADE,
 ) -> Preprocessed:
@@ -75,7 +91,7 @@ def preprocess_image(
 
     w, h = img.size
     longest = max(w, h)
-    if longest > max_edge:
+    if max_edge is not None and longest > max_edge:  # None = 축소 우회(two-stage 경로 전용)
         scale = max_edge / longest
         img = img.resize(
             (max(1, round(w * scale)), max(1, round(h * scale))),

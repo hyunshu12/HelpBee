@@ -325,6 +325,12 @@ export type DualEngineRow = {
   varroaInfectionRisk: number | null;
   overallHealth: string | null;
   rawResponse: Record<string, unknown> | null;
+  // v0.2.0 two-stage (구 row는 null)
+  vdi: number | null;
+  vdiCiLow: number | null;
+  vdiCiHigh: number | null;
+  beeTotal: number | null;
+  beeInfested: number | null;
 };
 
 export async function getDualByImage(db: Database, imageId: string): Promise<DualEngineRow[]> {
@@ -337,6 +343,11 @@ export async function getDualByImage(db: Database, imageId: string): Promise<Dua
       varroaInfectionRisk: analyses.varroaInfectionRisk,
       overallHealth: analyses.overallHealth,
       rawResponse: analyses.rawResponse,
+      vdi: analyses.vdi,
+      vdiCiLow: analyses.vdiCiLow,
+      vdiCiHigh: analyses.vdiCiHigh,
+      beeTotal: analyses.beeTotal,
+      beeInfested: analyses.beeInfested,
     })
     .from(analyses)
     .innerJoin(aiModels, eq(aiModels.id, analyses.modelId))
@@ -350,5 +361,10 @@ export async function getDualByImage(db: Database, imageId: string): Promise<Dua
     varroaInfectionRisk: r.varroaInfectionRisk,
     overallHealth: r.overallHealth,
     rawResponse: (r.rawResponse as Record<string, unknown> | null) ?? null,
+    vdi: r.vdi == null ? null : Number(r.vdi),
+    vdiCiLow: r.vdiCiLow == null ? null : Number(r.vdiCiLow),
+    vdiCiHigh: r.vdiCiHigh == null ? null : Number(r.vdiCiHigh),
+    beeTotal: r.beeTotal,
+    beeInfested: r.beeInfested,
   }));
 }

@@ -10,6 +10,10 @@ import '../data/images_api.dart';
 /// if the analyzing screen rebuilds (prevents a duplicate upload + re-charge).
 typedef AnalysisRequest = ({String hiveId, String imagePath});
 
+/// Result of one run: the analysis plus the path of the exact bytes uploaded
+/// (evidence crop coordinates refer to this image, not the camera original).
+typedef AnalysisRun = ({Analysis analysis, String uploadedImagePath});
+
 /// Runs the full pipeline for the 분석중 screen and returns the resulting
 /// [Analysis] (which may have `status: 'failed'` — a graceful 200 the report
 /// screen renders, not an error):
@@ -20,10 +24,11 @@ typedef AnalysisRequest = ({String hiveId, String imagePath});
 /// before `create` surface as the provider's error state. On success the per-hive
 /// caches are invalidated so the home card + detail timeline reflect the result.
 final runAnalysisProvider = FutureProvider.autoDispose
-    .family<Analysis, AnalysisRequest>((ref, req) async {
+    .family<AnalysisRun, AnalysisRequest>((ref, req) async {
       final images = ref.read(imagesApiProvider);
 
       final bytes = await preprocessForUpload(req.imagePath);
+      final uploadedPath = await saveUploadedCopy(bytes);
       final presign = await images.presign(
         filename: 'hive-capture.jpg',
         contentType: 'image/jpeg',
@@ -45,5 +50,5 @@ final runAnalysisProvider = FutureProvider.autoDispose
       ref.invalidate(latestAnalysisProvider(req.hiveId));
       ref.invalidate(hiveAnalysesProvider(req.hiveId));
       ref.invalidate(allAnalysesProvider); // 진단 이력 탭
-      return analysis;
+      return (analysis: analysis, uploadedImagePath: uploadedPath);
     });

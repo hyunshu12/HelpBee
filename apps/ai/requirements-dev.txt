@@ -2,3 +2,6 @@
 -r requirements.txt
 pytest==9.0.3
 pytest-asyncio==1.4.0
+# 평가 스크립트(training/eval_stage2.py, eval_e2e.py) 단위 테스트용 — requirements-gpu.txt 와 동일 하한
+pandas>=2.1
+scikit-learn>=1.4

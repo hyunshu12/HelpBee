@@ -136,6 +136,7 @@ class _HistoryCard extends StatelessWidget {
     final color = riskTierColor(tier);
     final when = analysis.analyzedAt ?? analysis.createdAt;
     final score = analysis.varroaInfectionRisk;
+    final vdiDisplay = analysis.vdiDisplay; // two-stage 우선
 
     return Material(
       color: AppColors.surface,
@@ -209,9 +210,17 @@ class _HistoryCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (score != null) ...[
+                    if (tier == RiskTier.insufficient)
                       Text(
-                        '$score',
+                        l10n.tierInsufficient,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    else if (vdiDisplay != null || score != null) ...[
+                      Text(
+                        vdiDisplay ?? '$score',
                         style: theme.textTheme.headlineSmall?.copyWith(
                           color: color,
                           fontWeight: FontWeight.w800,
@@ -219,7 +228,7 @@ class _HistoryCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 2),
                       Text(
-                        l10n.scoreSuffix,
+                        vdiDisplay != null ? '%' : l10n.scoreSuffix,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: color,
                           fontWeight: FontWeight.w700,

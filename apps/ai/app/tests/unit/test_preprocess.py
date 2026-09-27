@@ -93,3 +93,23 @@ def test_size_guard_raises_when_too_large():
 def test_size_guard_fits_compressible():
     out = preprocess_image(_jpeg(800, 600, color="white"), max_bytes=20000)
     assert len(out.jpeg) <= 20000
+
+
+def test_max_edge_none_keeps_full_resolution():
+    """two-stage 경로 전용: MAX_EDGE 축소 우회(스펙 §4)."""
+    out = preprocess_image(_jpeg(3000, 2000), max_edge=None)
+    assert (out.width, out.height) == (3000, 2000)
+
+
+def test_decode_rgb_full_resolution_array():
+    from app.services.preprocess import decode_rgb
+
+    arr = decode_rgb(_jpeg(3000, 2000))
+    assert arr.shape == (2000, 3000, 3) and arr.dtype.name == "uint8"
+
+
+def test_decode_rgb_invalid_raises():
+    from app.services.preprocess import decode_rgb
+
+    with pytest.raises(ImageDecodeError):
+        decode_rgb(b"not an image")

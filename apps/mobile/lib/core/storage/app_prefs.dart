@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// (secure storage). Uses the async [SharedPreferencesAsync] API.
 class AppPrefs {
   AppPrefs({SharedPreferencesAsync? prefs})
-      : _prefs = prefs ?? SharedPreferencesAsync();
+    : _prefs = prefs ?? SharedPreferencesAsync();
 
   static const String _kOnboardingSeen = 'hb_onboarding_seen';
   static const String _kKeepLoggedIn = 'hb_keep_logged_in';

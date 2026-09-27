@@ -42,18 +42,18 @@ class Hive {
   bool get hasLocation => latitude != null && longitude != null;
 
   factory Hive.fromJson(Map<String, dynamic> json) => Hive(
-        id: json['id'] as String,
-        userId: json['userId'] as String,
-        name: json['name'] as String,
-        note: json['note'] as String?,
-        latitude: _asDouble(json['latitude']),
-        longitude: _asDouble(json['longitude']),
-        address: json['address'] as String?,
-        installedAt: _asDateOrNull(json['installedAt']),
-        createdAt: _asDate(json['createdAt']),
-        updatedAt: _asDate(json['updatedAt']),
-        deletedAt: _asDateOrNull(json['deletedAt']),
-      );
+    id: json['id'] as String,
+    userId: json['userId'] as String,
+    name: json['name'] as String,
+    note: json['note'] as String?,
+    latitude: _asDouble(json['latitude']),
+    longitude: _asDouble(json['longitude']),
+    address: json['address'] as String?,
+    installedAt: _asDateOrNull(json['installedAt']),
+    createdAt: _asDate(json['createdAt']),
+    updatedAt: _asDate(json['updatedAt']),
+    deletedAt: _asDateOrNull(json['deletedAt']),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -72,8 +72,19 @@ class Hive {
           other.deletedAt == deletedAt;
 
   @override
-  int get hashCode => Object.hash(id, userId, name, note, latitude, longitude,
-      address, installedAt, createdAt, updatedAt, deletedAt);
+  int get hashCode => Object.hash(
+    id,
+    userId,
+    name,
+    note,
+    latitude,
+    longitude,
+    address,
+    installedAt,
+    createdAt,
+    updatedAt,
+    deletedAt,
+  );
 }
 
 /// `DELETE /v1/hives/:id` -> `{ id, deletedAt }` (soft delete).
@@ -84,9 +95,9 @@ class HiveDeletion {
   final DateTime? deletedAt;
 
   factory HiveDeletion.fromJson(Map<String, dynamic> json) => HiveDeletion(
-        id: json['id'] as String,
-        deletedAt: _asDateOrNull(json['deletedAt']),
-      );
+    id: json['id'] as String,
+    deletedAt: _asDateOrNull(json['deletedAt']),
+  );
 }
 
 // ── parsing helpers ──────────────────────────────────────────────────────────
